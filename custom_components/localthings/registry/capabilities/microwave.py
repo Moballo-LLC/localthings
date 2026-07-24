@@ -108,13 +108,12 @@ MICROWAVE_MODE = Capability(
     poll_tier='warm',
     entities=(
         SelectDesc(key='cook_mode', field='x.com.samsung.da.modes',
-                   name='Cooking mode', icon='mdi:tune',
+                   icon='mdi:tune',
                    options=_MICROWAVE_MODES,
                    value_fn=lambda v: v[0] if v else None,
                    write_fn=_mode_write),
         SwitchDesc(key='sound', field='x.com.samsung.da.options',
-                   name='Sound', icon='mdi:volume-high',
-                   entity_category='config',
+                   icon='mdi:volume-high', entity_category='config',
                    value_fn=lambda opts: _option_value(opts, 'Sound') == 'On',
                    write_fn=_sound_write),
     ),
@@ -124,10 +123,9 @@ MICROWAVE_CAVITY = Capability(
     href='/oven/vs/0',
     poll_tier='hot',
     entities=(
-        SensorDesc(key='cavity_state', field='x.com.samsung.da.state',
-                   name='Cavity state'),
+        SensorDesc(key='cavity_state', field='x.com.samsung.da.state'),
         SensorDesc(key='power_level', field='x.com.samsung.da.powerLevel',
-                   name='Power level', icon='mdi:flash', device_class='power',
+                   icon='mdi:flash', device_class='power',
                    state_class='measurement', unit='W',
                    value_fn=_power_level_watts),
     ),
@@ -138,7 +136,7 @@ MICROWAVE_TEMPERATURE = Capability(
     poll_tier='warm',
     entities=(
         SensorDesc(key='cavity_temp', field='x.com.samsung.da.items',
-                   name='Cavity temperature', device_class='temperature',
+                   device_class='temperature',
                    state_class='measurement', entity_category='diagnostic',
                    unit_fn=_cavity_temp_unit,
                    value_fn=lambda items: _int(
