@@ -107,7 +107,10 @@ custom_components/localthings/
   entity.py                Base entity wiring capability registry -> HA entity
   sensor.py / binary_sensor.py / switch.py / number.py / select.py / button.py / time.py / fan.py / climate.py
                             One module per HA platform
-  strings.json / translations/   Config-flow copy + entity state translations
+  catalog.py               Reads the shipped translation catalog (which keys/states exist)
+  translations/            Config-flow copy + entity name/state translations, one file per
+                            language; en.json is the source of truth (no strings.json —
+                            Home Assistant never reads one from a custom integration)
   registry/
     registry.py             Builds the global capability registry, validates href collisions
     capability.py           Capability dataclass (href, entities, transforms)

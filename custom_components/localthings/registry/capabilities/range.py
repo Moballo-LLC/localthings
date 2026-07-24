@@ -81,17 +81,23 @@ def _burner_entities(i):
     n = i + 1
     return (
         SelectDesc(key=f'burner_{i}_power_level', field='burnerList',
-                   name=f'Burner {n} power level', icon='mdi:knob',
+                   icon='mdi:knob',
+                   translation_key='range_burner_power_level',
+                   translation_placeholders={'number': str(n)},
                    options=_power_level_options,
                    exists_fn=exists,
                    value_fn=_burner_field_fn(i, 'powerLevel'),
                    write_fn=_burner_power_level_write(i)),
         SensorDesc(key=f'burner_{i}_state', field='burnerList',
-                   name=f'Burner {n} state', icon='mdi:stove',
+                   icon='mdi:stove',
+                   translation_key='burner_state',
+                   translation_placeholders={'number': str(n)},
                    exists_fn=exists,
                    value_fn=_burner_field_fn(i, 'operationState')),
         BinarySensorDesc(key=f'burner_{i}_hot_surface', field='burnerList',
-                         name=f'Burner {n} hot surface', device_class='heat',
+                         device_class='heat',
+                         translation_key='burner_hot_surface',
+                         translation_placeholders={'number': str(n)},
                          exists_fn=exists,
                          value_fn=_burner_hot_surface_fn(i)),
     )
@@ -102,7 +108,7 @@ COOKTOP_STATUS = Capability(
     poll_tier='hot',
     entities=(
         SensorDesc(key='cooktop_state', field='operationState',
-                   name='Cooktop state', icon='mdi:pot-steam'),
+                   icon='mdi:pot-steam'),
         *[e for i in range(MAX_BURNERS) for e in _burner_entities(i)],
     ),
 )
@@ -123,7 +129,6 @@ COOKTOP_SAFETY = Capability(
     poll_tier='warm',
     entities=(
         BinarySensorDesc(key='cooktop_safety_shutoff_enabled', field='safetyAlert',
-                         name='Hot surface auto-shutoff enabled',
                          entity_category='config',
                          value_fn=lambda v: (v or {}).get('state') == 'on'),
     ),

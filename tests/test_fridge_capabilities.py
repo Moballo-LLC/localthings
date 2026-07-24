@@ -258,3 +258,39 @@ class TestRefrigeratorAiEnergyLevelFixtureCoverage:
         assert unbound == []
         state = flatten(bound, resources)
         assert state['ai_energy_level'] == '1'
+
+
+class TestSwitchOffIsNotInverted:
+    """Regression: several fridge SwitchDesc write_fns used ``'On' if p else 'Off'``.
+
+    The switch platform passes the literal string ``'Off'`` on turn-off (and
+    ``'On'`` on turn-on). ``'Off'`` is a non-empty, truthy string, so
+    ``'On' if p else 'Off'`` always evaluated to ``'On'`` — turning the switch
+    OFF silently re-sent ``On`` and the switch could never be turned off. The
+    guard must compare ``p == 'On'`` (as the other capability files already do).
+    """
+
+    # (switch descriptor, payload key it writes)
+    CASES = [
+        (fridge.ICEMAKER_NIGHTTIME.entities[0], 'ice.night.status'),
+        (fridge.STATUS_LOCK.entities[0], 'x.com.samsung.da.ado.devicecontrol'),
+        (fridge.STATUS_LOCK.entities[1], 'x.com.samsung.da.device.sound'),
+        (fridge.DEFROST_DELAY.entities[0], 'x.com.samsung.da.delayDefrost'),
+        (fridge.WELCOME_LIGHTING.entities[0], 'status'),
+        (fridge.CABINET_LIGHT.entities[1], 'light.dimming.status'),
+        (fridge.ICEMAKER_STATUS_FALLBACK.entities[0], 'x.com.samsung.da.iceMaker'),
+    ]
+
+    def test_turning_off_sends_off(self):
+        for desc, key in self.CASES:
+            _segs, payload = desc.write_fn('Off', {})
+            assert payload[key] == 'Off', (
+                f"{desc.key}: OFF must send 'Off', got {payload[key]!r} (inverted)"
+            )
+
+    def test_turning_on_sends_on(self):
+        for desc, key in self.CASES:
+            _segs, payload = desc.write_fn('On', {})
+            assert payload[key] == 'On', (
+                f"{desc.key}: ON must send 'On', got {payload[key]!r}"
+            )

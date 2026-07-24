@@ -25,7 +25,7 @@ from ..entities import (
 from .common import normalize_temp_unit
 
 # Display names for the beverage zone, flex zone, ice type, and
-# ice-making-status enums below live in strings.json / translations/en.json,
+# ice-making-status enums below live in translations/en.json,
 # keyed by the lowercased raw device value — select.py and SensorDesc.options
 # normalize to lowercase for HA's translation lookup and map back to this
 # original casing before writing to the device.
@@ -55,7 +55,8 @@ TEMP_CURRENT_GENERIC = Capability(
     poll_tier='warm',
     entities=(
         SensorDesc(key='temperature', field='temperature',
-                   name=None, icon='mdi:thermometer',
+                   translation_key='instance_temperature',
+                   use_instance_name=True, icon='mdi:thermometer',
                    device_class='temperature', unit_fn=_temp_unit,
                    state_class='measurement'),
     ),
@@ -68,7 +69,8 @@ TEMP_SETPOINT_GENERIC = Capability(
     poll_tier='warm',
     entities=(
         NumberDesc(key='setpoint', field='temperature',
-                   name=None, device_class='temperature', unit_fn=_temp_unit,
+                   translation_key='instance_setpoint',
+                   use_instance_name=True, device_class='temperature', unit_fn=_temp_unit,
                    native_min=-20.0, native_max=50.0,
                    range_field='range', entity_category='config',
                    write_fn=lambda p, rep, href=None: (
@@ -87,12 +89,12 @@ ICEMAKER_NIGHTTIME = Capability(
     poll_tier='warm',
     entities=(
         SwitchDesc(key='ice_night_mode', field='ice.night.status',
-                   name='Nighttime ice quiet mode', icon='mdi:weather-night',
+                   icon='mdi:weather-night',
                    entity_category='config',
                    value_fn=lambda v: v == 'On',
                    write_fn=lambda p, rep, href=None: (
                        ['icemaker', 'nighttime', 'vs', '0'],
-                       {'ice.night.status': 'On' if p else 'Off'})),
+                       {'ice.night.status': 'On' if p == 'On' else 'Off'})),
     ),
 )
 
@@ -101,8 +103,9 @@ ICEMAKER_NIGHTTIME = Capability(
 # /icemaker/status/vs/0 is kept as exact-href cap and binds first.
 # /icemaker/nighttime/vs/0 is excluded by match_fn (lacks iceMaker.state).
 #
-# Entity names are derived from x.com.samsung.da.iceMaker.name ("CUBED_ICE",
-# "ICE_BITES") via name_field, not the href's "one"/"two" segment -- these two
+# Entity names interpolate x.com.samsung.da.iceMaker.name ("CUBED_ICE",
+# "ICE_BITES") -- read via name_field, reaching the translated name as the
+# {instance_name} placeholder -- not the href's "one"/"two" segment. These two
 # ice makers are independent on/off toggles that can both be enabled at once
 # (issue #27), so they stay separate entities rather than a single ice-type
 # select, but users still want them labeled with the device's own names.
@@ -123,17 +126,18 @@ ICEMAKER_GENERIC = Capability(
     entities=(
         SensorDesc(key='making_status',
                    field='x.com.samsung.da.iceMaker.iceMakingStatus',
-                   name=None, icon='mdi:cube-outline',
+                   use_instance_name=True, icon='mdi:cube-outline',
                    device_class='enum',
                    options=('icestatus_stop', 'icestatus_run'),
                    translation_key='ice_making_status',
                    value_fn=lambda v: v.lower() if isinstance(v, str) else v),
         SwitchDesc(key='enabled', field='x.com.samsung.da.iceMaker.state',
-                   name=None, icon='mdi:cube-outline',
+                   translation_key='instance_enabled',
+                   use_instance_name=True, icon='mdi:cube-outline',
                    value_fn=lambda v: v == 'On',
                    write_fn=_icemaker_write('x.com.samsung.da.iceMaker.state')),
         SelectDesc(key='type', field='x.com.samsung.da.iceType.desired',
-                   name=None, icon='mdi:cube-outline',
+                   use_instance_name=True, icon='mdi:cube-outline',
                    translation_key='ice_type',
                    entity_category='config',
                    options_field='x.com.samsung.da.iceType.supported',
@@ -151,7 +155,7 @@ DOOR_ALERT = Capability(
     poll_tier='warm',
     entities=(
         SelectDesc(key='door_alert', field='alert.door',
-                   name='Door alarm', icon='mdi:bell-alert',
+                   icon='mdi:bell-alert',
                    translation_key='door_alert',
                    entity_category='config',
                    options_field='supportedAlert.door',
@@ -168,7 +172,7 @@ DOOR_ALERT = Capability(
 def _status_lock_write(field):
     return lambda p, rep, href=None: (
         ['status', 'lock', 'vs', '0'],
-        {field: 'On' if p else 'Off'}
+        {field: 'On' if p == 'On' else 'Off'}
     )
 
 
@@ -177,12 +181,12 @@ STATUS_LOCK = Capability(
     poll_tier='warm',
     entities=(
         SwitchDesc(key='auto_door_opener', field='x.com.samsung.da.ado.devicecontrol',
-                   name='Auto door opener', icon='mdi:door-open',
+                   icon='mdi:door-open',
                    entity_category='config',
                    value_fn=lambda v: v == 'On',
                    write_fn=_status_lock_write('x.com.samsung.da.ado.devicecontrol')),
         SwitchDesc(key='fridge_sound', field='x.com.samsung.da.device.sound',
-                   name='Sound', icon='mdi:volume-high',
+                   icon='mdi:volume-high',
                    entity_category='config',
                    value_fn=lambda v: v == 'On',
                    write_fn=_status_lock_write('x.com.samsung.da.device.sound')),
@@ -207,12 +211,12 @@ DEFROST_DELAY = Capability(
     poll_tier='warm',
     entities=(
         SwitchDesc(key='defrost_delay', field='x.com.samsung.da.delayDefrost',
-                   name='Defrost delay', icon='mdi:snowflake-off',
+                   icon='mdi:snowflake-off',
                    entity_category='config',
                    value_fn=lambda v: v == 'On',
                    write_fn=lambda p, rep, href=None: (
                        ['defrost', 'delay', 'vs', '0'],
-                       {'x.com.samsung.da.delayDefrost': 'On' if p else 'Off'})),
+                       {'x.com.samsung.da.delayDefrost': 'On' if p == 'On' else 'Off'})),
     ),
 )
 
@@ -229,7 +233,7 @@ DEFROST_BLOCK_STATUS = Capability(
     poll_tier='warm',
     entities=(
         BinarySensorDesc(key='defrost_active', field='x.com.samsung.da.modes',
-                         name='Defrost active', icon='mdi:snowflake-melt',
+                         icon='mdi:snowflake-melt',
                          entity_category='diagnostic',
                          value_fn=lambda modes: bool(modes) and modes[0] == 'DEFROST_BLOCK_ON'),
     ),
@@ -252,12 +256,12 @@ REFRIGERATION = Capability(
     poll_tier='warm',
     entities=(
         SwitchDesc(key='rapid_fridge', field='x.com.samsung.da.rapidFridge',
-                   name='Rapid fridge', icon='mdi:fridge-industrial',
+                   icon='mdi:fridge-industrial',
                    entity_category='config',
                    value_fn=lambda v: v == 'On',
                    write_fn=_refrigeration_write('x.com.samsung.da.rapidFridge')),
         SwitchDesc(key='rapid_freezing', field='x.com.samsung.da.rapidFreezing',
-                   name='Rapid freezing', icon='mdi:snowflake',
+                   icon='mdi:snowflake',
                    entity_category='config',
                    value_fn=lambda v: v == 'On',
                    write_fn=_refrigeration_write('x.com.samsung.da.rapidFreezing')),
@@ -279,7 +283,7 @@ AUTOFILL = Capability(
     poll_tier='warm',
     entities=(
         SwitchDesc(key='autofill', field='x.com.samsung.da.autofill',
-                   name='Autofill pitcher', icon='mdi:cup-water',
+                   icon='mdi:cup-water',
                    entity_category='config',
                    value_fn=lambda v: v == 'On',
                    write_fn=_autofill_write),
@@ -295,12 +299,12 @@ WELCOME_LIGHTING = Capability(
     poll_tier='warm',
     entities=(
         SwitchDesc(key='welcome_lighting', field='status',
-                   name='Welcome lighting', icon='mdi:motion-sensor',
+                   icon='mdi:motion-sensor',
                    entity_category='config',
                    value_fn=lambda v: v == 'On',
                    write_fn=lambda p, rep, href=None: (
                        ['proximity', 'vs', '0'],
-                       {'status': 'On' if p else 'Off'})),
+                       {'status': 'On' if p == 'On' else 'Off'})),
     ),
 )
 
@@ -386,15 +390,15 @@ CABINET_LIGHT_ENHANCED = Capability(
     poll_tier='warm',
     entities=(
         SelectDesc(key='day_brightness', field='level.brightness.daytime',
-                   name='Cabinet brightness', icon='mdi:brightness-5',
-                   translation_key='brightness_level',
+                   icon='mdi:brightness-5',
+                   translation_key='day_brightness',
                    entity_category='config',
                    options=_NIGHT_BRIGHTNESS_OPTIONS,
                    write_fn=lambda p, rep, href=None: (
                        ['cabinet', 'light', 'enhanced', 'vs', '0'],
                        {'level.brightness.daytime': p})),
         SelectDesc(key='brightness_level', field='level.brightness.nighttime',
-                   name='Night brightness', icon='mdi:brightness-4',
+                   icon='mdi:brightness-4',
                    translation_key='brightness_level',
                    entity_category='config',
                    options=_NIGHT_BRIGHTNESS_OPTIONS,
@@ -402,12 +406,12 @@ CABINET_LIGHT_ENHANCED = Capability(
                        ['cabinet', 'light', 'enhanced', 'vs', '0'],
                        {'level.brightness.nighttime': p})),
         TimeDesc(key='night_start', field='',
-                 name='Night light start', icon='mdi:clock-start',
+                 icon='mdi:clock-start',
                  entity_category='config',
                  rep_fn=_night_start_value,
                  write_fn=_night_start_write),
         TimeDesc(key='night_end', field='',
-                 name='Night light end', icon='mdi:clock-end',
+                 icon='mdi:clock-end',
                  entity_category='config',
                  rep_fn=_night_end_value,
                  write_fn=_night_end_write),
@@ -431,16 +435,16 @@ CABINET_LIGHT = Capability(
     poll_tier='warm',
     entities=(
         SwitchDesc(key='cabinet_light_switch', field='x.com.samsung.da.lightControl',
-                   name='Cabinet light', icon='mdi:fridge-outline',
+                   icon='mdi:fridge-outline',
                    value_fn=lambda v: v == 'On',
                    write_fn=_cabinet_light_write),
         SwitchDesc(key='cabinet_light_dim', field='light.dimming.status',
-                   name='Brighten gradually', icon='mdi:brightness-auto',
+                   icon='mdi:brightness-auto',
                    entity_category='config',
                    value_fn=lambda v: v == 'On',
                    write_fn=lambda p, rep, href=None: (
                        ['cabinet', 'light', 'total', 'vs', '0'],
-                       {'light.dimming.status': 'On' if p else 'Off'})),
+                       {'light.dimming.status': 'On' if p == 'On' else 'Off'})),
     ),
 )
 
@@ -459,7 +463,7 @@ SABBATH = Capability(
     poll_tier='warm',
     entities=(
         SwitchDesc(key='sabbath_mode', field='x.com.samsung.da.sabbathMode',
-                   name='Sabbath mode', icon='mdi:hands-pray',
+                   icon='mdi:hands-pray',
                    entity_category='config',
                    value_fn=lambda v: v == 'On',
                    write_fn=_sabbath_write),
@@ -479,7 +483,7 @@ BEVERAGE_ZONE = Capability(
     poll_tier='warm',
     entities=(
         SelectDesc(key='beverage_zone_mode', field='roomDesiredMode',
-                   name='Beverage zone mode', icon='mdi:glass-wine',
+                   icon='mdi:glass-wine',
                    translation_key='beverage_zone_mode',
                    entity_category='config',
                    options_field='roomSupportedModes',
@@ -507,7 +511,7 @@ PANTRY_ZONE = Capability(
     poll_tier='warm',
     entities=(
         SelectDesc(key='pantry_zone_mode', field='x.com.samsung.da.mode',
-                   name='Pantry zone mode', icon='mdi:glass-wine',
+                   icon='mdi:glass-wine',
                    translation_key='pantry_zone_mode',
                    entity_category='config',
                    options_field='x.com.samsung.da.supportedOptions',
@@ -554,7 +558,7 @@ FLEX_ZONE = Capability(
     poll_tier='warm',
     entities=(
         SelectDesc(key='flex_zone_mode',
-                   name='Flex zone mode', icon='mdi:thermostat',
+                   icon='mdi:thermostat',
                    translation_key='flex_zone_mode',
                    entity_category='config',
                    options_field='x.com.samsung.da.supportedOptions',
@@ -575,7 +579,8 @@ DOOR_GENERIC = Capability(
     poll_tier='hot',
     entities=(
         BinarySensorDesc(key='open', field='openState',
-                         name=None, device_class='door',
+                         translation_key='instance_open',
+                         use_instance_name=True, device_class='door',
                          value_fn=lambda v: v == 'Open'),
     ),
 )
@@ -604,7 +609,7 @@ DOORS_FALLBACK = Capability(
     poll_tier='hot',
     entities=(
         BinarySensorDesc(key='door_open', field='x.com.samsung.da.items',
-                         name='Door', device_class='door',
+                         device_class='door',
                          value_fn=lambda items: any(
                              i.get('x.com.samsung.da.openState') == 'Open'
                              for i in (items or []))),
@@ -636,13 +641,13 @@ TEMPERATURES_FALLBACK = Capability(
     poll_tier='warm',
     entities=(
         SensorDesc(key='freezer_temperature', field='x.com.samsung.da.items',
-                   name='Freezer temperature', icon='mdi:thermometer',
+                   icon='mdi:thermometer',
                    device_class='temperature', state_class='measurement',
                    unit_fn=lambda rep: _temp_item_unit(
                        rep.get('x.com.samsung.da.items'), 'Freezer'),
                    value_fn=lambda items: _temp_item_value(items, 'Freezer')),
         SensorDesc(key='fridge_temperature', field='x.com.samsung.da.items',
-                   name='Fridge temperature', icon='mdi:thermometer',
+                   icon='mdi:thermometer',
                    device_class='temperature', state_class='measurement',
                    unit_fn=lambda rep: _temp_item_unit(
                        rep.get('x.com.samsung.da.items'), 'Fridge'),
@@ -665,11 +670,11 @@ ICEMAKER_STATUS_FALLBACK = Capability(
     poll_tier='warm',
     entities=(
         SwitchDesc(key='ice_maker_enabled', field='x.com.samsung.da.iceMaker',
-                   name='Ice maker', icon='mdi:cube-outline',
+                   icon='mdi:cube-outline',
                    value_fn=lambda v: v == 'On',
                    write_fn=lambda p, rep, href=None: (
                        ['icemaker', 'status', 'vs', '0'],
-                       {'x.com.samsung.da.iceMaker': 'On' if p else 'Off'})),
+                       {'x.com.samsung.da.iceMaker': 'On' if p == 'On' else 'Off'})),
     ),
 )
 
@@ -695,17 +700,17 @@ REFRIGERATION_FALLBACK = Capability(
     poll_tier='warm',
     entities=(
         BinarySensorDesc(key='defrost_active', field='defrost',
-                         name='Defrost active', icon='mdi:snowflake-melt',
+                         icon='mdi:snowflake-melt',
                          entity_category='diagnostic',
                          value_fn=lambda v: bool(v),
                          exists_fn=lambda rep, resources: '/defrost/block/vs/0' not in resources),
         BinarySensorDesc(key='rapid_fridge', field='rapidCool',
-                         name='Rapid fridge', icon='mdi:fridge-industrial',
+                         icon='mdi:fridge-industrial',
                          entity_category='config',
                          value_fn=lambda v: bool(v),
                          exists_fn=lambda rep, resources: '/refrigeration/vs/0' not in resources),
         BinarySensorDesc(key='rapid_freezing', field='rapidFreeze',
-                         name='Rapid freezing', icon='mdi:snowflake',
+                         icon='mdi:snowflake',
                          entity_category='config',
                          value_fn=lambda v: bool(v),
                          exists_fn=lambda rep, resources: '/refrigeration/vs/0' not in resources),

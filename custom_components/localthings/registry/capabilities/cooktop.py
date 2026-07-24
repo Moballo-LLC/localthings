@@ -61,7 +61,6 @@ COOKTOP_POWER = Capability(
         BinarySensorDesc(
             key='power_state',
             field='x.com.samsung.da.power',
-            name='Power state',
             device_class='power',
             icon='mdi:stove',
             value_fn=lambda value: str(value).lower() == 'on',
@@ -83,7 +82,6 @@ COOKTOP_MODE = Capability(
         BinarySensorDesc(
             key='any_burner_active',
             field='x.com.samsung.da.options',
-            name='Any burner active',
             device_class='running',
             icon='mdi:fire',
             value_fn=_any_burner_active,
@@ -92,7 +90,8 @@ COOKTOP_MODE = Capability(
             SensorDesc(
                 key=f'burner_{slot}_state',
                 field='x.com.samsung.da.options',
-                name=f'Burner {slot} state',
+                translation_key='burner_state',
+                translation_placeholders={'number': str(slot)},
                 icon='mdi:gas-burner',
                 value_fn=lambda options, slot=slot: _option_value(
                     options, f'OperationState{slot}'
@@ -109,14 +108,12 @@ COOKTOP_MODE = Capability(
         SensorDesc(
             key='main_timer_state',
             field='x.com.samsung.da.options',
-            name='Timer state',
             icon='mdi:timer-outline',
             value_fn=lambda options: _option_value(options, 'MainTimerState'),
         ),
         SensorDesc(
             key='main_timer_current',
             field='x.com.samsung.da.options',
-            name='Timer current value',
             icon='mdi:timer-sand',
             enabled_default=False,
             value_fn=lambda options: _int_or_none(
@@ -134,7 +131,6 @@ COOKTOP_CONNECTED = Capability(
         BinarySensorDesc(
             key='cloud_connected',
             field='x.com.samsung.da.connected',
-            name='Cloud connected',
             device_class='connectivity',
             entity_category='diagnostic',
             value_fn=lambda value: str(value).lower() == 'on',
@@ -150,35 +146,30 @@ PAIRED_HOOD_STATUS = Capability(
         BinarySensorDesc(
             key='paired_hood_connected',
             field='connectionState',
-            name='Paired hood connected',
             device_class='connectivity',
             value_fn=lambda value: str(value).lower() == 'connected',
         ),
         BinarySensorDesc(
             key='paired_hood_power',
             field='power',
-            name='Paired hood power',
             device_class='running',
             value_fn=lambda value: str(value).lower() == 'on',
         ),
         SensorDesc(
             key='paired_hood_fan_speed',
             field='fanSpeed',
-            name='Paired hood fan speed',
             icon='mdi:fan',
             value_fn=_int_or_none,
         ),
         BinarySensorDesc(
             key='paired_hood_light',
             field='lampState',
-            name='Paired hood light',
             device_class='light',
             value_fn=lambda value: str(value).lower() == 'on',
         ),
         SensorDesc(
             key='paired_hood_model',
             field='micomModelId',
-            name='Paired hood model',
             icon='mdi:information-outline',
             entity_category='diagnostic',
             enabled_default=False,
@@ -186,7 +177,6 @@ PAIRED_HOOD_STATUS = Capability(
         SensorDesc(
             key='paired_hood_firmware',
             field='firmwareVersion',
-            name='Paired hood firmware',
             icon='mdi:chip',
             entity_category='diagnostic',
             enabled_default=False,

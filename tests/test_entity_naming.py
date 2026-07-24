@@ -1,7 +1,4 @@
-"""Tests for LocalThingsEntity's display-name derivation
-(custom_components/localthings/entity.py) -- the explicit-name,
-device-given-instance-name, and href-derived fallbacks.
-"""
+"""Tests for translated entity naming and dynamic instance placeholders."""
 from custom_components.localthings.entity import LocalThingsEntity
 from custom_components.localthings.registry.capability import Capability
 from custom_components.localthings.registry.discovery import BoundEntity
@@ -23,23 +20,32 @@ def _make_entity(desc, href='/x/vs/0', key_override=None, instance='', instance_
     return LocalThingsEntity(_FakeCoordinator(), bound)
 
 
-def test_explicit_name_wins_over_everything():
-    desc = BinarySensorDesc(key='enabled', name='Explicit Name')
-    entity = _make_entity(desc, instance_name='Cubed Ice')
-    assert entity._attr_name == 'Explicit Name'
+def test_descriptor_key_is_the_default_translation_key():
+    """A descriptor names itself through the catalog, keyed by its own key.
 
-
-def test_instance_name_prefixes_the_derived_suffix():
-    """Issue #27: an ice maker's device-given name ("Cubed Ice") replaces
-    the href-derived instance label ("Icemaker One") as the name prefix,
-    keeping the same entity-specific suffix."""
+    Nothing sets _attr_name: that would take precedence over HA's
+    translation catalog and make the entity untranslatable.
+    """
     desc = BinarySensorDesc(key='enabled')
+    entity = _make_entity(desc, instance_name='Cubed Ice')
+    assert entity.translation_key == 'enabled'
+    assert not hasattr(entity, '_attr_name')
+
+
+def test_device_instance_name_becomes_translation_placeholder():
+    desc = BinarySensorDesc(
+        key='enabled', translation_key='instance_enabled', use_instance_name=True
+    )
     entity = _make_entity(desc, key_override='icemaker_one_enabled',
                            instance_name='Cubed Ice')
-    assert entity._attr_name == 'Cubed Ice Enabled'
+    assert entity.translation_key == 'instance_enabled'
+    assert entity.translation_placeholders == {'instance_name': 'Cubed Ice'}
+    assert not hasattr(entity, '_attr_name')
 
 
-def test_no_instance_name_falls_back_to_derived_state_key():
-    desc = BinarySensorDesc(key='enabled')
+def test_href_instance_name_becomes_translation_placeholder():
+    desc = BinarySensorDesc(
+        key='enabled', translation_key='instance_enabled', use_instance_name=True
+    )
     entity = _make_entity(desc, key_override='icemaker_one_enabled')
-    assert entity._attr_name == 'Icemaker One Enabled'
+    assert entity.translation_placeholders == {'instance_name': 'Icemaker One'}

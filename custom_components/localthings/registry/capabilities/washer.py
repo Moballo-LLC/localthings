@@ -19,12 +19,12 @@ from ..capability import Capability
 from ..entities import BinarySensorDesc, SelectDesc, SensorDesc
 from .laundry import (
     bool_option_exists, bool_option_switch, cycle_options, cycle_select, hex_pairs, option_value,
-    replace_in_options,
+    option_write,
 )
 
 # ---------------------------------------------------------------------------
-# Course_XX hex codes. 23 of the codes named in strings.json/translations
-# under entity.select.washer_cycle.state.<id, lowercased> were captured
+# Course_XX hex codes. 23 of the codes named in translations/en.json
+# under entity.select.washer_cycle_table_02.state.<id, lowercased> were captured
 # from a live WW90DG6U25LEU4's x.com.samsung.da.editCourseList
 # (EditCourseList_1C1D211B1E29243328262722202325322F2E30662D8F96), matched
 # positionally against a Slovak-UI user's screenshots of their app's course
@@ -75,19 +75,19 @@ WASHER_SETTINGS = Capability(
     href='/washer/vs/0',
     entities=(
         SelectDesc(key='wash_temperature', field='x.com.samsung.da.waterTemperature',
-                   name='Wash temperature', icon='mdi:thermometer-water',
+                   icon='mdi:thermometer-water',
                    entity_category='config',
                    options_field='x.com.samsung.da.supportedWaterTemperature',
                    write_fn=lambda p, rep, href=None: (
                        ['washer', 'vs', '0'], {'x.com.samsung.da.waterTemperature': p})),
         SelectDesc(key='spin_speed', field='x.com.samsung.da.spinLevel',
-                   name='Spin speed', icon='mdi:sync',
+                   icon='mdi:sync',
                    entity_category='config',
                    options_field='x.com.samsung.da.supportedSpinLevel',
                    write_fn=lambda p, rep, href=None: (
                        ['washer', 'vs', '0'], {'x.com.samsung.da.spinLevel': p})),
         SelectDesc(key='rinse_cycles', field='x.com.samsung.da.rinseCycles',
-                   name='Rinse cycles', icon='mdi:water-sync',
+                   icon='mdi:water-sync',
                    entity_category='config',
                    options_field='x.com.samsung.da.supportedRinseCycles',
                    write_fn=lambda p, rep, href=None: (
@@ -97,7 +97,7 @@ WASHER_SETTINGS = Capability(
         # #22. Self-gates off on plain washers, which never report
         # supportedDryLevel.
         SelectDesc(key='dry_level', field='x.com.samsung.da.dryLevel',
-                   name='Dry level', icon='mdi:tumble-dryer',
+                   icon='mdi:tumble-dryer',
                    entity_category='config',
                    translation_key='washer_dry_level',
                    options_field='x.com.samsung.da.supportedDryLevel',
@@ -157,8 +157,8 @@ def _drum_clean_last_cleaned(rep):
 # valid raw codes for its field, same hex-pair shape as EditCourseList.
 # '<Prefix>Alarm_<On/Off>' is a low-reservoir warning flag.
 #
-# Label mapping (entity.select.washer_dosing_quantity/washer_detergent_
-# water_hardness/washer_softener_concentration in strings.json) is an
+# Label mapping (entity.select.{detergent,softener}_quantity /
+# detergent_water_hardness / softener_concentration in translations/en.json) is an
 # assumed, not cross-device-verified, reading of the single issue #9 dump +
 # screenshots: LevelCtrl's 4 codes as None/Low/Medium/High (00 has no
 # on-screen equivalent -- the app's Quantité picker only offers
@@ -215,8 +215,7 @@ def _dosing_level(prefix):
 
 def _level_write(prefix):
     def write(p, rep, href=None):
-        opts = list(rep.get('x.com.samsung.da.options') or [])
-        if not opts:
+        if not rep.get('x.com.samsung.da.options'):
             return None
         # `p` is the zero-padded supported code the UI selected (e.g. '03');
         # the device stores the level un-padded (e.g. '3'), matching how it
@@ -226,7 +225,7 @@ def _level_write(prefix):
         except (TypeError, ValueError):
             native = p
         return ['course', 'vs', '0'], {
-            'x.com.samsung.da.options': replace_in_options(opts, prefix, native),
+            'x.com.samsung.da.options': option_write(prefix, native),
         }
     return write
 
@@ -260,7 +259,7 @@ def _dosing_low(prefix):
 # auto-release-dry toggles -- only this per-course gating is washer-only, so
 # it stays here rather than in laundry.py (see laundry.bool_option_switch's
 # docstring: it takes a prebuilt validate_fn and has no opinion on it).
-def _bool_option_switch(key, name, icon, prefix, availability_field):
+def _bool_option_switch(key, icon, prefix, availability_field):
     def validate(p, rep, resources):
         """Reject turning on when the selected course's byte in
         `availability_field` isn't 'F0'. Turning off is never blocked. Falls
@@ -282,11 +281,11 @@ def _bool_option_switch(key, name, icon, prefix, availability_field):
         if len(pairs) != len(courses):
             return None
         if pairs[courses.index(current)] != 'F0':
-            return f"{name} isn't available on the selected cycle."
+            return f"{key}_unavailable_for_cycle"
         return None
 
     return bool_option_switch(
-        key, name, icon, prefix,
+        key, icon, prefix,
         entity_category='config', gate_on_presence=True, validate_fn=validate)
 
 
@@ -295,63 +294,61 @@ WASHER_COURSE = Capability(
     entities=(
         cycle_select(translation_key='washer_cycle', icon='mdi:washing-machine',
                      table_href='/st/washercourse/vs/0'),
-        SensorDesc(key='drum_clean_cycles_remaining', name='Drum clean due in',
-                   icon='mdi:washing-machine-alert', unit='cycles',
+        SensorDesc(key='drum_clean_cycles_remaining', unit='cycles',
+                   icon='mdi:washing-machine-alert',
                    state_class='measurement',
                    exists_fn=lambda rep, resources: _drum_clean_cycles_remaining(rep) is not None,
                    rep_fn=_drum_clean_cycles_remaining),
-        SensorDesc(key='drum_clean_last_cleaned', name='Drum last cleaned',
-                   icon='mdi:calendar-clock', device_class='timestamp',
+        SensorDesc(key='drum_clean_last_cleaned', device_class='timestamp',
+                   icon='mdi:calendar-clock',
                    entity_category='diagnostic',
                    exists_fn=lambda rep, resources: _drum_clean_last_cleaned(rep) is not None,
                    rep_fn=_drum_clean_last_cleaned),
-        SelectDesc(key='detergent_quantity', name='Detergent quantity', icon='mdi:cup-water',
-                   translation_key='washer_dosing_quantity',
+        SelectDesc(key='detergent_quantity', icon='mdi:cup-water',
+                   translation_key='detergent_quantity',
                    entity_category='config',
                    options=_level_options('DetergentLevelCtrl'),
                    exists_fn=lambda rep, resources: bool(
                        _level_options('DetergentLevelCtrl')(resources)),
                    rep_fn=_dosing_level('DetergentLevelCtrl'),
                    write_fn=_level_write('DetergentLevelCtrl')),
-        SelectDesc(key='detergent_water_hardness', name='Detergent water hardness',
-                   icon='mdi:water-opacity',
-                   translation_key='washer_detergent_water_hardness',
+        SelectDesc(key='detergent_water_hardness', icon='mdi:water-opacity',
+                   translation_key='detergent_water_hardness',
                    entity_category='config',
                    options=_level_options('DetergentLevel2Ctrl'),
                    exists_fn=lambda rep, resources: bool(
                        _level_options('DetergentLevel2Ctrl')(resources)),
                    rep_fn=_dosing_level('DetergentLevel2Ctrl'),
                    write_fn=_level_write('DetergentLevel2Ctrl')),
-        SelectDesc(key='softener_quantity', name='Softener quantity', icon='mdi:flask-outline',
-                   translation_key='washer_dosing_quantity',
+        SelectDesc(key='softener_quantity', icon='mdi:flask-outline',
+                   translation_key='softener_quantity',
                    entity_category='config',
                    options=_level_options('SoftenerLevelCtrl'),
                    exists_fn=lambda rep, resources: bool(
                        _level_options('SoftenerLevelCtrl')(resources)),
                    rep_fn=_dosing_level('SoftenerLevelCtrl'),
                    write_fn=_level_write('SoftenerLevelCtrl')),
-        SelectDesc(key='softener_concentration', name='Softener concentration',
-                   icon='mdi:flask-plus-outline',
-                   translation_key='washer_softener_concentration',
+        SelectDesc(key='softener_concentration', icon='mdi:flask-plus-outline',
+                   translation_key='softener_concentration',
                    entity_category='config',
                    options=_level_options('SoftenerLevel2Ctrl'),
                    exists_fn=lambda rep, resources: bool(
                        _level_options('SoftenerLevel2Ctrl')(resources)),
                    rep_fn=_dosing_level('SoftenerLevel2Ctrl'),
                    write_fn=_level_write('SoftenerLevel2Ctrl')),
-        BinarySensorDesc(key='detergent_low', name='Detergent low',
-                         icon='mdi:alert-circle-outline', device_class='problem',
+        BinarySensorDesc(key='detergent_low', device_class='problem',
+                         icon='mdi:alert-circle-outline',
                          exists_fn=bool_option_exists('DetergentAlarm'),
                          rep_fn=_dosing_low('DetergentAlarm')),
-        BinarySensorDesc(key='softener_low', name='Softener low',
-                         icon='mdi:alert-circle-outline', device_class='problem',
+        BinarySensorDesc(key='softener_low', device_class='problem',
+                         icon='mdi:alert-circle-outline',
                          exists_fn=bool_option_exists('SoftenerAlarm'),
                          rep_fn=_dosing_low('SoftenerAlarm')),
-        _bool_option_switch('bubble_soak', 'Bubble soak', 'mdi:chart-bubble',
+        _bool_option_switch('bubble_soak', 'mdi:chart-bubble',
                              'BubbleSoak', 'BubbleSoakSet'),
-        _bool_option_switch('pre_wash', 'Pre wash', 'mdi:washing-machine',
+        _bool_option_switch('pre_wash', 'mdi:washing-machine',
                              'PreWashSetting', 'PreWashAvailableSet'),
-        _bool_option_switch('intensive', 'Intensive', 'mdi:washing-machine',
+        _bool_option_switch('intensive', 'mdi:washing-machine',
                              'IntensiveSetting', 'IntensiveAvailableSet'),
     ),
 )

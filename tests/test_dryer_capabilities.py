@@ -69,7 +69,7 @@ def test_course_bound_to_shared_course_vs_0():
     assert callable(desc.translation_key)
     table_03 = {'/st/dryercourse/vs/0': {'x.com.samsung.da.st.courseTable': 'Table_03'}}
     assert desc.translation_key(table_03) == 'dryer_cycle_table_03'
-    assert desc.translation_key({}) is None
+    assert desc.translation_key({}) == 'cycle'
     assert desc.options is laundry.cycle_options
     rep = {'x.com.samsung.da.options': ['Course_16', 'GMT_02']}
     assert desc.rep_fn(rep) == '16'

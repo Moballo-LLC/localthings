@@ -52,7 +52,6 @@ HOOD_ALARMS = Capability(
         SensorDesc(
             key='alarm_code',
             field='x.com.samsung.da.items',
-            name='Alarm code',
             icon='mdi:alert',
             entity_category='diagnostic',
             value_fn=_active_alarm_codes,
@@ -93,13 +92,11 @@ HOOD_FAN = Capability(
         FanDesc(
             key='fan',
             field='x.com.samsung.da.hood.fanSpeed',
-            name=None,
             write_fn=_hood_fan_write,
         ),
         BinarySensorDesc(
             key='automatic_operation',
             field='x.com.samsung.da.hood.autoOperation',
-            name='Automatic operation',
             icon='mdi:fan-auto',
             entity_category='diagnostic',
             value_fn=lambda value: str(value).lower() == 'on',
@@ -125,7 +122,6 @@ HOOD_LAMP = Capability(
         SwitchDesc(
             key='lamp',
             field='x.com.samsung.lamp.power',
-            name='Lamp',
             icon='mdi:range-hood',
             value_fn=lambda value: str(value).lower() == 'on',
             write_fn=lambda payload, rep, href=None: (
@@ -136,7 +132,6 @@ HOOD_LAMP = Capability(
         SelectDesc(
             key='lamp_brightness',
             field='x.com.samsung.lamp.current',
-            name='Lamp brightness',
             icon='mdi:brightness-6',
             translation_key='range_hood_lamp_brightness',
             options_field='x.com.samsung.lamp.range',
@@ -153,7 +148,6 @@ HOOD_FILTER = Capability(
         SensorDesc(
             key='hood_filter_usage',
             field='x.com.samsung.da.filterUsage',
-            name='Filter usage',
             unit='%',
             state_class='measurement',
             icon='mdi:air-filter',
@@ -163,14 +157,18 @@ HOOD_FILTER = Capability(
         SensorDesc(
             key='hood_filter_status',
             field='x.com.samsung.da.filterStatus',
-            name='Filter status',
             icon='mdi:air-filter',
             entity_category='diagnostic',
+            device_class='enum',
+            options=('normal', 'wash', 'replace'),
+            translation_key='filter_status',
+            value_fn=lambda value: (
+                value.lower() if isinstance(value, str) else value
+            ),
         ),
         SensorDesc(
             key='hood_filter_capacity',
             field='x.com.samsung.da.filterCapacity',
-            name='Filter capacity',
             unit='h',
             icon='mdi:timer-outline',
             entity_category='diagnostic',
@@ -188,26 +186,22 @@ AIR_QUALITY = Capability(
         SensorDesc(
             key='clean_level',
             field='x.com.samsung.da.items',
-            name='Clean level',
             icon='mdi:air-filter',
             value_fn=lambda items: sensor_item_value(items, 'CleanLevel'),
         ),
         SensorDesc(
             key='dust',
             field='x.com.samsung.da.items',
-            name='Dust',
             value_fn=lambda items: sensor_item_value(items, 'Dust'),
         ),
         SensorDesc(
             key='fine_dust',
             field='x.com.samsung.da.items',
-            name='Fine dust',
             value_fn=lambda items: sensor_item_value(items, 'FineDust'),
         ),
         SensorDesc(
             key='super_fine_dust',
             field='x.com.samsung.da.items',
-            name='Super fine dust',
             value_fn=lambda items: sensor_item_value(items, 'SuperFineDust'),
         ),
     ),
@@ -221,7 +215,6 @@ AIR_LEVEL_CHECK = Capability(
         BinarySensorDesc(
             key='periodic_air_sensing',
             field='x.com.samsung.da.periodicSensingActivationState',
-            name='Periodic air sensing',
             icon='mdi:radar',
             entity_category='diagnostic',
             value_fn=lambda value: str(value).lower() == 'on',
@@ -229,14 +222,12 @@ AIR_LEVEL_CHECK = Capability(
         SensorDesc(
             key='air_sensing_state',
             field='x.com.samsung.da.sensingState',
-            name='Air sensing state',
             icon='mdi:radar',
             entity_category='diagnostic',
         ),
         SensorDesc(
             key='last_air_sensing_time',
             field='x.com.samsung.da.lastSensingTime',
-            name='Last air sensing time',
             device_class='timestamp',
             entity_category='diagnostic',
             value_fn=_timestamp,
@@ -244,14 +235,12 @@ AIR_LEVEL_CHECK = Capability(
         SensorDesc(
             key='last_air_sensing_level',
             field='x.com.samsung.da.lastSensingLevel',
-            name='Last air sensing level',
             icon='mdi:air-filter',
             entity_category='diagnostic',
         ),
         SensorDesc(
             key='automatic_ventilation_state',
             field='x.com.samsung.da.autoExeState',
-            name='Automatic ventilation state',
             icon='mdi:fan-auto',
             entity_category='diagnostic',
         ),
@@ -266,7 +255,6 @@ AUTO_VENTILATION = Capability(
         SensorDesc(
             key='auto_ventilation_action',
             field='action',
-            name='Auto ventilation action',
             icon='mdi:fan-auto',
         ),
     ),

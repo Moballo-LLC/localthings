@@ -24,13 +24,13 @@ DRYER_SETTINGS = Capability(
     poll_tier='warm',
     entities=(
         SensorDesc(key='dry_level', field='x.com.samsung.da.dryLevel',
-                   name='Dry level', icon='mdi:water-percent'),
+                   icon='mdi:water-percent'),
         SensorDesc(key='dry_time', field='x.com.samsung.da.dryTime',
-                   name='Dry time', icon='mdi:timer'),
+                   icon='mdi:timer'),
         SensorDesc(key='dryer_type', field='x.com.samsung.da.dryerType',
-                   name='Dryer type', icon='mdi:tumble-dryer'),
+                   icon='mdi:tumble-dryer'),
         SwitchDesc(key='wrinkle_prevent', field='x.com.samsung.da.wrinklePrevent',
-                   name='Wrinkle prevent', icon='mdi:iron',
+                   icon='mdi:iron',
                    value_fn=lambda v: v == 'On',
                    write_fn=_wrinkle_write),
     ),
@@ -58,6 +58,6 @@ DRYER_DIAGNOSIS = Capability(
     poll_tier='warm',
     entities=(
         SensorDesc(key='diagnosis', field='x.com.samsung.da.diagnosisStart',
-                   name='Diagnosis', entity_category='diagnostic'),
+                   entity_category='diagnostic'),
     ),
 )

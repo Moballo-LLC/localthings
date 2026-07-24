@@ -914,8 +914,11 @@ async def test_send_command_blocked_when_remote_control_disabled(
 
     with patch.object(fake, 'subscribe'):
         fake.post = _post
-        with pytest.raises(ServiceValidationError, match="Remote control is turned off"):
+        with pytest.raises(ServiceValidationError) as exc_info:
             await coordinator.async_send_command(bound, 5)
+
+    assert exc_info.value.translation_domain == DOMAIN
+    assert exc_info.value.translation_key == 'remote_control_disabled'
 
     assert posted is False
 
@@ -977,8 +980,9 @@ async def test_send_command_remote_control_check_precedes_validate_fn(
     desc = SwitchDesc(key='test', field='value', write_fn=_write_fn, validate_fn=_validate_fn)
     bound = BoundEntity(href='/test/vs/0', capability=coordinator.bound[0].capability, desc=desc)
 
-    with pytest.raises(ServiceValidationError, match="Remote control is turned off"):
+    with pytest.raises(ServiceValidationError) as exc_info:
         await coordinator.async_send_command(bound, 'On')
+    assert exc_info.value.translation_key == 'remote_control_disabled'
 
 
 async def test_send_command_bypasses_remote_control_when_option_enabled(

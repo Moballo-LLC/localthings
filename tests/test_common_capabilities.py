@@ -26,6 +26,37 @@ def test_common_caps_discover_on_dishwasher(dishwasher_resources):
     assert 'power_switch' in keys
 
 
+class TestMergeOptionsField:
+    """merge_options_field() is the read side of issue #54's finding: a
+    write only needs to carry the changed token, so the coordinator uses
+    this to keep its optimistic cache entry complete (every sibling option
+    still present) without waiting on a real poll."""
+
+    def test_replaces_matching_prefix(self):
+        cached = ['DeviceType_0167', 'Course_16', 'GMT_04']
+        assert common.merge_options_field(cached, ['Course_1D']) == [
+            'DeviceType_0167', 'Course_1D', 'GMT_04',
+        ]
+
+    def test_appends_when_prefix_absent(self):
+        cached = ['DeviceType_0167']
+        assert common.merge_options_field(cached, ['NaturalSteam_On']) == [
+            'DeviceType_0167', 'NaturalSteam_On',
+        ]
+
+    def test_merges_multiple_tokens_independently(self):
+        cached = ['DetergentLevelCtrl_1', 'SoftenerLevelCtrl_0', 'GMT_04']
+        merged = common.merge_options_field(cached, ['SoftenerLevelCtrl_2'])
+        assert merged == ['DetergentLevelCtrl_1', 'SoftenerLevelCtrl_2', 'GMT_04']
+
+    def test_handles_missing_cache(self):
+        assert common.merge_options_field(None, ['Course_1D']) == ['Course_1D']
+
+    def test_ignores_malformed_tokens(self):
+        cached = ['Course_16']
+        assert common.merge_options_field(cached, ['nounderscore']) == ['Course_16']
+
+
 # ---------------------------------------------------------------------------
 # OCF-native / vendor '-vs' fallback pairs (power, kids-lock, remote control).
 # ---------------------------------------------------------------------------
@@ -228,7 +259,7 @@ class TestAiEnergyLevelSelect:
 
     def test_no_translation_key(self):
         """aiLevel's values are plain digits that render fine untranslated
-        (select.py's _display()) -- no strings.json entry to maintain
+        (select.py's _display()) -- no catalog entry to maintain
         against an unknown number of future levels."""
         desc = self._desc()
         assert desc.translation_key is None

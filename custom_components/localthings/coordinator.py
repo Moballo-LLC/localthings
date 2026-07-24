@@ -22,7 +22,7 @@ from smartthings_local.ocf.state_cache import StateCache
 
 from .registry.batch import parse_device0_batch
 from .registry.by_type import for_device, for_device_by_model, for_device_by_resources
-from .registry.capabilities.common import remote_control_enabled
+from .registry.capabilities.common import merge_options_field, remote_control_enabled
 from .registry.discovery import discover, BoundEntity
 from .registry import CAPABILITIES
 from .registry.adapter import flatten
@@ -37,13 +37,6 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 _SEED_PATH = ['device', '0']
-
-_REMOTE_CONTROL_DISABLED_MESSAGE = (
-    "Remote control is turned off on this device. Check your appliance's "
-    "manual for how to enable remote control before Home Assistant can "
-    "control it."
-)
-
 
 class _NoOpDescriptor:
     """StateCache requires a descriptor with an on_observation hook. This
@@ -548,12 +541,18 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         resources = self._cache.snapshot()
         bypass_remote_control = self._entry.options.get(CONF_BYPASS_REMOTE_CONTROL, False)
         if not bypass_remote_control and not remote_control_enabled(resources):
-            raise ServiceValidationError(_REMOTE_CONTROL_DISABLED_MESSAGE)
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="remote_control_disabled",
+            )
         validate_fn = getattr(desc, 'validate_fn', None)
         if validate_fn is not None:
             error = validate_fn(payload, rep, resources)
             if error:
-                raise ServiceValidationError(error)
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key=error,
+                )
         result = write_fn(payload, rep, href)
         if result is None:
             self._log.warning("write_fn rejected payload %r for %s", payload, href)
@@ -612,7 +611,24 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # introduced its own races around overlapping writes to the same
         # href. Simpler and safer to just hold the guard for the full,
         # generously-sized window and let it expire on its own.
-        self._observe.apply(write_href, body, source='optimistic')
+        # write_fn bodies that touch x.com.samsung.da.options carry only the
+        # changed token(s) now (issue #54: confirmed sufficient on the wire --
+        # the device merges by prefix itself), not the whole packed array.
+        # observe.apply()'s field-level {**cached, **rep} merge doesn't know
+        # that -- handed the bare token list, it would replace the cached
+        # field outright and wipe every sibling option for the rest of the
+        # settle window. Pre-merge it here the same way the device does, so
+        # the optimistic cache entry stays complete; the minimal `body` below
+        # is still exactly what goes out over the wire.
+        optimistic_body = body
+        new_options = body.get('x.com.samsung.da.options')
+        if isinstance(new_options, list):
+            cached_options = (self._cache.get(write_href) or {}).get('x.com.samsung.da.options')
+            optimistic_body = {
+                **body,
+                'x.com.samsung.da.options': merge_options_field(cached_options, new_options),
+            }
+        self._observe.apply(write_href, optimistic_body, source='optimistic')
         self._observe.mark_write_pending(
             write_href, settle_s=self._POST_TIMEOUT_S + self._POLL_TIMEOUT_S
         )
@@ -630,3 +646,64 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._log.error("command failed for %s: %s", write_href, e)
         else:
             await self.async_request_refresh()
+
+    # ------------------------------------------------------------------
+    # Debug raw write (issue #54): a power-user escape hatch for the
+    # options-flow debug panel, letting a user POST an arbitrary partial
+    # body to an arbitrary href to pin down device-specific write behavior
+    # without waiting on a new release. Deliberately bypasses the
+    # remote-control block and every write_fn/validate_fn above -- that's
+    # the whole point, so use with care.
+    # ------------------------------------------------------------------
+
+    def _raw_write_blocking(self, path_segs: list[str], body: dict, href: str) -> tuple[int, dict]:
+        """Debug primitive: POST an arbitrary patch, then read the href
+        back for ground truth. Blocking -- runs in executor."""
+        if self._session is None:
+            self._connect_session()
+        sess = self._session
+        if sess is None:
+            raise RuntimeError("no session")
+        code, _ = sess.post(path_segs, cbor2.dumps(body), timeout=self._POST_TIMEOUT_S)
+        self._log.warning("DEBUG raw write POST %s %r → code %#04x", href, body, code)
+        new_rep: dict = {}
+        try:
+            sess.pace()
+            rcode, payload = sess.get(path_segs, timeout=10.0)
+            if rcode == 0x45 and payload:
+                rep = cbor2.loads(payload)
+                if isinstance(rep, dict):
+                    self._observe.apply(href, rep, source='poll')
+                    new_rep = rep
+        except Exception as e:
+            self._log.debug("raw write follow-up read failed: %s", e)
+        return code, new_rep
+
+    async def async_raw_write(self, href: str, body: dict) -> tuple[int, dict]:
+        """Debug-only arbitrary write (issue #54). Bypasses the
+        remote-control block and all write_fn/validate_fn logic; sends
+        `body` verbatim as a partial-rep PATCH to `href`. Returns
+        (coap_code, new_rep) where new_rep is the href's value read back
+        right after the write. Used by the options-flow debug panel to
+        help users pin down device-specific write behavior without a new
+        release."""
+        if not isinstance(body, dict) or not body:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="debug_payload_empty",
+            )
+        path_segs = [s for s in href.strip('/').split('/') if s]
+        if not path_segs:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="resource_href_required",
+            )
+        norm_href = '/' + '/'.join(path_segs)
+        async with self._session_lock:
+            code, new_rep = await self.hass.async_add_executor_job(
+                self._raw_write_blocking, path_segs, body, norm_href
+            )
+        # Hasten a full summary poll so entities on other resources catch
+        # up too -- a debug write can affect siblings, not just its href.
+        await self.async_request_refresh()
+        return code, new_rep

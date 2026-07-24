@@ -73,7 +73,7 @@ def _finish_time(remaining_str):
 # Shared by dryer/dishwasher/oven/washer -- oven.py imports this directly
 # rather than keeping its own copy, since both wrote the identical
 # state='Ready' RMW.
-STOP_BUTTON = ButtonDesc(key='stop', field='', name='Stop', payload='Ready',
+STOP_BUTTON = ButtonDesc(key='stop', field='', payload='Ready',
                          icon='mdi:stop',
                          write_fn=lambda p, rep, href=None: (
                              ['operational', 'state', 'vs', '0'],
@@ -84,7 +84,7 @@ OPERATIONAL_STATE = Capability(
     poll_tier='hot',
     entities=(
         SensorDesc(key='machine_state', field='x.com.samsung.da.state',
-                   name='Machine state', device_class='enum',
+                   device_class='enum',
                    options=('idle', 'active', 'pause'),
                    translation_key='machine_state', value_fn=_to_ocf),
         # cycle_active is a bool derived from machine_state; used by the
@@ -92,23 +92,22 @@ OPERATIONAL_STATE = Capability(
         # Harmless for non-oven appliances — just an extra bool in state.
         # Samsung firmware keeps state='Run' after progress reaches 'Finish',
         # so we also gate on progress to avoid a stuck 'Running' indication.
-        # Named 'Running' rather than 'Cycle active' -- this href (and the
+        # Named 'Running' in the catalog rather than 'Cycle active' -- this href (and the
         # start/pause/stop buttons below) is shared across the dryer/
         # dishwasher/oven/washer families, and 'cycle' is laundry-specific
         # vocabulary that doesn't fit an oven's bake/roast/etc.
         BinarySensorDesc(key='cycle_active', device_class='running',
-                         name='Running',
                          rep_fn=lambda rep: (
                              _SAMSUNG_STATE_TO_OCF.get(rep.get('x.com.samsung.da.state')) == 'active'
                              and rep.get('x.com.samsung.da.progress') != 'Finish'
                          )),
-        SensorDesc(key='progress', name='Progress', icon='mdi:progress-wrench',
+        SensorDesc(key='progress', icon='mdi:progress-wrench',
                    rep_fn=lambda rep: (
                        'Idle' if _SAMSUNG_STATE_TO_OCF.get(rep.get('x.com.samsung.da.state')) != 'active'
                        else _progress(rep.get('x.com.samsung.da.progress'))
                    )),
         SensorDesc(key='progress_percentage',
-                   name='Progress percent', unit='%', state_class='measurement',
+                   unit='%', state_class='measurement',
                    rep_fn=lambda rep: (
                        0 if _SAMSUNG_STATE_TO_OCF.get(rep.get('x.com.samsung.da.state')) != 'active'
                        else _int(rep.get('x.com.samsung.da.progressPercentage'))
@@ -117,13 +116,12 @@ OPERATIONAL_STATE = Capability(
         # firmware leaves a stale remainingTime after a cycle ends, and
         # freezes it at '00:01:00' when progress reaches 'Finish'.
         SensorDesc(key='finish_time', device_class='timestamp',
-                   name='Estimated finish',
                    rep_fn=lambda rep: (
                        None if _SAMSUNG_STATE_TO_OCF.get(rep.get('x.com.samsung.da.state')) != 'active'
                             or rep.get('x.com.samsung.da.progress') == 'Finish'
                        else _finish_time(rep.get('x.com.samsung.da.remainingTime'))
                    )),
-        NumberDesc(key='delay_start_hours', name='Delay start', icon='mdi:timer-plus-outline',
+        NumberDesc(key='delay_start_hours', icon='mdi:timer-plus-outline',
                    device_class='duration', unit='h',
                    native_min=0, native_max=24, step=1,
                    rep_fn=lambda rep: _delay_hours(
@@ -132,12 +130,12 @@ OPERATIONAL_STATE = Capability(
                    write_fn=lambda p, rep, href=None: (
                        ['operational', 'state', 'vs', '0'],
                        {_delay_field(rep): _format_delay(p)})),
-        ButtonDesc(key='start', field='', name='Start', payload='Run',
+        ButtonDesc(key='start', field='', payload='Run',
                    icon='mdi:play',
                    write_fn=lambda p, rep, href=None: (
                        ['operational', 'state', 'vs', '0'],
                        {'x.com.samsung.da.state': p})),
-        ButtonDesc(key='pause', field='', name='Pause', payload='Pause',
+        ButtonDesc(key='pause', field='', payload='Pause',
                    icon='mdi:pause',
                    write_fn=lambda p, rep, href=None: (
                        ['operational', 'state', 'vs', '0'],

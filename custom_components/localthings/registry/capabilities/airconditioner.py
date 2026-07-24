@@ -109,7 +109,7 @@ AIR_PURIFY = Capability(
     poll_tier='warm',
     entities=(
         SwitchDesc(key='air_purify', field='x.com.samsung.da.modes',
-                   name='Air purification', icon='mdi:air-purifier',
+                   icon='mdi:air-purifier',
                    entity_category='config',
                    value_fn=lambda v: v == 'On',
                    write_fn=lambda p, rep, href=None: (
@@ -123,7 +123,7 @@ AUTO_CLEAN = Capability(
     poll_tier='cold',
     entities=(
         SwitchDesc(key='auto_clean', field='x.com.samsung.da.settingStatus',
-                   name='Auto clean', icon='mdi:spray-bottle',
+                   icon='mdi:spray-bottle',
                    entity_category='config',
                    value_fn=lambda v: v == 'On',
                    write_fn=lambda p, rep, href=None: (
@@ -137,12 +137,12 @@ AIR_FILTER = Capability(
     poll_tier='cold',
     entities=(
         SensorDesc(key='air_filter_usage', rep_fn=_filter_usage_percent,
-                   name='Filter usage', unit='%', state_class='measurement',
+                   unit='%', state_class='measurement',
                    icon='mdi:air-filter', entity_category='diagnostic'),
         SensorDesc(key='air_filter_status', field='x.com.samsung.da.filterStatus',
-                   name='Filter status', device_class='enum',
+                   device_class='enum',
                    options=('normal', 'wash', 'replace'),
-                   translation_key='air_filter_status',
+                   translation_key='filter_status',
                    icon='mdi:air-filter', entity_category='diagnostic',
                    value_fn=lambda v: v.lower() if isinstance(v, str) else v),
     ),
@@ -153,7 +153,7 @@ DISPLAY_LIGHT = Capability(
     poll_tier='cold',
     entities=(
         SwitchDesc(key='display_light', field='mode',
-                   name='Display light', icon='mdi:led-on',
+                   icon='mdi:led-on',
                    entity_category='config',
                    value_fn=lambda v: v == 'On',
                    write_fn=lambda p, rep, href=None: (
@@ -170,7 +170,7 @@ MUTE_ONCE = Capability(
     poll_tier='warm',
     entities=(
         SwitchDesc(key='mute_once', field='muteonce',
-                   name='Mute once', icon='mdi:volume-mute',
+                   icon='mdi:volume-mute',
                    entity_category='config',
                    value_fn=lambda v: v == 'On',
                    write_fn=lambda p, rep, href=None: (
@@ -190,11 +190,11 @@ CURRENT_LIMIT = Capability(
     poll_tier='cold',
     entities=(
         BinarySensorDesc(key='current_limit_enabled', field='operation',
-                          name='Current limit enabled', icon='mdi:current-ac',
+                          icon='mdi:current-ac',
                           entity_category='diagnostic',
                           value_fn=lambda v: v == 'On'),
         SensorDesc(key='current_limit_level', field='modes',
-                   name='Current limit level', icon='mdi:current-ac',
+                   icon='mdi:current-ac',
                    entity_category='diagnostic'),
     ),
 )

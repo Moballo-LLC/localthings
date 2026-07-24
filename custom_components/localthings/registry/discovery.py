@@ -32,7 +32,7 @@ class BoundEntity:
 
 def _snake_to_title(s: str) -> str:
     """'CUBED_ICE'/'cubed_ice' -> 'Cubed Ice'. Shared with entity.py's
-    _derive_name, which applies the same transform to a state key."""
+    _derive_name, which applies the same transform to an href-derived key."""
     return s.replace('_', ' ').title()
 
 

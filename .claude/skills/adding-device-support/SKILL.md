@@ -141,8 +141,47 @@ settings) must render through translations, not Python:
   `entity.select.<translation_key>.state.<code>`, with the code **lowercased**
   (e.g. `"16": "Cotton"`). Codes with no entry render as the raw code — that's
   the cue to identify and name them.
+  
+## 7. Names and enum labels live in translations, never in Python
 
-## 7. Coverage discipline: bound or ignored
+Descriptors have **no `name` field**. Every entity is named from the shipped
+catalog, keyed by `translation_key` — which defaults to the descriptor's own
+`key`. So adding `SensorDesc(key='filter_status', ...)` obliges you to add:
+
+```json
+"entity": { "sensor": { "filter_status": { "name": "Filter status" } } }
+```
+
+to `translations/en.json`. Skip it and the entity ships nameless;
+`tests/test_translations.py` fails the build instead.
+
+- **Sentence case** ("Filter status", not "Filter Status"), per HA's style
+  guide — capitalize only proper nouns and Samsung feature names ("AI Energy
+  Mode", "Storm Wash+").
+- Set `translation_key` explicitly only to **share** one catalog entry across
+  descriptors, or to point at a differently-named one. Two descriptors on the
+  same platform with the same `key` already share an entry — intended for
+  `common.py`'s OCF/vendor fallback pairs, a silent mislabel otherwise.
+- Prefer HA's own vocabulary where it fits: a `device_class` gives you
+  translated states for free (`binary_sensor` door/running, `sensor`
+  timestamp/enum), so don't restate them.
+
+Selects whose options are raw device codes (course/cycle, code-valued
+settings) additionally need those codes labelled:
+- `options`/`options_field` supply the **raw** codes; the catalog maps them.
+- Add labels under `entity.select.<translation_key>.state.<code>`, code
+  **lowercased** (e.g. `"16": "Cotton"`). `select.py` derives which values it
+  normalizes from the catalog itself, so there is no Python list to keep in
+  sync — a code with no entry simply renders as the raw code, which is the cue
+  to identify and name it.
+
+`translations/en.json` is the only place any of this lives: there is no
+`strings.json` (Home Assistant doesn't read one from a custom integration) and
+no `[%key:...%]` resolution (that's Core build tooling). Every other language
+must mirror `en.json` key for key — also enforced by
+`tests/test_translations.py`.
+
+## 8. Coverage discipline: bound or ignored
 
 Every href in the dump must resolve, or the repair fires. If a resource isn't
 worth an entity, add it to `capabilities/ignored.py` (a no-entity `Capability`)
@@ -156,7 +195,7 @@ friendlier href**.
   ignored because washers bind it. When only one family should ignore an href
   that another binds, scope the ignore to that family's registry.
 
-## 8. Reuse before writing new code
+## 9. Reuse before writing new code
 
 Check `common.py` (generic OCF: power, energy, alarms, water) and `laundry.py`
 (shared washer/dryer/dishwasher: buzzer, job status, `cycle_select` + course
@@ -165,7 +204,7 @@ registry uses `fridge.FIRMWARE_UPDATE`; all three laundry families share
 `laundry.cycle_select`. If two families hand-roll the same helper, hoist it to a
 shared module rather than copying.
 
-## 9. Lock it in
+## 10. Lock it in
 
 1. Add a **scrubbed** fixture `tests/fixtures/<type>_device.json`
    (`{"device0": [ {devcol rep}, {href, rep}, ... ]}`) — replace serials, MACs,

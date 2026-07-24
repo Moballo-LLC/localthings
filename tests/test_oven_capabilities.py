@@ -137,7 +137,10 @@ def test_oven_mode_rejects_unknown():
 
 
 # ---------------------------------------------------------------------------
-# OVEN_MODE options-array RMW (lamp, sound, fast_preheat, natural_steam)
+# OVEN_MODE options-array writes (lamp, sound, fast_preheat, natural_steam).
+# Confirmed on real hardware (issue #54): a write only needs to carry the
+# changed token -- the device matches by prefix, evicts the stale token, and
+# merges the result into the array itself. No read-modify-write needed.
 # ---------------------------------------------------------------------------
 
 def _mode_rep(*extra_opts):
@@ -146,12 +149,11 @@ def _mode_rep(*extra_opts):
     ]}
 
 
-def test_lamp_write_replaces_slot():
+def test_lamp_write_is_single_token():
     desc = next(e for e in oven.OVEN_MODE.entities if e.key == 'lamp')
     path, body = desc.write_fn('On', _mode_rep())
-    opts = body['x.com.samsung.da.options']
-    assert 'UpperLamp_On' in opts
-    assert 'UpperLamp_Off' not in opts
+    assert path == ['mode', 'vs', '0']
+    assert body == {'x.com.samsung.da.options': ['UpperLamp_On']}
 
 
 def test_lamp_write_requires_existing_options():
@@ -159,20 +161,19 @@ def test_lamp_write_requires_existing_options():
     assert desc.write_fn('On', {}) is None
 
 
-def test_sound_write_preserves_other_options():
+def test_sound_write_is_single_token():
     desc = next(e for e in oven.OVEN_MODE.entities if e.key == 'sound')
     path, body = desc.write_fn('Off', _mode_rep())
-    opts = body['x.com.samsung.da.options']
-    assert 'Sound_Off' in opts
-    assert 'UpperLamp_Off' in opts     # other slot unchanged
+    assert body == {'x.com.samsung.da.options': ['Sound_Off']}
 
 
-def test_natural_steam_appended_if_absent():
-    """NaturalSteam slot is absent until first write — write_fn must append it."""
+def test_natural_steam_write_is_single_token():
+    """NaturalSteam's slot may be absent from the live rep until first
+    write -- the single-token write covers both the insert and replace case
+    identically, since the device merges by prefix either way."""
     desc = next(e for e in oven.OVEN_MODE.entities if e.key == 'natural_steam')
     path, body = desc.write_fn('On', _mode_rep())   # no NaturalSteam_* in rep
-    opts = body['x.com.samsung.da.options']
-    assert any(o.startswith('NaturalSteam_') for o in opts)
+    assert body == {'x.com.samsung.da.options': ['NaturalSteam_On']}
 
 
 # ---------------------------------------------------------------------------

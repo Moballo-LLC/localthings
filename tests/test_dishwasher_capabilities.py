@@ -28,9 +28,7 @@ class TestCycleOptions:
         rep = {'x.com.samsung.da.options': ['DeviceType_0001', 'Course_0E', 'GMT_04']}
         path, body = desc.write_fn('90', rep)
         assert path == ['course', 'vs', '0']
-        assert body == {
-            'x.com.samsung.da.options': ['DeviceType_0001', 'Course_90', 'GMT_04'],
-        }
+        assert body == {'x.com.samsung.da.options': ['Course_90']}
 
 
 class TestDishwasherOptions:

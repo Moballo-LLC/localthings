@@ -2,7 +2,7 @@
 from custom_components.localthings.select import _display
 
 _UNTRANSLATED = None
-_TRANSLATED = 'door_alert'
+_TRANSLATED = 'ice_type'
 
 
 def test_display_titlecases_a_fully_lowercase_device_native_token():
@@ -28,10 +28,19 @@ def test_display_passes_through_an_already_human_friendly_value():
 
 
 def test_display_lowercases_for_translation_key_lookup():
-    """An entity with a translation_key must match strings.json's
+    """An entity with a translation_key must match the catalog's
     lowercase keys exactly -- unlike the untranslated cases above, this
     is not a cosmetic transform."""
     assert _display('Whiskey_IceBall_3', _TRANSLATED) == 'whiskey_iceball_3'
+
+
+def test_unknown_translated_vendor_value_keeps_readable_fallback():
+    """A firmware-added value must remain readable instead of being mangled."""
+    assert _display('FutureVendorMode', _TRANSLATED) == 'Future Vendor Mode'
+
+
+def test_known_camel_case_state_uses_snake_case_translation_key():
+    assert _display('ExtraHigh', 'heated_dry') == 'extra_high'
 
 
 def test_display_passes_through_non_string_values():

@@ -11,6 +11,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .registry.entities import SelectDesc
 
+from .catalog import translated_states
 from .const import DOMAIN
 from .coordinator import LocalThingsCoordinator
 from .entity import LocalThingsEntity, _is_included
@@ -32,6 +33,22 @@ async def async_setup_entry(
 _CAMEL_BOUNDARY_RE = re.compile(r'(?<=[a-z0-9])(?=[A-Z])')
 
 
+def _translation_state(value: str, known: frozenset[str]) -> str | None:
+    """Return the catalog state `value` normalizes to, else None.
+
+    Samsung reports options in whatever casing the resource uses
+    ('Rinse_Hold', 'SpTtypeBeerDrinks', '1b'); Home Assistant looks state
+    translations up by a lowercase key. Only values the catalog actually
+    knows are normalized -- an unrecognized (or future) vendor value keeps
+    its own readable form rather than becoming an untranslatable slug.
+    """
+    direct = value.lower().replace(' ', '_')
+    if direct in known:
+        return direct
+    snake = _CAMEL_BOUNDARY_RE.sub('_', value).lower().replace(' ', '_')
+    return snake if snake in known else None
+
+
 def _display(value, translation_key: Optional[str]):
     """Turn a raw device option/state value into what's shown in the UI.
 
@@ -40,13 +57,13 @@ def _display(value, translation_key: Optional[str]):
     callers pass the resolved value, e.g. self.translation_key, not
     the raw descriptor field).
 
-    An entity with a translation_key looks its state up in strings.json,
-    and hassfest requires those keys to be lowercase -- so those values
+    An entity with a translation_key looks its state up in the shipped
+    translation catalog, whose state keys are lowercase -- so those values
     must be lowercased exactly to match, and the device still expects
     that same raw casing back on write (callers map the displayed value
     back to raw via _raw_options()).
 
-    Everything else has no strings.json lookup, so there's no reason to
+    Everything else has no catalog lookup, so there's no reason to
     destroy the device's own casing. Only two cosmetic fixups apply: a
     fully lowercase device-native token (e.g. "voice") is title-cased,
     and a PascalCase token (e.g. "ExtraHigh") gets a space inserted at
@@ -57,7 +74,15 @@ def _display(value, translation_key: Optional[str]):
     if not isinstance(value, str):
         return value
     if translation_key:
-        return value.lower()
+        known = translated_states('select', translation_key)
+        if not known:
+            # No state table for this key: either the entity isn't translated
+            # at all, or its name is translated but its options deliberately
+            # aren't (an unrecognized course table, say). Either way the
+            # opaque device value is the best thing to show.
+            return value
+        if translated := _translation_state(value, known):
+            return translated
     if value.islower():
         return value.replace('_', ' ').title()
     return _CAMEL_BOUNDARY_RE.sub(' ', value)

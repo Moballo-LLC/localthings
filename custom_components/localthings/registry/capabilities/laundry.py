@@ -21,6 +21,7 @@ Door-LED keys use NO `x.com.samsung.da.` prefix -- `setBrightness` /
 """
 from datetime import time as dt_time
 
+from ...catalog import has_entity_translation
 from ..capability import Capability
 from ..entities import NumberDesc, SelectDesc, SensorDesc, SwitchDesc, TimeDesc
 
@@ -60,30 +61,30 @@ DOOR_LED = Capability(
     href='/doorled/light/vs/0',
     entities=(
         SelectDesc(key='led_brightness', field='setBrightness',
-                   name='Door LED brightness', icon='mdi:brightness-6',
+                   icon='mdi:brightness-6',
                    entity_category='config',
                    options=_LED_LEVELS, write_fn=_led_brightness_write),
         SwitchDesc(key='led_night_light', field='setNightLight',
-                   name='Door LED night light', icon='mdi:weather-night',
+                   icon='mdi:weather-night',
                    entity_category='config',
                    value_fn=lambda v: v == 'On',
                    write_fn=_led_night_write),
         SelectDesc(key='led_night_brightness', field='setNightLightBrightness',
-                   name='Door LED night brightness', icon='mdi:brightness-4',
+                   icon='mdi:brightness-4',
                    entity_category='config',
                    options=_LED_LEVELS,
                    write_fn=lambda p, rep, href=None: (
                        ['doorled', 'light', 'vs', '0'],
                        {'setNightLightBrightness': p})),
         TimeDesc(key='led_night_start', field='setNightLightTimeStart',
-                 name='Door LED night start', icon='mdi:clock-start',
+                 icon='mdi:clock-start',
                  entity_category='config',
                  value_fn=_parse_hm,
                  write_fn=lambda p, rep, href=None: (
                      ['doorled', 'light', 'vs', '0'],
                      {'setNightLightTimeStart': f'{p.hour:02d}:{p.minute:02d}'})),
         TimeDesc(key='led_night_end', field='setNightLightTimeEnd',
-                 name='Door LED night end', icon='mdi:clock-end',
+                 icon='mdi:clock-end',
                  entity_category='config',
                  value_fn=_parse_hm,
                  write_fn=lambda p, rep, href=None: (
@@ -96,7 +97,7 @@ SOUND_MODE = Capability(
     href='/settings/sound/mode/vs/0',
     entities=(
         SelectDesc(key='sound_mode', field='mode',
-                   name='Sound mode', icon='mdi:volume-high',
+                   icon='mdi:volume-high',
                    entity_category='config',
                    options=_SOUND_MODES, write_fn=_sound_mode_write),
     ),
@@ -106,7 +107,7 @@ SOUND_VOLUME = Capability(
     href='/settings/sound/volume/vs/0',
     entities=(
         NumberDesc(key='sound_volume', field='level',
-                   name='Sound volume', icon='mdi:volume-medium',
+                   icon='mdi:volume-medium',
                    entity_category='config',
                    native_min=0, native_max=15, step=5,
                    value_fn=lambda v: int(v) if v is not None else None,
@@ -127,13 +128,13 @@ BUZZER_SOUND = Capability(
     href='/buzzersound/vs/0',
     entities=(
         SelectDesc(key='buzzer_sound', field='setBuzzerSound',
-                   name='Buzzer sound', icon='mdi:volume-high',
+                   icon='mdi:volume-high',
                    entity_category='config',
                    options_field='supportedBuzzerSound',
                    write_fn=lambda p, rep, href=None: (
                        ['buzzersound', 'vs', '0'], {'setBuzzerSound': p})),
         SelectDesc(key='finish_sound', field='setFinishSound',
-                   name='Finish sound', icon='mdi:bell-ring',
+                   icon='mdi:bell-ring',
                    entity_category='config',
                    exists_fn=lambda rep, resources: 'supportedFinishSound' in rep,
                    options_field='supportedFinishSound',
@@ -146,9 +147,13 @@ BUZZER_SOUND = Capability(
 # Cycle selection over /course/vs/0.
 #
 # The selected course and every other user-tunable option ride in the
-# x.com.samsung.da.options array on /course/vs/0 as `<Prefix>_<value>` tokens;
-# a write is a read-modify-write of that whole array (cycle_write). The set of
-# *selectable* courses is not hardcoded -- it's read live from
+# x.com.samsung.da.options array on /course/vs/0 as `<Prefix>_<value>` tokens.
+# Confirmed on real hardware (issue #54): a write only needs to carry the one
+# changed token -- `{'x.com.samsung.da.options': ['SoftenerLevelCtrl_2']}` --
+# the device matches by prefix, evicts the stale token, and merges the result
+# into the array itself. No read-modify-write of the whole array needed (see
+# option_write). The set of *selectable* courses is not hardcoded -- it's read
+# live from
 # x.com.samsung.da.editCourseList on /wm/editcourse/vs/0 (cycle_options), so we
 # never show a course a given model doesn't have or hide one it does. Course
 # codes are uppercase hex; display names live in translations under
@@ -257,17 +262,17 @@ def _course_codes_from_supported_options(course_rep):
     return []
 
 
-def replace_in_options(options, prefix, new_value):
-    return [f"{prefix}_{new_value}" if isinstance(o, str) and o.startswith(prefix + '_') else o
-            for o in options]
+def option_write(prefix, new_value):
+    """A one-token x.com.samsung.da.options write -- see the module comment
+    above cycle_options for why this doesn't read/rewrite the whole array."""
+    return [f'{prefix}_{new_value}']
 
 
 def cycle_write(p, rep, href=None):
-    opts = list(rep.get('x.com.samsung.da.options') or [])
-    if not opts:
+    if not rep.get('x.com.samsung.da.options'):
         return None
     return ['course', 'vs', '0'], {
-        'x.com.samsung.da.options': replace_in_options(opts, 'Course', p),
+        'x.com.samsung.da.options': option_write('Course', p),
     }
 
 
@@ -287,23 +292,22 @@ def cycle_select(*, translation_key, icon, table_href=None):
     suffixes translation_key with the device's own course-table id, read
     from /st/washercourse/vs/0 or /st/dryercourse/vs/0's
     x.com.samsung.da.st.courseTable (e.g. 'washer_cycle' + 'Table_02' ->
-    'washer_cycle_table_02'). No table id available at all -- the href
-    absent or empty -- gets no translation_key, i.e. the raw course code
-    displayed as-is.
+    'washer_cycle_table_02'). An absent or unrecognized table id gets the
+    name-only ``cycle`` translation key while the raw course code remains
+    visible and writable.
 
     This matters because course codes are NOT guaranteed consistent across
     board generations sharing the same /course/vs/0 contract: every code in
     washer_cycle_table_02 was confirmed against Table_02-reporting devices
     (DA_WM_TP1/TP2 boards); FlexWash's older DA_WM_A51 board reports
     Table_00 instead, so the same hex code could mean a different course
-    there for all we've verified. Building the key from whatever table the
-    device actually reports, rather than gating a single hardcoded key on
-    an exact match, means a table we haven't built translations for yet
-    (like Table_00) just falls through Home Assistant's own missing-
-    translation handling to the same raw-code display -- exactly what
-    happens today for any individual code within a table's translations
-    that isn't populated yet -- and adding one later needs new strings.json
-    entries, not a code change here.
+    there for all we've verified. So a table-specific key is used only when
+    the shipped catalog actually has one; any other table (Table_00 today,
+    whatever ships next) falls back to the name-only ``cycle`` key, which
+    shows the raw course code rather than a label borrowed from another
+    board generation. Translating a new table is therefore a
+    translations-only change -- add the ``<family>_cycle_<table>`` entry and
+    this resolver picks it up.
 
     Left at its default for dishwasher, which has no equivalent table-id
     resource in any dump seen and no evidence its course codes vary by
@@ -314,10 +318,13 @@ def cycle_select(*, translation_key, icon, table_href=None):
     if table_href is not None:
         def key(resources):
             table = _table_id(resources, table_href)
-            return f'{translation_key}_{table.lower()}' if table else None
+            if not isinstance(table, str) or not table:
+                return 'cycle'
+            candidate = f'{translation_key}_{table.lower()}'
+            return candidate if has_entity_translation('select', candidate) else 'cycle'
 
     return SelectDesc(
-        key='cycle', name='Cycle', icon=icon, translation_key=key,
+        key='cycle', icon=icon, translation_key=key,
         options=cycle_options,
         exists_fn=lambda rep, resources: bool(cycle_options(resources)),
         rep_fn=lambda rep: option_value(rep.get('x.com.samsung.da.options'), 'Course'),
@@ -339,11 +346,10 @@ def bool_option_write(prefix):
     def write(p, rep, href=None):
         if p not in ('On', 'Off'):
             return None
-        opts = list(rep.get('x.com.samsung.da.options') or [])
-        if not opts:
+        if not rep.get('x.com.samsung.da.options'):
             return None
         return ['course', 'vs', '0'], {
-            'x.com.samsung.da.options': replace_in_options(opts, prefix, p),
+            'x.com.samsung.da.options': option_write(prefix, p),
         }
     return write
 
@@ -357,8 +363,8 @@ def bool_option_exists(prefix):
         rep.get('x.com.samsung.da.options'), prefix) is not None
 
 
-def bool_option_switch(key, name, icon, prefix, *, entity_category=None,
-                        gate_on_presence=False, validate_fn=None):
+def bool_option_switch(key, icon, prefix, *, entity_category=None,
+                       gate_on_presence=False, validate_fn=None):
     """A SwitchDesc over a '<prefix>_On'/'<prefix>_Off' options[] token.
 
     gate_on_presence self-gates the entity off on models that never report
@@ -370,7 +376,7 @@ def bool_option_switch(key, name, icon, prefix, *, entity_category=None,
     building one, if needed, is the caller's job.
     """
     return SwitchDesc(
-        key=key, name=name, icon=icon, entity_category=entity_category,
+        key=key, icon=icon, entity_category=entity_category,
         exists_fn=bool_option_exists(prefix) if gate_on_presence else None,
         rep_fn=bool_option_value(prefix),
         write_fn=bool_option_write(prefix),
@@ -393,7 +399,6 @@ JOB_BEGINNING_STATUS = Capability(
     entities=(
         SensorDesc(key='job_beginning_status',
                    field='x.com.samsung.da.currentStatus',
-                   name='Job beginning status',
                    entity_category='diagnostic'),
     ),
 )

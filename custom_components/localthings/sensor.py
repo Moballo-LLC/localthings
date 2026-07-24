@@ -61,7 +61,6 @@ class LocalThingsConnectionModeSensor(CoordinatorEntity[LocalThingsCoordinator],
     Disabled by default — it's for troubleshooting, not everyday use."""
 
     _attr_has_entity_name = True
-    _attr_name = 'Connection mode'
     _attr_translation_key = 'connection_mode'
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default = False

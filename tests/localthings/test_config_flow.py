@@ -38,6 +38,7 @@ async def test_form_second_device_reuses_creds(hass: HomeAssistant) -> None:
         DOMAIN, context={'source': 'user'}
     )
     assert result['type'] == FlowResultType.FORM
+    assert result['step_id'] == 'user_reuse'
     assert CONF_CA_CERT_PEM not in result['data_schema'].schema
     assert CONF_CA_KEY_PEM not in result['data_schema'].schema
 
@@ -219,6 +220,39 @@ async def test_unknown_type_shows_confirmation_step(
     assert result['data'][CONF_HOST] == MOCK_HOST
 
 
+async def test_unknown_type_without_version_uses_localized_step(
+    hass: HomeAssistant,
+) -> None:
+    """No English placeholder sentinel leaks into a translated description."""
+    probe_result = {
+        'port': MOCK_PORT,
+        'serial': MOCK_SERIAL,
+        'leaf_cert_pem': 'leaf cert',
+        'leaf_key_pem': 'leaf key',
+        'one_ui_version': '',
+        'device_type_recognized': False,
+    }
+    with patch(
+        'custom_components.localthings.config_flow._probe_and_validate',
+        return_value=probe_result,
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={'source': 'user'}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result['flow_id'],
+            {
+                CONF_HOST: MOCK_HOST,
+                CONF_CA_CERT_PEM: MOCK_CA_CERT_PEM,
+                CONF_CA_KEY_PEM: MOCK_CA_KEY_PEM,
+            },
+        )
+
+    assert result['type'] == FlowResultType.FORM
+    assert result['step_id'] == 'confirm_unknown_type_no_version'
+    assert not result.get('description_placeholders')
+
+
 async def test_duplicate_device_aborted(hass: HomeAssistant, mock_probe) -> None:
     """Second add of same serial: flow aborts.
 
@@ -279,6 +313,20 @@ def test_probe_marks_washer_as_recognized(monkeypatch):
     assert recognized is True
 
 
+async def test_options_flow_init_shows_menu(hass: HomeAssistant) -> None:
+    """The options flow's entry point is now a menu (issue #54's debug
+    panel lives alongside the remote-control settings), not the settings
+    form directly."""
+    entry = MockConfigEntry(domain=DOMAIN, data=ENTRY_DATA, unique_id=f'localthings_{MOCK_SERIAL}')
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+
+    assert result['type'] == FlowResultType.MENU
+    assert result['step_id'] == 'init'
+    assert set(result['menu_options']) == {'settings', 'debug_write'}
+
+
 async def test_options_flow_default_is_off(hass: HomeAssistant) -> None:
     """The bypass defaults to False, so devices that never touch this
     option see no change in the remote-control write block."""
@@ -286,9 +334,12 @@ async def test_options_flow_default_is_off(hass: HomeAssistant) -> None:
     entry.add_to_hass(hass)
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result['flow_id'], user_input={'next_step_id': 'settings'}
+    )
 
     assert result['type'] == FlowResultType.FORM
-    assert result['step_id'] == 'init'
+    assert result['step_id'] == 'settings'
     assert result['data_schema']({})[CONF_BYPASS_REMOTE_CONTROL] is False
 
 
@@ -299,6 +350,9 @@ async def test_options_flow_can_enable_bypass(hass: HomeAssistant) -> None:
     entry.add_to_hass(hass)
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result['flow_id'], user_input={'next_step_id': 'settings'}
+    )
     result = await hass.config_entries.options.async_configure(
         result['flow_id'], user_input={CONF_BYPASS_REMOTE_CONTROL: True}
     )
@@ -317,5 +371,140 @@ async def test_options_flow_reflects_previously_saved_value(hass: HomeAssistant)
     entry.add_to_hass(hass)
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result['flow_id'], user_input={'next_step_id': 'settings'}
+    )
 
     assert result['data_schema']({})[CONF_BYPASS_REMOTE_CONTROL] is True
+
+
+async def test_options_flow_debug_write_shows_hrefs_from_coordinator(
+    hass: HomeAssistant, mock_coordinator_session,
+) -> None:
+    """The debug panel's href dropdown is populated from the live
+    coordinator's cached resources, not a static list."""
+    entry = MockConfigEntry(domain=DOMAIN, data=ENTRY_DATA, unique_id=f'localthings_{MOCK_SERIAL}')
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result['flow_id'], user_input={'next_step_id': 'debug_write'}
+    )
+
+    assert result['type'] == FlowResultType.FORM
+    assert result['step_id'] == 'debug_write'
+
+
+async def test_options_flow_debug_write_aborts_when_device_not_loaded(
+    hass: HomeAssistant,
+) -> None:
+    """No coordinator in hass.data (device never finished loading) means
+    the debug panel has nothing to write to or read from."""
+    entry = MockConfigEntry(domain=DOMAIN, data=ENTRY_DATA, unique_id=f'localthings_{MOCK_SERIAL}')
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result['flow_id'], user_input={'next_step_id': 'debug_write'}
+    )
+
+    assert result['type'] == FlowResultType.ABORT
+    assert result['reason'] == 'not_loaded'
+
+
+async def test_options_flow_debug_edit_writes_and_shows_result(
+    hass: HomeAssistant, mock_coordinator_session,
+) -> None:
+    """Picking an href, then submitting a payload, drives
+    coordinator.async_raw_write and lands on the result menu with the
+    device's response."""
+    entry = MockConfigEntry(domain=DOMAIN, data=ENTRY_DATA, unique_id=f'localthings_{MOCK_SERIAL}')
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result['flow_id'], user_input={'next_step_id': 'debug_write'}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result['flow_id'], user_input={'href': '/washer/vs/0'},
+    )
+    assert result['type'] == FlowResultType.FORM
+    assert result['step_id'] == 'debug_edit'
+
+    with patch(
+        'custom_components.localthings.coordinator.LocalThingsCoordinator.async_raw_write',
+        return_value=(0x44, {'a': 1}),
+    ):
+        result = await hass.config_entries.options.async_configure(
+            result['flow_id'], user_input={'payload': {'a': 1}},
+        )
+
+    assert result['type'] == FlowResultType.MENU
+    assert result['step_id'] == 'debug_result'
+    assert result['description_placeholders']['code'] == '2.04 (0x44)'
+
+
+async def test_options_flow_debug_edit_rejects_empty_payload(
+    hass: HomeAssistant, mock_coordinator_session,
+) -> None:
+    entry = MockConfigEntry(domain=DOMAIN, data=ENTRY_DATA, unique_id=f'localthings_{MOCK_SERIAL}')
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result['flow_id'], user_input={'next_step_id': 'debug_write'}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result['flow_id'], user_input={'href': '/washer/vs/0'},
+    )
+    result = await hass.config_entries.options.async_configure(
+        result['flow_id'], user_input={'payload': {}},
+    )
+
+    assert result['type'] == FlowResultType.FORM
+    assert result['step_id'] == 'debug_edit'
+    assert result['errors'] == {'payload': 'empty_payload'}
+
+
+async def test_options_flow_finish_preserves_existing_options(
+    hass: HomeAssistant, mock_coordinator_session,
+) -> None:
+    """Finishing from the debug-result menu must not clobber a previously
+    saved remote-control bypass setting."""
+    entry = MockConfigEntry(
+        domain=DOMAIN, data=ENTRY_DATA, unique_id=f'localthings_{MOCK_SERIAL}',
+        options={CONF_BYPASS_REMOTE_CONTROL: True},
+    )
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result['flow_id'], user_input={'next_step_id': 'debug_write'}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result['flow_id'], user_input={'href': '/washer/vs/0'},
+    )
+    with patch(
+        'custom_components.localthings.coordinator.LocalThingsCoordinator.async_raw_write',
+        return_value=(0x44, {'a': 1}),
+    ):
+        result = await hass.config_entries.options.async_configure(
+            result['flow_id'], user_input={'payload': {'a': 1}},
+        )
+    assert result['type'] == FlowResultType.MENU
+    assert result['step_id'] == 'debug_result'
+
+    result = await hass.config_entries.options.async_configure(
+        result['flow_id'], user_input={'next_step_id': 'finish'}
+    )
+
+    assert result['type'] == FlowResultType.CREATE_ENTRY
+    assert entry.options[CONF_BYPASS_REMOTE_CONTROL] is True

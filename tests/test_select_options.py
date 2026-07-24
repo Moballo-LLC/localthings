@@ -49,7 +49,7 @@ def test_callable_options_receives_full_resource_snapshot():
         '/other/vs/0': {'codes': ['1C', '1D']},
     }
     entity = _make_select(desc, '/x/vs/0', resources)
-    assert entity.options == ['1c', '1d']
+    assert entity.options == ['1C', '1D']
     assert calls == [resources]
 
 
@@ -74,3 +74,29 @@ def test_callable_translation_key_reresolves_live_not_once_at_construction():
 
     resources['key'] = 'washer_cycle_table_02'
     assert entity.translation_key == 'washer_cycle_table_02'
+
+
+async def test_unknown_vendor_option_round_trips_to_exact_raw_value():
+    """Readable fallback labels must still write the exact Samsung token."""
+    class _WritableCoordinator(_FakeCoordinator):
+        data = {'mode': 'FutureVendorMode'}
+
+        def __init__(self, last_resources):
+            super().__init__(last_resources)
+            self.writes = []
+
+        async def async_send_command(self, bound, value):
+            self.writes.append(value)
+
+    desc = SelectDesc(
+        key='mode', translation_key='door_alert',
+        options=('Known', 'FutureVendorMode'), write_fn=lambda *args: None,
+    )
+    capability = Capability(href='/x/vs/0', entities=(desc,))
+    bound = BoundEntity(href='/x/vs/0', capability=capability, desc=desc)
+    coordinator = _WritableCoordinator({})
+    entity = LocalThingsSelect(coordinator, bound)
+
+    assert entity.options[-1] == 'Future Vendor Mode'
+    await entity.async_select_option('Future Vendor Mode')
+    assert coordinator.writes == ['FutureVendorMode']

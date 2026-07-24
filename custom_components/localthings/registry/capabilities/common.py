@@ -65,6 +65,33 @@ def _active_alarm_codes(items):
     return ', '.join(codes) if codes else 'none'
 
 
+def merge_options_field(cached, new_tokens):
+    """Merge freshly-written `<Prefix>_<Value>` tokens into a cached
+    x.com.samsung.da.options[]-style array the same way the device itself
+    merges them: match by prefix, replace if present, append if not.
+
+    Confirmed on real hardware (issue #54) that a write only needs to carry
+    the changed token(s), not the whole array -- see laundry.option_write /
+    oven._option_write for the write side. This is the read side of that
+    same fact: coordinator.async_send_command uses it to keep the
+    optimistic cache entry for the written href complete (every sibling
+    option still present) during the write-settle window, since the wire
+    body it applies straight to the cache no longer carries them."""
+    merged = list(cached or [])
+    for token in new_tokens or ():
+        if not isinstance(token, str) or '_' not in token:
+            continue
+        prefix = token.split('_', 1)[0]
+        replaced = False
+        for i, o in enumerate(merged):
+            if isinstance(o, str) and o.startswith(prefix + '_'):
+                merged[i] = token
+                replaced = True
+        if not replaced:
+            merged.append(token)
+    return merged
+
+
 def sensor_item_value(items, sensor_type, index=0):
     """Pull one reading out of a `/sensors/vs/0`-style items[] list -- each
     item is `{type, value: [...]}`; `index` picks which slot of a possibly
@@ -102,7 +129,6 @@ POWER_GENERIC = Capability(
     href='/power/0',
     entities=(
         SwitchDesc(key='power_switch', field='value',
-                   name='Power',
                    value_fn=lambda v: bool(v),
                    write_fn=lambda p, rep, href=None: (
                        ['power', '0'], {'value': p == 'On'})),
@@ -114,7 +140,6 @@ POWER_VS_FALLBACK = Capability(
     match_fn=lambda rep, resources: '/power/0' not in resources,
     entities=(
         SwitchDesc(key='power_switch', field='x.com.samsung.da.power',
-                   name='Power',
                    value_fn=lambda v: v == 'On',
                    write_fn=lambda p, rep, href=None: (
                        ['power', 'vs', '0'],
@@ -126,7 +151,7 @@ KIDS_LOCK_GENERIC = Capability(
     href='/kidslock/0',
     entities=(
         SwitchDesc(key='child_lock', field='value',
-                   name='Child lock', device_class='lock',
+                   device_class='lock',
                    value_fn=lambda v: bool(v),
                    write_fn=lambda p, rep, href=None: (
                        ['kidslock', '0'], {'value': p == 'On'})),
@@ -138,7 +163,7 @@ KIDS_LOCK_VS_FALLBACK = Capability(
     match_fn=lambda rep, resources: '/kidslock/0' not in resources,
     entities=(
         SwitchDesc(key='child_lock', field='x.com.samsung.da.kidsLock',
-                   name='Child lock', device_class='lock',
+                   device_class='lock',
                    value_fn=lambda v: v != 'Ready',
                    write_fn=lambda p, rep, href=None: (
                        ['kidslock', 'vs', '0'],
@@ -172,7 +197,7 @@ REMOTE_CONTROL_GENERIC = Capability(
     poll_tier='warm',
     entities=(
         BinarySensorDesc(key='remote_control', field='value',
-                         name='Smart Control', device_class='connectivity',
+                         device_class='connectivity',
                          value_fn=lambda v: bool(v)),
     ),
 )
@@ -184,7 +209,7 @@ REMOTE_CONTROL_VS_FALLBACK = Capability(
     entities=(
         BinarySensorDesc(key='remote_control',
                          field='x.com.samsung.da.remoteControlEnabled',
-                         name='Smart Control', device_class='connectivity',
+                         device_class='connectivity',
                          value_fn=lambda v: str(v).lower() == 'true'),
     ),
 )
@@ -194,7 +219,7 @@ ALARMS = Capability(
     poll_tier='hot',
     entities=(
         SensorDesc(key='alarm_code', field='x.com.samsung.da.items',
-                   name='Alarm code', icon='mdi:alert',
+                   icon='mdi:alert',
                    entity_category='diagnostic', value_fn=_active_alarm_codes),
     ),
 )
@@ -217,13 +242,13 @@ ENERGY_METER = Capability(
         # entity when /device/0 returns a not-yet-fetched stub. On a populated
         # rep, hide power only for the dead sentinel or an absent field.
         SensorDesc(key='power_watts', field='x.com.samsung.da.instantaneousPower',
-                   name='Power', device_class='power', state_class='measurement',
+                   device_class='power', state_class='measurement',
                    unit='W', value_fn=clamp_power,
                    exists_fn=lambda rep, resources: not rep or (
                        rep.get('x.com.samsung.da.instantaneousPower')
                        not in (None, _DEAD_INSTANTANEOUS_POWER))),
         SensorDesc(key='energy_kwh', field='x.com.samsung.da.cumulativePower',
-                   name='Energy', device_class='energy',
+                   device_class='energy',
                    state_class='total_increasing', unit='kWh', value_fn=wh_to_kwh,
                    exists_fn=lambda rep, resources: (
                        not rep or 'x.com.samsung.da.cumulativePower' in rep)),
@@ -234,7 +259,7 @@ ENERGY_METER = Capability(
         # energy_kwh above -- without it, an exists_fn permanently drops the
         # entity if setup happens to land on a not-yet-fetched stub.
         SensorDesc(key='power_energy_kwh', field='x.com.samsung.da.cumulativeConsumption',
-                   name='Power energy', device_class='energy',
+                   device_class='energy',
                    state_class='total_increasing', unit='kWh', value_fn=wh_to_kwh,
                    exists_fn=lambda rep, resources: (
                        not rep or 'x.com.samsung.da.cumulativeConsumption' in rep)),
@@ -242,7 +267,7 @@ ENERGY_METER = Capability(
         # baseline -- present on some models (e.g. TP1X_REF_21K, issue #21/
         # #27) and absent on others (issue #20/#26), unlike cumulativePower.
         SensorDesc(key='energy_saved_kwh', field='x.com.samsung.da.cumulativeSavedPower',
-                   name='Energy saved', device_class='energy',
+                   device_class='energy',
                    state_class='total_increasing', unit='kWh', value_fn=wh_to_kwh,
                    exists_fn=lambda rep, resources: (
                        not rep or 'x.com.samsung.da.cumulativeSavedPower' in rep)),
@@ -250,12 +275,12 @@ ENERGY_METER = Capability(
         # in-progress current month. Not ever-increasing (each resets at
         # month boundary), so no state_class.
         SensorDesc(key='energy_last_month_kwh', field='x.com.samsung.da.monthlyConsumption',
-                   name='Energy (last month)', device_class='energy',
+                   device_class='energy',
                    unit='kWh', value_fn=wh_to_kwh,
                    exists_fn=lambda rep, resources: (
                        not rep or 'x.com.samsung.da.monthlyConsumption' in rep)),
         SensorDesc(key='energy_this_month_kwh', field='x.com.samsung.da.thismonthlyConsumption',
-                   name='Energy (this month)', device_class='energy',
+                   device_class='energy',
                    unit='kWh', value_fn=wh_to_kwh,
                    exists_fn=lambda rep, resources: (
                        not rep or 'x.com.samsung.da.thismonthlyConsumption' in rep)),
@@ -266,7 +291,7 @@ WATER_METER = Capability(
     href='/water/consumption/vs/0',
     entities=(
         SensorDesc(key='water_liters', field='x.com.samsung.da.cumulativeWater',
-                   name='Water consumption', device_class='water',
+                   device_class='water',
                    state_class='total_increasing', unit='L', icon='mdi:water',
                    value_fn=_ml_to_l),
     ),
@@ -277,10 +302,14 @@ WATER_FILTER = Capability(
     match_fn=lambda rep, _: rep.get('x.com.samsung.da.filterStatus', '').lower() != 'notused',
     entities=(
         SensorDesc(key='filter_usage', field='x.com.samsung.da.filterUsage',
-                   name='Filter usage', unit='%', state_class='measurement',
+                   unit='%', state_class='measurement',
                    icon='mdi:filter'),
         SensorDesc(key='filter_status', field='x.com.samsung.da.filterStatus',
-                   name='Filter status', icon='mdi:filter-check'),
+                   icon='mdi:filter-check',
+                   device_class='enum', options=('normal', 'wash', 'replace'),
+                   value_fn=lambda value: (
+                       value.lower() if isinstance(value, str) else value
+                   )),
     ),
 )
 
@@ -297,7 +326,7 @@ WATER_FILTER = Capability(
 #
 # No translation_key: aiLevel's values are plain digit strings, and
 # select.py's _display() already renders an untranslated numeric string
-# as-is -- there's nothing a strings.json entry adds that's worth maintaining
+# as-is -- there's nothing a catalog entry adds that's worth maintaining
 # against an unknown, growing number of future levels.
 
 
@@ -344,14 +373,14 @@ AI_ENERGY_LEVEL = Capability(
         # cold-tier href, the same reload already required to fix which
         # platform got picked in that case.
         SwitchDesc(key='ai_energy_level', field='aiLevel',
-                   name='AI energy level', icon='mdi:leaf',
+                   icon='mdi:leaf',
                    entity_category='config',
                    value_fn=lambda v: v != '0',
                    exists_fn=lambda rep, resources: (
                        len(_ai_energy_supported_levels(rep)) == 1),
                    write_fn=_ai_energy_level_switch_write),
         SelectDesc(key='ai_energy_level', field='aiLevel',
-                   name='AI energy level', icon='mdi:leaf',
+                   icon='mdi:leaf',
                    entity_category='config',
                    options=_ai_energy_level_options,
                    exists_fn=lambda rep, resources: (
@@ -367,7 +396,6 @@ FIRMWARE_UPDATE = Capability(
         BinarySensorDesc(
             key='firmware_update',
             field='x.com.samsung.da.newVersionAvailable',
-            name='Firmware update available',
             device_class='update',
             entity_category='diagnostic',
             value_fn=lambda v: str(v).lower() == 'true' if v is not None else None,
@@ -380,21 +408,21 @@ SELF_CHECK = Capability(
     poll_tier='cold',
     entities=(
         SensorDesc(key='selfcheck_status', field='x.com.samsung.da.status',
-                   name='Self-check status', icon='mdi:stethoscope',
+                   icon='mdi:stethoscope',
                    entity_category='diagnostic'),
         SensorDesc(key='selfcheck_result', field='x.com.samsung.da.result',
-                   name='Self-check result', icon='mdi:clipboard-check-outline',
+                   icon='mdi:clipboard-check-outline',
                    entity_category='diagnostic'),
         # List of error codes from the last self-check; joined for display.
         # Not every fridge reports the field, hence the exists_fn.
         SensorDesc(key='selfcheck_error', field='x.com.samsung.da.error',
-                   name='Self-check error', icon='mdi:alert-circle-outline',
+                   icon='mdi:alert-circle-outline',
                    entity_category='diagnostic',
                    exists_fn=lambda rep, resources: (
                        not rep or 'x.com.samsung.da.error' in rep),
                    value_fn=lambda v: (', '.join(v) if v else None) if isinstance(v, list) else v),
-        ButtonDesc(key='selfcheck_start', field='', name='Start self-check',
-                   payload='Start', icon='mdi:play-circle-outline',
+        ButtonDesc(key='selfcheck_start', field='', payload='Start',
+                   icon='mdi:play-circle-outline',
                    entity_category='diagnostic',
                    write_fn=lambda p, rep, href=None: (
                        ['selfcheck', 'vs', '0'], {'x.com.samsung.da.status': p})),
