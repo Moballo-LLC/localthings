@@ -19,6 +19,7 @@ Your state stays on your LAN: HA talks to the appliance over a direct DTLS sessi
 | Air conditioner | `by_type/airconditioner.py` |
 | Air purifier | `by_type/air_purifier.py` |
 | Dryer | `by_type/dryer.py` |
+| Microwave | `by_type/microwave.py` |
 | Oven | `by_type/oven.py` |
 | Cooktop (read-only burner status) | `by_type/cooktop.py` |
 | Range hood | `by_type/range_hood.py` |
@@ -116,8 +117,8 @@ custom_components/localthings/
     identity.py              Reads device identity for type detection
     redact.py                 Strips account/identity data before diagnostics leave HA
     capabilities/             Shared + per-family Capability definitions (common, airconditioner,
-                               cooktop, range_hood, dryer, oven, dishwasher, fridge, washer,
-                               laundry, operational, ignored)
+                               cooktop, range_hood, dryer, microwave, oven, dishwasher, fridge,
+                               washer, laundry, operational, ignored)
     by_type/                  One DeviceRegistry per appliance type, composed from capabilities/
 tests/                    Registry composition, discovery, entity descriptors, coordinator/observe
                             behavior, and golden-file regression against captured device dumps

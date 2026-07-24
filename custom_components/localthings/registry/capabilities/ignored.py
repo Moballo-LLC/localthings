@@ -131,4 +131,11 @@ IGNORED: list[Capability] = [
     # parallel write-capable capability around an unverified generic OCF
     # write contract.
     Capability(href='/operational/state/0'),
+
+    # Microwave (issue #66): JSON-encoded {language, menu, servingSize,
+    # option} display string for the active cook recipe/program. Every
+    # field is empty on the only dump seen so far (device idle, no active
+    # cook program) -- no confirmed shape to build an entity around.
+    # Revisit if a dump with an active cook program surfaces.
+    Capability(href='/recipe/cook/vs/0'),
 ]

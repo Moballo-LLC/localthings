@@ -1,0 +1,217 @@
+{
+  "meta": {
+    "model": "TP2X_DA-KS-MICROWAVE-01011 (MW5300A-/KO0)",
+    "device_type": "microwave",
+    "source": "issue #66 diagnostics (scrubbed)",
+    "note": "Microwave reports no oneUiVersion; resolved via the '-MICROWAVE-' modelNum token fallback in for_device_by_model, mirroring the '-OVEN-'/'-RANGE-' fallbacks added for issues #55/#44."
+  },
+  "device0": [
+    {
+      "rt": [
+        "x.com.samsung.devcol",
+        "oic.wk.col"
+      ],
+      "if": [
+        "oic.if.baseline",
+        "oic.if.ll",
+        "oic.if.b"
+      ]
+    },
+    {
+      "href": "/connected/vs/0",
+      "rep": {
+        "x.com.samsung.da.connected": "On"
+      }
+    },
+    {
+      "href": "/doors/vs/0",
+      "rep": {
+        "x.com.samsung.da.items": [
+          {
+            "x.com.samsung.da.id": "0",
+            "x.com.samsung.da.description": "Door",
+            "x.com.samsung.da.openState": "Close"
+          }
+        ],
+        "rt": [
+          "x.com.samsung.da.doors"
+        ],
+        "if": [
+          "oic.if.baseline",
+          "oic.if.s"
+        ]
+      }
+    },
+    {
+      "href": "/energy/consumption/vs/0",
+      "rep": {
+        "x.com.samsung.da.instantaneousPower": "-500",
+        "x.com.samsung.da.instantaneousPowerUnit": "W",
+        "x.com.samsung.da.cumulativePower": "12500",
+        "x.com.samsung.da.cumulativeUnit": "Wh"
+      }
+    },
+    {
+      "href": "/information/vs/0",
+      "rep": {
+        "x.com.samsung.da.modelNum": "TP2X_DA-KS-MICROWAVE-01011|40444841|50040100021511000200000000000000",
+        "x.com.samsung.da.description": "MW5300A-/KO0",
+        "x.com.samsung.da.serialNum": "**REDACTED**",
+        "x.com.samsung.da.otnDUID": "**REDACTED**",
+        "x.com.samsung.da.items": [
+          {
+            "x.com.samsung.da.id": "0",
+            "x.com.samsung.da.description": "Version",
+            "x.com.samsung.da.type": "Software",
+            "x.com.samsung.da.number": "240717",
+            "x.com.samsung.da.newVersionAvailable": "0"
+          },
+          {
+            "x.com.samsung.da.id": "1",
+            "x.com.samsung.da.description": "Version",
+            "x.com.samsung.da.type": "Firmware",
+            "x.com.samsung.da.number": "DE92-04448A_21010500",
+            "x.com.samsung.da.newVersionAvailable": "0"
+          }
+        ],
+        "x.com.samsung.da.diagProtocolType": "WIFI_HTTPS",
+        "x.com.samsung.da.diagLogType": [
+          "errCode",
+          "dump"
+        ],
+        "x.com.samsung.da.diagDumpType": "file",
+        "x.com.samsung.da.diagEndPoint": "SSM",
+        "x.com.samsung.da.diagMnid": "0AJT",
+        "x.com.samsung.da.diagSetupid": "622",
+        "x.com.samsung.da.diagMinVersion": "1.0"
+      }
+    },
+    {
+      "href": "/kidslock/vs/0",
+      "rep": {
+        "x.com.samsung.da.kidsLock": "Ready"
+      }
+    },
+    {
+      "href": "/mode/vs/0",
+      "rep": {
+        "x.com.samsung.da.supportedModes": [
+          "Autocook",
+          "NoOperation",
+          "MicroWave",
+          "MicroWaveGrill",
+          "Grill",
+          "AutocookCustom"
+        ],
+        "x.com.samsung.da.modes": [
+          "NoOperation"
+        ],
+        "x.com.samsung.da.options": [
+          "DeviceType_MW5300A-/KO0",
+          "ScreenTimeOut_10min",
+          "Sound_On"
+        ],
+        "rt": [
+          "x.com.samsung.da.mode"
+        ],
+        "if": [
+          "oic.if.baseline",
+          "oic.if.a"
+        ]
+      }
+    },
+    {
+      "href": "/operational/state/vs/0",
+      "rep": {
+        "x.com.samsung.da.state": "Ready",
+        "x.com.samsung.da.operationTime": "00:00:00",
+        "x.com.samsung.da.remainingTime": "00:00:00",
+        "x.com.samsung.da.progressPercentage": "0",
+        "rt": [
+          "x.com.samsung.da.operation"
+        ],
+        "if": [
+          "oic.if.baseline",
+          "oic.if.a"
+        ]
+      }
+    },
+    {
+      "href": "/otninformation/vs/0",
+      "rep": {
+        "x.com.samsung.da.target": "",
+        "x.com.samsung.da.newVersionAvailable": "false"
+      }
+    },
+    {
+      "href": "/alarms/vs/0",
+      "rep": {
+        "rt": [
+          "x.com.samsung.da.alarms"
+        ],
+        "if": [
+          "oic.if.baseline",
+          "oic.if.s"
+        ],
+        "x.com.samsung.da.items": [
+          {
+            "x.com.samsung.da.id": "0",
+            "x.com.samsung.da.description": "Alarm",
+            "x.com.samsung.da.alarmType": "Device",
+            "x.com.samsung.da.code": "OV_E_OFF",
+            "x.com.samsung.da.triggeredTime": "2026-07-24T13:38:49"
+          }
+        ]
+      }
+    },
+    {
+      "href": "/oven/vs/0",
+      "rep": {
+        "x.com.samsung.da.state": "Ready",
+        "x.com.samsung.da.recipe": "00000000000000",
+        "x.com.samsung.da.powerLevel": "0W",
+        "rt": [
+          "x.com.samsung.da.oven"
+        ],
+        "if": [
+          "oic.if.baseline",
+          "oic.if.s"
+        ]
+      }
+    },
+    {
+      "href": "/power/vs/0",
+      "rep": {
+        "x.com.samsung.da.power": "Off"
+      }
+    },
+    {
+      "href": "/recipe/cook/vs/0",
+      "rep": {
+        "x.com.samsung.da.recipeDisplay": "{\"language\":\"None\",\"menu\":\"\",\"servingSize\":\"\",\"option\":\"\"}"
+      }
+    },
+    {
+      "href": "/temperatures/vs/0",
+      "rep": {
+        "x.com.samsung.da.items": [
+          {
+            "x.com.samsung.da.id": "0",
+            "x.com.samsung.da.description": "Temperature",
+            "x.com.samsung.da.desired": "0",
+            "x.com.samsung.da.current": "1",
+            "x.com.samsung.da.increment": "5",
+            "x.com.samsung.da.unit": "Celsius"
+          }
+        ],
+        "rt": [
+          "x.com.samsung.da.temperatures"
+        ],
+        "if": [
+          "oic.if.baseline",
+          "oic.if.a"
+        ]
+      }
+    }
+  ]
+}
