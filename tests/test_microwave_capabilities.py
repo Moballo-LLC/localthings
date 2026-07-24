@@ -84,9 +84,16 @@ def test_cavity_state_reads_state_field():
     assert desc.value_fn('Ready') == 'Ready'
 
 
-def test_power_level_reads_raw_string():
+def test_power_level_parses_watts():
     desc = next(e for e in microwave.MICROWAVE_CAVITY.entities if e.key == 'power_level')
-    assert desc.value_fn('700W') == '700W'
+    assert desc.value_fn('700W') == 700
+    assert desc.value_fn('0W') == 0
+
+
+def test_power_level_rejects_unparseable():
+    desc = next(e for e in microwave.MICROWAVE_CAVITY.entities if e.key == 'power_level')
+    assert desc.value_fn('') is None
+    assert desc.value_fn(None) is None
 
 
 # ---------------------------------------------------------------------------

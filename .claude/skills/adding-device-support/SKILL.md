@@ -103,7 +103,35 @@ sub-polled between summary polls. Pick descriptor types from `entities.py`
 as a gap for a human, or ignore it with a documented reason — never invent an
 entity on a hunch (`ignored.py`'s rule).
 
-## 5. Enum selects need translation support
+## 5. Parse units out of the value — don't ship them embedded in a string
+
+Samsung reps sometimes encode a numeral and its unit as one string
+(`x.com.samsung.da.powerLevel: "700W"`; a `desired`/`current` temperature whose
+unit lives in a sibling field instead). The lazy fix — a plain `SensorDesc`
+with no `device_class`/`unit` that passes the raw string straight through —
+binds the href and looks done, but HA then sees text, not a measurement: no
+unit conversion, no long-term statistics, no graphing. This shipped once
+already (microwave `power_level` went out as the literal string `"700W"`
+before being caught in review) — treat that as the standard failure mode to
+check for, not a one-off.
+
+Before wiring up a numeric-looking field:
+- **Check where the unit actually lives.** Embedded in the same string
+  (`powerLevel`)? A fixed, undocumented assumption (most wattages/energy
+  fields)? Or reported live in a sibling field (`/temperatures/vs/0`'s
+  per-item `unit`, `'Celsius'`/`'Fahrenheit'`)? Don't guess C vs F or W vs kW
+  without checking the dump.
+- **Parse the numeral in `value_fn`** (regex or strip the unit suffix) so the
+  entity's state is a number, not `"700W"`.
+- **Set `unit`** (static) **or `unit_fn`** (reads a live sibling field — see
+  `common.normalize_temp_unit`, used by both `fridge.py` and `oven.py` for a
+  per-device C/F reading) **plus the matching `device_class`/`state_class`**
+  so HA treats it as a real measurement.
+- A plain string `SensorDesc` (no unit/device_class) is still correct for
+  genuinely non-numeric state (mode names, enum-like text) — reserve it for
+  that, not as a shortcut past parsing a numeral.
+
+## 6. Enum selects need translation support
 
 Any select whose options are raw device codes (course/cycle, and code-valued
 settings) must render through translations, not Python:
@@ -114,7 +142,7 @@ settings) must render through translations, not Python:
   (e.g. `"16": "Cotton"`). Codes with no entry render as the raw code — that's
   the cue to identify and name them.
 
-## 6. Coverage discipline: bound or ignored
+## 7. Coverage discipline: bound or ignored
 
 Every href in the dump must resolve, or the repair fires. If a resource isn't
 worth an entity, add it to `capabilities/ignored.py` (a no-entity `Capability`)
@@ -128,7 +156,7 @@ friendlier href**.
   ignored because washers bind it. When only one family should ignore an href
   that another binds, scope the ignore to that family's registry.
 
-## 7. Reuse before writing new code
+## 8. Reuse before writing new code
 
 Check `common.py` (generic OCF: power, energy, alarms, water) and `laundry.py`
 (shared washer/dryer/dishwasher: buzzer, job status, `cycle_select` + course
@@ -137,7 +165,7 @@ registry uses `fridge.FIRMWARE_UPDATE`; all three laundry families share
 `laundry.cycle_select`. If two families hand-roll the same helper, hoist it to a
 shared module rather than copying.
 
-## 8. Lock it in
+## 9. Lock it in
 
 1. Add a **scrubbed** fixture `tests/fixtures/<type>_device.json`
    (`{"device0": [ {devcol rep}, {href, rep}, ... ]}`) — replace serials, MACs,

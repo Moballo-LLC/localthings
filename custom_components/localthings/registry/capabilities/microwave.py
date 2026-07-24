@@ -11,8 +11,9 @@ re-declared here -- see by_type/microwave.py.
 and options-array toggles (only a Sound_On/Off slot on this dump -- no
 UpperLamp/fastpreheat/NaturalSteam like the oven family) are microwave-
 specific, so it gets its own capability here. /oven/vs/0 additionally
-reports a powerLevel field the oven family's cavity capability doesn't
-carry, so it also gets its own.
+reports a powerLevel field (a wattage with the unit embedded in the string,
+e.g. "700W") the oven family's cavity capability doesn't carry, so it also
+gets its own.
 
 Cycle start/pause is deliberately not modeled: unlike the oven family
 (whose module docstring documents confirmed-unreliable local cycle-start
@@ -27,6 +28,8 @@ below any plausible cook temperature, with no confirmed write contract.
 display string) is not modeled here -- every field is empty on this dump
 (device idle, no active cook program); see ignored.py.
 """
+import re
+
 from ..capability import Capability
 from ..entities import SelectDesc, SensorDesc, SwitchDesc
 from .common import normalize_temp_unit
@@ -37,6 +40,18 @@ def _int(v):
         return int(v)
     except (TypeError, ValueError):
         return None
+
+
+_POWER_LEVEL_RE = re.compile(r'^(-?\d+)W$')
+
+
+def _power_level_watts(v):
+    """'0'/'700W' -> 0/700 -- the unit is embedded in the string on every
+    dump seen so far; strip it so the sensor reports a plain wattage."""
+    if not isinstance(v, str):
+        return None
+    m = _POWER_LEVEL_RE.match(v)
+    return int(m.group(1)) if m else None
 
 
 def _cavity_temp_unit(rep):
@@ -111,10 +126,10 @@ MICROWAVE_CAVITY = Capability(
     entities=(
         SensorDesc(key='cavity_state', field='x.com.samsung.da.state',
                    name='Cavity state'),
-        # e.g. "0W"/"700W" -- unit is embedded in the string on every dump
-        # seen so far; shown as reported rather than parsed apart.
         SensorDesc(key='power_level', field='x.com.samsung.da.powerLevel',
-                   name='Power level', icon='mdi:flash'),
+                   name='Power level', icon='mdi:flash', device_class='power',
+                   state_class='measurement', unit='W',
+                   value_fn=_power_level_watts),
     ),
 )
 
