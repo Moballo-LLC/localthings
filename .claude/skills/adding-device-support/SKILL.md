@@ -103,7 +103,38 @@ sub-polled between summary polls. Pick descriptor types from `entities.py`
 as a gap for a human, or ignore it with a documented reason — never invent an
 entity on a hunch (`ignored.py`'s rule).
 
-## 5. Names and enum labels live in translations, never in Python
+## 5. Never hard-code the one dump's values
+
+A single `/device/0` dump is **one device on one firmware** — its select options,
+temperature range/increment, and any other "what values are valid here" data are
+**that unit's snapshot**, not the field's universe. Other units of the same model
+(different region, firmware, board revision) can support more, fewer, or
+differently-stepped values. If the dump reports the live option/range list, wire
+the descriptor to read it live — don't transcribe what you saw into a Python
+literal:
+
+- **Selects**: use `options_field` (a resource field holding the live options
+  list, e.g. `supportedWaterTemperature`, `iceType.supported`) so `select.py`
+  reads the current device's real options every time, not `options=(...)` typed
+  from the dump. Reach for a callable `options` only when the values require
+  cross-resource computation the field alone can't give you — a static tuple is
+  right only for genuinely fixed, spec-defined enums (e.g. an OCF-standard field
+  with a closed value set), never for vendor `supported*` lists.
+- **Number ranges/steps**: use `range_field` (a `[min, max]`-shaped field) or
+  `native_min_fn`/`native_max_fn`/`step_fn` to read bounds from the live rep —
+  see `oven.py`'s `_setpoint_bounds`. Only fall back to static `native_min`/
+  `native_max`/`step` when the dump has no such field and the bound is genuinely
+  fixed by spec, not just "the only value this one unit happened to report."
+- **Anywhere else** a field's presence, count, or shape looks like it could vary
+  by model/config (course lists, capability flags, supported-mode arrays):
+  check whether the resource carries its own `supported*` companion field before
+  assuming the observed value is exhaustive.
+
+When you do hard-code something (a genuinely fixed enum, a spec constant), that's
+a judgement call worth a one-line comment saying why it's safe — the default
+assumption should be "derive it," not "copy it."
+
+## 6. Names and enum labels live in translations, never in Python
 
 Descriptors have **no `name` field**. Every entity is named from the shipped
 catalog, keyed by `translation_key` — which defaults to the descriptor's own
@@ -142,7 +173,7 @@ no `[%key:...%]` resolution (that's Core build tooling). Every other language
 must mirror `en.json` key for key — also enforced by
 `tests/test_translations.py`.
 
-## 6. Coverage discipline: bound or ignored
+## 7. Coverage discipline: bound or ignored
 
 Every href in the dump must resolve, or the repair fires. If a resource isn't
 worth an entity, add it to `capabilities/ignored.py` (a no-entity `Capability`)
@@ -156,7 +187,7 @@ friendlier href**.
   ignored because washers bind it. When only one family should ignore an href
   that another binds, scope the ignore to that family's registry.
 
-## 7. Reuse before writing new code
+## 8. Reuse before writing new code
 
 Check `common.py` (generic OCF: power, energy, alarms, water) and `laundry.py`
 (shared washer/dryer/dishwasher: buzzer, job status, `cycle_select` + course
@@ -165,7 +196,7 @@ registry uses `fridge.FIRMWARE_UPDATE`; all three laundry families share
 `laundry.cycle_select`. If two families hand-roll the same helper, hoist it to a
 shared module rather than copying.
 
-## 8. Lock it in
+## 9. Lock it in
 
 1. Add a **scrubbed** fixture `tests/fixtures/<type>_device.json`
    (`{"device0": [ {devcol rep}, {href, rep}, ... ]}`) — replace serials, MACs,
