@@ -156,13 +156,17 @@ class TestEnergyMeter:
         kwh = next(e for e in common.ENERGY_METER.entities if e.key == 'energy_kwh')
         assert kwh.exists_fn({'x.com.samsung.da.cumulativePower': '58900'}, {}) is True
 
-    def test_both_entities_included_on_empty_stub(self):
-        """An empty {} rep means the resource exists but data isn't fetched yet
-        (see entity._is_included) -- include both so sub-polls populate them."""
+    def test_both_entities_hidden_on_empty_rep(self):
+        """Issue #78: a permanently-{} rep (a fridge that just doesn't report
+        energy data) must not spawn a phantom sensor stuck at "Unknown"
+        forever -- an empty {} rep and a not-yet-fetched stub are
+        indistinguishable from content alone, so this deliberately drops the
+        old stub carve-out (same tradeoff AI_ENERGY_LEVEL already makes,
+        see TestAiEnergyLevelStubDoesNotDecideThePlatform)."""
         pw = next(e for e in common.ENERGY_METER.entities if e.key == 'power_watts')
         kwh = next(e for e in common.ENERGY_METER.entities if e.key == 'energy_kwh')
-        assert pw.exists_fn({}, {}) is True
-        assert kwh.exists_fn({}, {}) is True
+        assert pw.exists_fn({}, {}) is False
+        assert kwh.exists_fn({}, {}) is False
 
     def test_power_watts_hidden_when_field_absent_in_populated_rep(self):
         """A populated rep that lacks instantaneousPower must not spawn a
@@ -319,11 +323,11 @@ class TestSelfCheckError:
         desc = self._desc()
         assert desc.exists_fn({'x.com.samsung.da.status': 'Ready'}, {}) is False
 
-    def test_exists_for_empty_stub_rep(self):
-        """An empty {} rep is /device/0's not-yet-fetched-stub carve-out --
-        must be included-for-now, same as ENERGY_METER's fields."""
+    def test_hidden_for_empty_rep(self):
+        """Issue #78: no stub carve-out -- see ENERGY_METER's
+        test_both_entities_hidden_on_empty_rep for why."""
         desc = self._desc()
-        assert desc.exists_fn({}, {}) is True
+        assert desc.exists_fn({}, {}) is False
 
     def test_value_joins_list(self):
         desc = self._desc()

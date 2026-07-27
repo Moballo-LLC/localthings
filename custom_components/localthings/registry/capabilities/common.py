@@ -237,32 +237,33 @@ _DEAD_INSTANTANEOUS_POWER = '-500'
 ENERGY_METER = Capability(
     href='/energy/consumption/vs/0',
     entities=(
-        # `not rep` keeps the empty-{} stub carve-out (see entity._is_included):
-        # an explicit exists_fn otherwise bypasses it, which would drop the
-        # entity when /device/0 returns a not-yet-fetched stub. On a populated
-        # rep, hide power only for the dead sentinel or an absent field.
+        # No `not rep` stub carve-out (issue #78: a fridge whose
+        # /energy/consumption/vs/0 is permanently {} -- it just doesn't
+        # report energy data -- got all five sensors created anyway and
+        # stuck at "Unknown" forever, since an empty {} rep and a
+        # not-yet-fetched stub are indistinguishable from content alone).
+        # Same tradeoff AI_ENERGY_LEVEL below already makes deliberately:
+        # an entity that's unlucky on first-poll timing stays absent until
+        # a reload sees real data, rather than every genuinely-unsupported
+        # resource showing a permanent phantom sensor.
         SensorDesc(key='power_watts', field='x.com.samsung.da.instantaneousPower',
                    device_class='power', state_class='measurement',
                    unit='W', value_fn=clamp_power,
-                   exists_fn=lambda rep, resources: not rep or (
+                   exists_fn=lambda rep, resources: (
                        rep.get('x.com.samsung.da.instantaneousPower')
                        not in (None, _DEAD_INSTANTANEOUS_POWER))),
         SensorDesc(key='energy_kwh', field='x.com.samsung.da.cumulativePower',
                    device_class='energy',
                    state_class='total_increasing', unit='kWh', value_fn=wh_to_kwh,
-                   exists_fn=lambda rep, resources: (
-                       not rep or 'x.com.samsung.da.cumulativePower' in rep)),
+                   exists_fn=lambda rep, resources: 'x.com.samsung.da.cumulativePower' in rep),
         # cumulativeConsumption is a second, independently-varying running
         # total alongside cumulativePower -- some fridges (issue #26) report
-        # both. Self-gates off where only cumulativePower is present. `not
-        # rep or` keeps the same empty-{} stub carve-out as power_watts/
-        # energy_kwh above -- without it, an exists_fn permanently drops the
-        # entity if setup happens to land on a not-yet-fetched stub.
+        # both. Self-gates off where only cumulativePower is present.
         SensorDesc(key='power_energy_kwh', field='x.com.samsung.da.cumulativeConsumption',
                    device_class='energy',
                    state_class='total_increasing', unit='kWh', value_fn=wh_to_kwh,
                    exists_fn=lambda rep, resources: (
-                       not rep or 'x.com.samsung.da.cumulativeConsumption' in rep)),
+                       'x.com.samsung.da.cumulativeConsumption' in rep)),
         # AI Energy Mode's lifetime savings estimate vs. an unoptimized
         # baseline -- present on some models (e.g. TP1X_REF_21K, issue #21/
         # #27) and absent on others (issue #20/#26), unlike cumulativePower.
@@ -270,7 +271,7 @@ ENERGY_METER = Capability(
                    device_class='energy',
                    state_class='total_increasing', unit='kWh', value_fn=wh_to_kwh,
                    exists_fn=lambda rep, resources: (
-                       not rep or 'x.com.samsung.da.cumulativeSavedPower' in rep)),
+                       'x.com.samsung.da.cumulativeSavedPower' in rep)),
         # Monthly billing-cycle totals -- the completed prior month and the
         # in-progress current month. Not ever-increasing (each resets at
         # month boundary), so no state_class.
@@ -278,12 +279,12 @@ ENERGY_METER = Capability(
                    device_class='energy',
                    unit='kWh', value_fn=wh_to_kwh,
                    exists_fn=lambda rep, resources: (
-                       not rep or 'x.com.samsung.da.monthlyConsumption' in rep)),
+                       'x.com.samsung.da.monthlyConsumption' in rep)),
         SensorDesc(key='energy_this_month_kwh', field='x.com.samsung.da.thismonthlyConsumption',
                    device_class='energy',
                    unit='kWh', value_fn=wh_to_kwh,
                    exists_fn=lambda rep, resources: (
-                       not rep or 'x.com.samsung.da.thismonthlyConsumption' in rep)),
+                       'x.com.samsung.da.thismonthlyConsumption' in rep)),
     ),
 )
 
@@ -414,12 +415,12 @@ SELF_CHECK = Capability(
                    icon='mdi:clipboard-check-outline',
                    entity_category='diagnostic'),
         # List of error codes from the last self-check; joined for display.
-        # Not every fridge reports the field, hence the exists_fn.
+        # Not every fridge reports the field, hence the exists_fn (no stub
+        # carve-out -- see ENERGY_METER above).
         SensorDesc(key='selfcheck_error', field='x.com.samsung.da.error',
                    icon='mdi:alert-circle-outline',
                    entity_category='diagnostic',
-                   exists_fn=lambda rep, resources: (
-                       not rep or 'x.com.samsung.da.error' in rep),
+                   exists_fn=lambda rep, resources: 'x.com.samsung.da.error' in rep,
                    value_fn=lambda v: (', '.join(v) if v else None) if isinstance(v, list) else v),
         ButtonDesc(key='selfcheck_start', field='', payload='Start',
                    icon='mdi:play-circle-outline',

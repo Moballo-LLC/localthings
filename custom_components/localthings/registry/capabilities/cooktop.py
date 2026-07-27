@@ -97,7 +97,7 @@ COOKTOP_MODE = Capability(
                     options, f'OperationState{slot}'
                 ),
                 exists_fn=lambda rep, resources, slot=slot: (
-                    not rep or _option_value(
+                    _option_value(
                         rep.get('x.com.samsung.da.options'),
                         f'OperationState{slot}',
                     ) is not None
