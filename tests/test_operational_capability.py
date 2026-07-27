@@ -1,3 +1,5 @@
+"""Unit tests for operational state capabilities."""
+
 from custom_components.localthings.registry.capabilities.operational import OPERATIONAL_STATE
 
 
@@ -22,6 +24,42 @@ class TestProgressPercentage:
         desc = next(e for e in OPERATIONAL_STATE.entities if e.key == 'progress_percentage')
         rep = {'x.com.samsung.da.state': 'Run', 'x.com.samsung.da.progressPercentage': '42'}
         assert desc.rep_fn(rep) == 42
+
+
+class TestCompletionMinutes:
+    """Unit tests for completion_minutes entity."""
+
+    def test_completion_minutes_parsing(self):
+        desc = next(e for e in OPERATIONAL_STATE.entities if e.key == 'completion_minutes')
+        
+        # 1 hour 25 mins 30 secs -> 85 mins + 1 sec ceiling = 86 mins
+        rep = {'x.com.samsung.da.remainingTime': '01:25:30'}
+        assert desc.rep_fn(rep) == 86
+
+        # Exact minutes: 1 hour 30 mins 00 secs -> 90 mins
+        rep_exact = {'x.com.samsung.da.remainingTime': '01:30:00'}
+        assert desc.rep_fn(rep_exact) == 90
+
+    def test_completion_minutes_fallback_key(self):
+        desc = next(e for e in OPERATIONAL_STATE.entities if e.key == 'completion_minutes')
+        rep = {'remainingTime': '00:45:00'}
+        assert desc.rep_fn(rep) == 45
+
+    def test_completion_minutes_stale_finish_gated(self):
+        """Firmware freezes remainingTime at '00:01:00' when progress reaches 'Finish'.
+        Should return 0 to prevent stuck values."""
+        desc = next(e for e in OPERATIONAL_STATE.entities if e.key == 'completion_minutes')
+        rep = {
+            'x.com.samsung.da.progress': 'Finish',
+            'x.com.samsung.da.remainingTime': '00:01:00',
+        }
+        assert desc.rep_fn(rep) == 0
+
+    def test_completion_minutes_missing_or_invalid(self):
+        desc = next(e for e in OPERATIONAL_STATE.entities if e.key == 'completion_minutes')
+        
+        rep = {}
+        assert desc.rep_fn(rep) is None
 
 
 class TestDelayFieldFallback:

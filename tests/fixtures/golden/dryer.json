@@ -3,6 +3,7 @@
     "alarm_code",
     "buzzer_sound",
     "child_lock",
+    "completion_minutes",
     "cycle",
     "cycle_active",
     "delay_start_hours",
