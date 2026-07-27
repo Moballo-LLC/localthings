@@ -7,10 +7,12 @@ progress_percentage, operation_time_minutes, finish_time, cook_time, stop),
 so those capabilities are reused directly from oven.py rather than
 re-declared here -- see by_type/microwave.py.
 
-/mode/vs/0's cook-mode vocabulary (MicroWave/MicroWaveGrill/Grill/Autocook)
-and options-array toggles (only a Sound_On/Off slot on this dump -- no
-UpperLamp/fastpreheat/NaturalSteam like the oven family) are microwave-
-specific, so it gets its own capability here. /oven/vs/0 additionally
+/mode/vs/0's cook-mode select reads its options live from supportedModes
+(MicroWave/MicroWaveGrill/Grill/Autocook on this dump -- no oven-style
+Bake/Broil vocabulary applies, and another model's supported set may
+differ) and its options-array toggles (only a Sound_On/Off slot on this
+dump -- no UpperLamp/fastpreheat/NaturalSteam like the oven family) are
+microwave-specific, so it gets its own capability here. /oven/vs/0 additionally
 reports a powerLevel field (a wattage with the unit embedded in the string,
 e.g. "700W") the oven family's cavity capability doesn't carry, so it also
 gets its own.
@@ -85,20 +87,11 @@ def _sound_write(p, rep, href=None):
     }
 
 
-# Cook modes as reported by /mode/vs/0's supportedModes (issue #66 dump) --
-# no oven-style Bake/Broil vocabulary applies to a microwave.
-_MICROWAVE_MODES = (
-    'NoOperation',
-    'MicroWave',
-    'MicroWaveGrill',
-    'Grill',
-    'Autocook',
-    'AutocookCustom',
-)
-
-
 def _mode_write(p, rep, href=None):
-    if p not in _MICROWAVE_MODES:
+    # rep is this capability's own /mode/vs/0 rep, so the live
+    # supportedModes list is right here -- no static vocabulary to keep in
+    # sync with devices whose mode set differs (grill-less models, etc.).
+    if p not in (rep.get('x.com.samsung.da.supportedModes') or ()):
         return None
     return ['mode', 'vs', '0'], {'x.com.samsung.da.modes': [p]}
 
@@ -109,7 +102,7 @@ MICROWAVE_MODE = Capability(
     entities=(
         SelectDesc(key='cook_mode', field='x.com.samsung.da.modes',
                    icon='mdi:tune',
-                   options=_MICROWAVE_MODES,
+                   options_field='x.com.samsung.da.supportedModes',
                    value_fn=lambda v: v[0] if v else None,
                    write_fn=_mode_write),
         SwitchDesc(key='sound', field='x.com.samsung.da.options',

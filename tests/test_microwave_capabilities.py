@@ -27,24 +27,38 @@ def test_microwave_fixture_resolves_and_has_no_unbound_hrefs():
 
 
 # ---------------------------------------------------------------------------
-# MICROWAVE_MODE -- SelectDesc with non-empty options
+# MICROWAVE_MODE -- SelectDesc reads its options live from supportedModes
 # ---------------------------------------------------------------------------
 
-def test_microwave_mode_options_nonempty():
-    assert len(microwave.MICROWAVE_MODE.entities[0].options) > 0
+_SUPPORTED_MODES_REP = {'x.com.samsung.da.supportedModes': [
+    'NoOperation', 'MicroWave', 'MicroWaveGrill', 'Grill', 'Autocook', 'AutocookCustom',
+]}
+
+
+def test_microwave_mode_options_field():
+    desc = microwave.MICROWAVE_MODE.entities[0]
+    assert desc.options_field == 'x.com.samsung.da.supportedModes'
 
 
 def test_microwave_mode_write_round_trips():
     desc = microwave.MICROWAVE_MODE.entities[0]
-    valid_mode = desc.options[1]   # e.g. 'MicroWave'
-    path, body = desc.write_fn(valid_mode, {})
+    path, body = desc.write_fn('MicroWave', _SUPPORTED_MODES_REP)
     assert path == ['mode', 'vs', '0']
-    assert body['x.com.samsung.da.modes'] == [valid_mode]
+    assert body['x.com.samsung.da.modes'] == ['MicroWave']
 
 
 def test_microwave_mode_rejects_unknown():
     desc = microwave.MICROWAVE_MODE.entities[0]
-    assert desc.write_fn('SpaghettiMode', {}) is None
+    assert desc.write_fn('SpaghettiMode', _SUPPORTED_MODES_REP) is None
+
+
+def test_microwave_mode_rejects_when_not_in_live_supported_list():
+    """A mode absent from *this* device's live supportedModes is rejected
+    even if another microwave model supports it -- the write must not fall
+    back to a static vocabulary."""
+    desc = microwave.MICROWAVE_MODE.entities[0]
+    narrower_rep = {'x.com.samsung.da.supportedModes': ['NoOperation', 'MicroWave']}
+    assert desc.write_fn('Grill', narrower_rep) is None
 
 
 # ---------------------------------------------------------------------------

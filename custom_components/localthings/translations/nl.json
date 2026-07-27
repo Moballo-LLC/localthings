@@ -154,6 +154,17 @@
           "on": "Aan"
         }
       },
+      "cook_mode": {
+        "name": "Kookmodus",
+        "state": {
+          "no_operation": "Niet actief",
+          "micro_wave": "Magnetron",
+          "micro_wave_grill": "Magnetron + grill",
+          "grill": "Grill",
+          "autocook": "Automatisch koken",
+          "autocook_custom": "Automatisch koken (aangepast)"
+        }
+      },
       "cycle": {
         "name": "Programma"
       },
@@ -438,6 +449,12 @@
       "burner_state": {
         "name": "Status brander {number}"
       },
+      "cavity_state": {
+        "name": "Status ovenruimte"
+      },
+      "cavity_temp": {
+        "name": "Temperatuur ovenruimte"
+      },
       "clean_level": {
         "name": "Reinigingsniveau"
       },
@@ -570,6 +587,9 @@
       },
       "power_energy_kwh": {
         "name": "Energieverbruik"
+      },
+      "power_level": {
+        "name": "Vermogensniveau"
       },
       "power_watts": {
         "name": "Vermogen"

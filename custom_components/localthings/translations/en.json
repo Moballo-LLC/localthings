@@ -154,6 +154,17 @@
           "on": "On"
         }
       },
+      "cook_mode": {
+        "name": "Cook mode",
+        "state": {
+          "no_operation": "No operation",
+          "micro_wave": "Microwave",
+          "micro_wave_grill": "Microwave + grill",
+          "grill": "Grill",
+          "autocook": "Autocook",
+          "autocook_custom": "Autocook custom"
+        }
+      },
       "cycle": {
         "name": "Cycle"
       },
@@ -438,6 +449,12 @@
       "burner_state": {
         "name": "Burner {number} state"
       },
+      "cavity_state": {
+        "name": "Cavity state"
+      },
+      "cavity_temp": {
+        "name": "Cavity temperature"
+      },
       "clean_level": {
         "name": "Clean level"
       },
@@ -570,6 +587,9 @@
       },
       "power_energy_kwh": {
         "name": "Power energy"
+      },
+      "power_level": {
+        "name": "Power level"
       },
       "power_watts": {
         "name": "Power"

@@ -103,7 +103,38 @@ sub-polled between summary polls. Pick descriptor types from `entities.py`
 as a gap for a human, or ignore it with a documented reason — never invent an
 entity on a hunch (`ignored.py`'s rule).
 
-## 5. Parse units out of the value — don't ship them embedded in a string
+## 5. Never hard-code the one dump's values
+
+A single `/device/0` dump is **one device on one firmware** — its select options,
+temperature range/increment, and any other "what values are valid here" data are
+**that unit's snapshot**, not the field's universe. Other units of the same model
+(different region, firmware, board revision) can support more, fewer, or
+differently-stepped values. If the dump reports the live option/range list, wire
+the descriptor to read it live — don't transcribe what you saw into a Python
+literal:
+
+- **Selects**: use `options_field` (a resource field holding the live options
+  list, e.g. `supportedWaterTemperature`, `iceType.supported`) so `select.py`
+  reads the current device's real options every time, not `options=(...)` typed
+  from the dump. Reach for a callable `options` only when the values require
+  cross-resource computation the field alone can't give you — a static tuple is
+  right only for genuinely fixed, spec-defined enums (e.g. an OCF-standard field
+  with a closed value set), never for vendor `supported*` lists.
+- **Number ranges/steps**: use `range_field` (a `[min, max]`-shaped field) or
+  `native_min_fn`/`native_max_fn`/`step_fn` to read bounds from the live rep —
+  see `oven.py`'s `_setpoint_bounds`. Only fall back to static `native_min`/
+  `native_max`/`step` when the dump has no such field and the bound is genuinely
+  fixed by spec, not just "the only value this one unit happened to report."
+- **Anywhere else** a field's presence, count, or shape looks like it could vary
+  by model/config (course lists, capability flags, supported-mode arrays):
+  check whether the resource carries its own `supported*` companion field before
+  assuming the observed value is exhaustive.
+
+When you do hard-code something (a genuinely fixed enum, a spec constant), that's
+a judgement call worth a one-line comment saying why it's safe — the default
+assumption should be "derive it," not "copy it."
+
+## 6. Parse units out of the value — don't ship them embedded in a string
 
 Samsung reps sometimes encode a numeral and its unit as one string
 (`x.com.samsung.da.powerLevel: "700W"`; a `desired`/`current` temperature whose
@@ -131,17 +162,6 @@ Before wiring up a numeric-looking field:
   genuinely non-numeric state (mode names, enum-like text) — reserve it for
   that, not as a shortcut past parsing a numeral.
 
-## 6. Enum selects need translation support
-
-Any select whose options are raw device codes (course/cycle, and code-valued
-settings) must render through translations, not Python:
-- Set `translation_key='<family>_cycle'` (or similar) on the `SelectDesc`;
-  `options`/`options_field` supply the **raw** codes.
-- Add the labels to **both** `strings.json` and `translations/en.json` under
-  `entity.select.<translation_key>.state.<code>`, with the code **lowercased**
-  (e.g. `"16": "Cotton"`). Codes with no entry render as the raw code — that's
-  the cue to identify and name them.
-  
 ## 7. Names and enum labels live in translations, never in Python
 
 Descriptors have **no `name` field**. Every entity is named from the shipped
