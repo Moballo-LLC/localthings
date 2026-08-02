@@ -280,7 +280,13 @@
           "07": "Pre blast",
           "8d": "Pots and pans",
           "8e": "Plastic",
-          "8f": "Baby Care"
+          "8f": "Baby Care",
+          "82": "Auto",
+          "8a": "Normal",
+          "a7": "Heavy",
+          "a8": "Express",
+          "8c": "Extra Silence",
+          "88": "Self Clean"
         }
       },
       "dispense_type": {

@@ -152,6 +152,20 @@ def test_confirmed_korean_table_02_washer_course_names():
     }
 
 
+def test_confirmed_dishwasher_course_names():
+    states = _load('en')['entity']['select']['dishwasher_cycle']['state']
+    assert {code: states[code] for code in (
+        '82', '8a', 'a7', 'a8', '8c', '88',
+    )} == {
+        '82': 'Auto',
+        '8a': 'Normal',
+        'a7': 'Heavy',
+        'a8': 'Express',
+        '8c': 'Extra Silence',
+        '88': 'Self Clean',
+    }
+
+
 # The hood fan is its device's primary feature: fan.py sets _attr_name = None
 # so it presents as the device itself, and never reads a catalog name. Same
 # for the ARTIK051 air-purifier's airflow_fan (issue #56) -- ordered speed

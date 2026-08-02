@@ -280,7 +280,13 @@
           "07": "Předoplach",
           "8d": "Hrnce a pánve",
           "8e": "Plast",
-          "8f": "Dětské potřeby"
+          "8f": "Dětské potřeby",
+          "82": "Auto",
+          "8a": "Normal",
+          "a7": "Heavy",
+          "a8": "Express",
+          "8c": "Extra Silence",
+          "88": "Self Clean"
         }
       },
       "dispense_type": {

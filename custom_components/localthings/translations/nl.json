@@ -280,7 +280,13 @@
           "07": "Voorspoelen",
           "8d": "Potten en pannen",
           "8e": "Kunststof",
-          "8f": "Babyverzorging"
+          "8f": "Babyverzorging",
+          "82": "Auto",
+          "8a": "Normal",
+          "a7": "Heavy",
+          "a8": "Express",
+          "8c": "Extra Silence",
+          "88": "Self Clean"
         }
       },
       "dispense_type": {
