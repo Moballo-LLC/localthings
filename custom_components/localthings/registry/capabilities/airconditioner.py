@@ -324,6 +324,59 @@ def _option_number_write(prefix, factor=1):
     return write
 
 
+def _good_sleep_write(payload, rep, href=None):
+    """Good Sleep needs its mode token in the same write as its duration.
+
+    `Sleep_<n>` on its own is answered 2.04 Changed and then thrown away:
+    measured on an ARTIK051_KRAC_18K, writing `["Sleep_4"]` left the token at
+    `Sleep_0` at both +8s and +45s, while the same value written together with
+    `Comode_Sleep` held. So the number is a parameter of the mode, not a
+    setting of its own, and the appliance's app never sends one without the
+    other either.
+
+    Which mode token goes with it depends on nano wind, the way the app decides
+    it: nano and Good Sleep share the single `Comode_` slot, so running both is
+    `Comode_NanoSleep`, and switching the timer off while nano is on leaves nano
+    running rather than turning everything off.
+    """
+    half_hours = round(float(payload) * 2)
+    nano = _option_token(rep, "Comode") in ("Nano", "NanoSleep")
+    if half_hours:
+        comode = "Comode_NanoSleep" if nano else "Comode_Sleep"
+    else:
+        comode = "Comode_Nano" if nano else "Comode_Off"
+    return (
+        ["mode", "vs", "0"],
+        {"x.com.samsung.da.options": [comode, f"Sleep_{half_hours}"]},
+    )
+
+
+# What the appliance itself picks when a Good Sleep mode is asked for with no
+# duration to go with it: writing a bare `Comode_Nano` over a live
+# `Comode_Sleep`/`Sleep_4` came back as `Comode_NanoSleep`/`Sleep_16`. Used only
+# when a sleep preset is selected while the timer reads 0.
+_DEFAULT_SLEEP_HALF_HOURS = 16
+
+
+def _preset_options(code, rep):
+    """The options array for a legacy preset write.
+
+    One `Comode_` token has to express both nano wind and Good Sleep, so
+    selecting nano while the timer is running means `Comode_NanoSleep` -- and it
+    has to carry the duration, because the board otherwise supplies its own.
+    Measured: `["Comode_Nano"]` written over `Comode_Sleep`/`Sleep_4` came back
+    as `Comode_NanoSleep`/`Sleep_16`, silently turning the user's two hours into
+    eight. Writing the pair keeps the two hours.
+    """
+    sleep = _option_token(rep, "Sleep")
+    running = sleep not in (None, "0")
+    if code == "Nano" and running:
+        code = "NanoSleep"
+    if code in ("Sleep", "NanoSleep"):
+        return [f"Comode_{code}", f"Sleep_{sleep if running else _DEFAULT_SLEEP_HALF_HOURS}"]
+    return option_write("Comode", code)
+
+
 def _odor_controller_active(rep):
     """Odor-controller self-clean on/off, from the `SmartCoolClean_<On/Off>`
     option token (matches the SmartThings cloud's airConditionerOdorController
@@ -404,7 +457,7 @@ def _climate_write(payload, rep, href=None):
     if kind == "swing_legacy":
         return (["airflow", "vs", "0"], {"x.com.samsung.da.direction": value})
     if kind == "preset_legacy":
-        return (["mode", "vs", "0"], {"x.com.samsung.da.options": option_write("Comode", value)})
+        return (["mode", "vs", "0"], {"x.com.samsung.da.options": _preset_options(value, rep)})
     if kind == "preset":
         return (["mode", "convenient", "vs", "0"], {"x.com.samsung.da.modes": value})
     return None
@@ -555,7 +608,7 @@ CLIMATE = Capability(
             key="good_sleep",
             rep_fn=_option_token_num("Sleep", divisor=2),
             exists_fn=_has_option_token("Sleep"),
-            write_fn=_option_number_write("Sleep", factor=2),
+            write_fn=_good_sleep_write,
             native_min=0,
             native_max=12,
             step=0.5,

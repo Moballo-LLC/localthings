@@ -235,12 +235,50 @@ def test_good_sleep_is_hours_while_the_token_counts_half_hours():
     assert (desc.native_max, desc.step) == (12, 0.5)
     assert desc.write_fn(2.5, {}) == (
         ["mode", "vs", "0"],
-        {"x.com.samsung.da.options": ["Sleep_5"]},
+        {"x.com.samsung.da.options": ["Comode_Sleep", "Sleep_5"]},
     )
     # 12 hours is the app's maximum and has to be reachable -- it was not while
     # the token was published as hours.
-    assert desc.write_fn(12, {})[1]["x.com.samsung.da.options"] == ["Sleep_24"]
-    assert desc.write_fn(0, {})[1]["x.com.samsung.da.options"] == ["Sleep_0"]
+    assert desc.write_fn(12, {})[1]["x.com.samsung.da.options"] == ["Comode_Sleep", "Sleep_24"]
+
+
+def _options(rep_options):
+    return {"x.com.samsung.da.options": list(rep_options)}
+
+
+def test_good_sleep_write_carries_the_mode_token_the_duration_belongs_to():
+    """`Sleep_<n>` on its own does nothing. Measured on an ARTIK051_KRAC_18K:
+    writing `["Sleep_4"]` was answered 2.04 Changed and the token still read
+    `Sleep_0` at +8s and +45s, while `["Comode_Sleep", "Sleep_4"]` held. The
+    duration is a parameter of the mode, so both go in one write -- which is
+    also the only form the appliance's own app sends."""
+    desc = _desc(_load_device(FIXTURE), "good_sleep")
+
+    assert desc.write_fn(2, _options(["Comode_Off", "Sleep_0"])) == (
+        ["mode", "vs", "0"],
+        {"x.com.samsung.da.options": ["Comode_Sleep", "Sleep_4"]},
+    )
+    # Off means leaving the mode as well as zeroing the duration.
+    assert desc.write_fn(0, _options(["Comode_Sleep", "Sleep_4"]))[1] == _options(
+        ["Comode_Off", "Sleep_0"]
+    )
+
+
+def test_good_sleep_and_nano_wind_share_one_token():
+    """Nano wind and Good Sleep are one Comode_ slot, so running both is
+    Comode_NanoSleep -- the board produces that code by itself when nano is
+    asked for while the timer runs. Turning the timer off then has to leave nano
+    running rather than switching the mode off entirely, which is how the app
+    reads it back."""
+    desc = _desc(_load_device(FIXTURE), "good_sleep")
+
+    for comode in ("Comode_Nano", "Comode_NanoSleep"):
+        assert desc.write_fn(2, _options([comode, "Sleep_0"]))[1] == _options(
+            ["Comode_NanoSleep", "Sleep_4"]
+        )
+    assert desc.write_fn(0, _options(["Comode_NanoSleep", "Sleep_4"]))[1] == _options(
+        ["Comode_Nano", "Sleep_0"]
+    )
 
 
 def test_filter_alarm_time_reads_the_threshold_and_writes_one_token():
@@ -398,6 +436,10 @@ def test_preset_comes_from_the_comode_token():
         "comfort",
         "2step",
         "speed",
+        # Not learned from the cloud but from the unit itself, which reports
+        # them in the same slot -- see test_the_sleep_modes_are_presets_too.
+        "sleep",
+        "nanosleep",
     ]
 
     options = resources["/mode/vs/0"]["x.com.samsung.da.options"]
@@ -415,6 +457,62 @@ async def test_preset_write_uses_the_token_path():
     await entity.async_set_preset_mode("nano")
 
     assert coordinator.commands[-1][1] == ("preset_legacy", "Nano")
+
+
+def test_the_sleep_modes_are_presets_too():
+    """Good Sleep lives in the same Comode_ slot as the presets, so a unit
+    running it reports a code that was not in the list -- and a preset_mode
+    outside preset_modes is not a state HA allows. Verified against a live unit:
+    with the board on Comode_Sleep, the entity reported preset_mode 'sleep'
+    while preset_modes offered only none/nano/quiet/comfort/2step/speed."""
+    resources = _load_device(FIXTURE)
+    assert _climate(resources).preset_modes[-2:] == ["sleep", "nanosleep"]
+
+    for token, preset in (("Comode_Sleep", "sleep"), ("Comode_NanoSleep", "nanosleep")):
+        options = resources["/mode/vs/0"]["x.com.samsung.da.options"]
+        resources["/mode/vs/0"]["x.com.samsung.da.options"] = [
+            token if option.startswith("Comode_") else option for option in options
+        ]
+        entity = _climate(resources)
+        assert entity.preset_mode == preset
+        assert preset in entity.preset_modes
+
+
+def test_boards_without_the_sleep_token_do_not_get_the_sleep_presets():
+    """The codes come with the Sleep_ token; a unit that has no such token has
+    nothing to report them from."""
+    resources = _load_device(FIXTURE)
+    options = resources["/mode/vs/0"]["x.com.samsung.da.options"]
+    resources["/mode/vs/0"]["x.com.samsung.da.options"] = [
+        option for option in options if not option.startswith("Sleep_")
+    ]
+    presets = _climate(resources).preset_modes
+    assert "sleep" not in presets and "nanosleep" not in presets
+
+
+def test_nano_preset_keeps_a_running_good_sleep_at_its_own_duration():
+    """Writing a bare Comode_Nano over a live Comode_Sleep/Sleep_4 came back as
+    Comode_NanoSleep/Sleep_16 -- the board upgrades the code by itself and then
+    supplies a duration of its own, turning two hours into eight without anyone
+    asking. Sending the pair keeps the user's value."""
+    from custom_components.localthings.registry.capabilities.airconditioner import _climate_write
+
+    assert _climate_write(("preset_legacy", "Nano"), _options(["Comode_Sleep", "Sleep_4"]))[
+        1
+    ] == _options(["Comode_NanoSleep", "Sleep_4"])
+    # Idle timer: nano is just nano, exactly as before.
+    assert _climate_write(("preset_legacy", "Nano"), _options(["Comode_Off", "Sleep_0"]))[
+        1
+    ] == _options(["Comode_Nano"])
+    # A sleep preset selected outright has no duration to reuse, so it takes the
+    # one the appliance itself falls back to (Sleep_16, eight hours).
+    assert _climate_write(("preset_legacy", "Sleep"), _options(["Comode_Off", "Sleep_0"]))[
+        1
+    ] == _options(["Comode_Sleep", "Sleep_16"])
+    # Any other preset is untouched by all of this.
+    assert _climate_write(("preset_legacy", "Quiet"), _options(["Comode_Sleep", "Sleep_4"]))[
+        1
+    ] == _options(["Comode_Quiet"])
 
 
 async def test_newer_boards_keep_the_resource_paths():

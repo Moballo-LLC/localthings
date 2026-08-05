@@ -267,15 +267,26 @@ class LocalThingsClimate(LocalThingsEntity, ClimateEntity):
     # Nano=windFree, Quiet, Comfort, 2Step, Speed=Fast Turbo, Off=none.
     _LEGACY_PRESET_CODES = ("Off", "Nano", "Quiet", "Comfort", "2Step", "Speed")
 
+    # Good Sleep occupies the same Comode_ slot as the presets above, so a unit
+    # running it reports Comode_Sleep -- or Comode_NanoSleep, which the board
+    # will produce by itself when nano wind is asked for while the timer runs.
+    # Neither is in the list above, and a preset_mode outside preset_modes is
+    # not a state HA allows, so they are added for boards that have the Sleep_
+    # token these codes come with.
+    _LEGACY_SLEEP_PRESET_CODES = ("Sleep", "NanoSleep")
+
     def _legacy_convenient(self) -> dict:
         """A /mode/convenient/vs/0-shaped rep built from the Comode_* token in
         /mode/vs/0's options, for boards that have no convenient resource."""
         options = self._rep(MODE_HREF).get("x.com.samsung.da.options") or []
+        codes = list(self._LEGACY_PRESET_CODES)
+        if any(isinstance(option, str) and option.startswith("Sleep_") for option in options):
+            codes += self._LEGACY_SLEEP_PRESET_CODES
         for option in options:
             if isinstance(option, str) and option.startswith("Comode_"):
                 return {
                     _MODES_FIELD: [option.split("_", 1)[1]],
-                    _SUPPORTED_FIELD: list(self._LEGACY_PRESET_CODES),
+                    _SUPPORTED_FIELD: codes,
                 }
         return {}
 

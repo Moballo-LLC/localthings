@@ -152,6 +152,7 @@
               "smart": "Slim",
               "speed": "Snel",
               "nano": "WindFree",
+              "sleep": "Slaap",
               "nanosleep": "WindFree-slaap",
               "longwind": "Lange wind",
               "motionindirect": "Beweging indirect",
