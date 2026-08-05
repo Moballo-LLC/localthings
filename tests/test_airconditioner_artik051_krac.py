@@ -425,19 +425,20 @@ def test_preset_comes_from_the_comode_token():
     resources = _load_device(FIXTURE)
     entity = _climate(resources)
     assert entity.preset_mode == "none"  # Comode_Off in the fixture
-    # Codes learned by driving this unit through its cloud integration and
-    # reading the token back. They go through the same dynamic resolver as a
-    # real convenient resource's supportedModes, so 'Nano' resolves to the
-    # existing 'nano' preset -- already labelled WindFree in the catalog.
+    # The codes go through the same dynamic resolver as a real convenient
+    # resource's supportedModes, so 'Nano' resolves to the existing 'nano' preset
+    # -- already labelled WindFree in the catalog. Which of them are offered
+    # depends on the HVAC mode and on the unit's own capability bits; the fixture
+    # is in Cool, and test_presets_follow_the_hvac_mode_and_the_capability_bits
+    # covers every mode.
     assert entity.preset_modes == [
         "none",
         "nano",
+        "speed",
+        "2step",
         "quiet",
         "comfort",
-        "2step",
-        "speed",
-        # Not learned from the cloud but from the unit itself, which reports
-        # them in the same slot -- see test_the_sleep_modes_are_presets_too.
+        "smart",
         "sleep",
         "nanosleep",
     ]
@@ -488,6 +489,134 @@ def test_boards_without_the_sleep_token_do_not_get_the_sleep_presets():
     ]
     presets = _climate(resources).preset_modes
     assert "sleep" not in presets and "nanosleep" not in presets
+
+
+def _in_mode(mode, fixture=FIXTURE):
+    resources = _load_device(fixture)
+    resources["/mode/vs/0"]["x.com.samsung.da.modes"] = [mode]
+    return _climate(resources).preset_modes
+
+
+def test_presets_follow_the_hvac_mode_and_the_capability_bits():
+    """The fixture's own OptionCode_35882 / ExtendOptionCode_7 say: WindFree yes
+    (eoc[31]), 18K yes (eoc[30]), Quiet yes (oc[10]), Turbo/Comfort in Heat yes
+    (oc[12]), d'light no (oc[2]), Single User no (oc[3], oc[11]).
+
+    Its owner read the same lists off the remote and the appliance's app --
+    2-Step/Fast Turbo/Comfort/Quiet/WindFree in Cool, Fast Turbo/Comfort/Quiet in
+    Heat with WindFree impossible, WindFree alone in Dry and Fan, nothing in Auto
+    beyond WindFree (which the app reaches by switching to Cool) -- and the
+    appliance itself refused Comode_Nano in Auto and accepted it in Cool.
+    """
+    assert _in_mode("Cool") == [
+        "none",
+        "nano",
+        "speed",
+        "2step",
+        "quiet",
+        "comfort",
+        "smart",
+        "sleep",
+        "nanosleep",
+    ]
+    # Heat: no WindFree at all, and no Smart Saver (Cool-only).
+    heat = _in_mode("Heat")
+    assert "nano" not in heat
+    assert "smart" not in heat
+    assert [c for c in ("speed", "comfort", "quiet") if c in heat] == ["speed", "comfort", "quiet"]
+    # Dry and Fan: WindFree is the only one, and it keeps the mode.
+    for mode in ("Dry", "Wind"):
+        assert _in_mode(mode) == ["none", "nano"]
+    # Auto: WindFree only because this is an 18K model.
+    assert _in_mode("Auto") == ["none", "nano"]
+    # Nothing offers what the bits deny, in any mode.
+    for mode in ("Cool", "Heat", "Dry", "Wind", "Auto"):
+        presets = _in_mode(mode)
+        assert "dlightcool" not in presets, mode
+        assert "singleuser" not in presets, mode
+
+
+def test_a_bit_that_is_zero_removes_its_preset():
+    """oc[12] is what puts Fast Turbo and Comfort in Heat; without it the app
+    hides both, and so does this."""
+    resources = _load_device(FIXTURE)
+    options = resources["/mode/vs/0"]["x.com.samsung.da.options"]
+    # 35882 with oc[12] cleared, everything else untouched.
+    assert format(35882, "016b")[12] == "1"
+    cleared = int(format(35882, "016b")[:12] + "0" + format(35882, "016b")[13:], 2)
+    resources["/mode/vs/0"]["x.com.samsung.da.options"] = [
+        f"OptionCode_{cleared}" if option.startswith("OptionCode_") else option
+        for option in options
+    ]
+    resources["/mode/vs/0"]["x.com.samsung.da.modes"] = ["Heat"]
+    presets = _climate(resources).preset_modes
+    assert "speed" not in presets and "comfort" not in presets
+    assert "quiet" in presets  # oc[10], untouched
+
+
+def test_a_board_without_the_bit_maps_keeps_the_unconditional_list():
+    """An absent map is not a claim that nothing is supported -- issue #136's unit
+    of this same model publishes a different token set, and a board that omits
+    OptionCode entirely must not lose every preset."""
+    resources = _load_device(FIXTURE)
+    options = resources["/mode/vs/0"]["x.com.samsung.da.options"]
+    resources["/mode/vs/0"]["x.com.samsung.da.options"] = [
+        option for option in options if not option.startswith(("OptionCode_", "ExtendOptionCode_"))
+    ]
+    resources["/mode/vs/0"]["x.com.samsung.da.modes"] = ["Auto"]
+    assert _climate(resources).preset_modes == [
+        "none",
+        "nano",
+        "quiet",
+        "comfort",
+        "2step",
+        "speed",
+    ]
+
+
+def test_the_active_code_is_always_listed_even_where_the_rules_deny_it():
+    """A remote can put the unit in a mode these rules would not offer -- and a
+    preset_mode outside preset_modes is not a state HA allows, so the appliance
+    has the last word. Measured: Comode_2Step was accepted and held while the
+    unit was in Auto, where neither the remote nor the app offers it."""
+    resources = _load_device(FIXTURE)
+    options = resources["/mode/vs/0"]["x.com.samsung.da.options"]
+    resources["/mode/vs/0"]["x.com.samsung.da.options"] = [
+        "Comode_2Step" if option.startswith("Comode_") else option for option in options
+    ]
+    resources["/mode/vs/0"]["x.com.samsung.da.modes"] = ["Auto"]
+    entity = _climate(resources)
+    assert entity.preset_mode == "2step"
+    assert "2step" in entity.preset_modes
+
+
+async def test_nano_in_auto_switches_the_board_to_cool_first():
+    """Comode_Nano written while the unit is in Auto is answered 2.04 Changed and
+    dropped; the same token after a separate mode write holds. Putting modes and
+    options in one POST does not work either, so the mode goes first, on its own.
+    """
+    resources = _load_device(FIXTURE)
+    resources["/mode/vs/0"]["x.com.samsung.da.modes"] = ["Auto"]
+    coordinator = _FakeCoordinator(resources)
+    entity = _climate(resources, coordinator)
+
+    await entity.async_set_preset_mode("nano")
+
+    assert [payload for _, payload in coordinator.commands] == [
+        ("mode", "Cool"),
+        ("preset_legacy", "Nano"),
+    ]
+
+
+async def test_nano_outside_auto_writes_only_the_preset():
+    """In Cool the token holds on its own, so nothing else is sent -- and in Dry
+    the mode must be left alone, since WindFree keeps it."""
+    for mode in ("Cool", "Dry"):
+        resources = _load_device(FIXTURE)
+        resources["/mode/vs/0"]["x.com.samsung.da.modes"] = [mode]
+        coordinator = _FakeCoordinator(resources)
+        await _climate(resources, coordinator).async_set_preset_mode("nano")
+        assert [payload for _, payload in coordinator.commands] == [("preset_legacy", "Nano")], mode
 
 
 def test_nano_preset_keeps_a_running_good_sleep_at_its_own_duration():

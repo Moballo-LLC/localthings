@@ -245,6 +245,41 @@ def _option_token(rep, prefix):
     return None
 
 
+def option_bit(rep, prefix, index, width):
+    """One capability bit out of the `OptionCode_<n>` / `ExtendOptionCode_<n>` token.
+
+    The appliance packs which features it has into two integers. Its own app reads
+    them by turning the number into binary, left-padding to a fixed width, and
+    indexing that *string* -- so index 0 is the most significant bit, and the
+    indices below are the app's own (`racOptionCodeValue[12]`, and so on), kept
+    identical so the two can be compared line by line.
+
+    Returns None when the token is absent, which is not the same as a zero: a bit
+    that is present and 0 says the feature is missing, while no token at all says
+    only that this board does not publish the map.
+    """
+    raw = _option_token(rep, prefix)
+    if raw is None:
+        return None
+    try:
+        bits = format(int(raw), f"0{width}b")
+    except (TypeError, ValueError):
+        return None
+    if len(bits) != width or not 0 <= index < width:
+        return None  # a number too wide for the map is not one we can read
+    return bits[index] == "1"
+
+
+def option_code_bit(rep, index):
+    """A bit of the 16-wide `OptionCode` map."""
+    return option_bit(rep, "OptionCode", index, 16)
+
+
+def extend_option_code_bit(rep, index):
+    """A bit of the 32-wide `ExtendOptionCode` map."""
+    return option_bit(rep, "ExtendOptionCode", index, 32)
+
+
 def is_legacy_board(resources):
     """True for the board generation whose airflow lives in /airflow/vs/0
     rather than /wind/strength/vs/0 -- every AC dump on record has one shape
