@@ -277,11 +277,13 @@
               "smart": "Inteligente",
               "speed": "Rápido",
               "nano": "WindFree",
+              "sleep": "Sueño",
               "nanosleep": "WindFree sueño",
               "longwind": "Viento prolongado",
               "motionindirect": "Indirecto al movimiento",
               "motiondirect": "Directo al movimiento",
               "drycomfort": "Confort seco",
+              "dlightcool": "d'light Cool",
               "2step": "2 pasos"
             }
           }

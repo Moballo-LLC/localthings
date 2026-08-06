@@ -245,6 +245,59 @@ def _option_token(rep, prefix):
     return None
 
 
+def option_bit(rep, prefix, index, width):
+    """One capability bit out of the `OptionCode_<n>` / `ExtendOptionCode_<n>` token.
+
+    The appliance packs which features it has into two integers. Its own app reads
+    them by turning the number into binary, left-padding to a fixed width, and
+    indexing that *string* -- so index 0 is the most significant bit, and the
+    indices below are the app's own (`racOptionCodeValue[12]`, and so on), kept
+    identical so the two can be compared line by line.
+
+    Returns None when the token is absent, which is not the same as a zero: a bit
+    that is present and 0 says the feature is missing, while no token at all says
+    only that this board does not publish the map.
+    """
+    raw = _option_token(rep, prefix)
+    if raw is None:
+        return None
+    try:
+        bits = format(int(raw), f"0{width}b")
+    except (TypeError, ValueError):
+        return None
+    if len(bits) != width or not 0 <= index < width:
+        return None  # a number too wide for the map is not one we can read
+    return bits[index] == "1"
+
+
+def option_code_bit(rep, index):
+    """A bit of the 16-wide `OptionCode` map."""
+    return option_bit(rep, "OptionCode", index, 16)
+
+
+def extend_option_code_bit(rep, index):
+    """A bit of the 32-wide `ExtendOptionCode` map."""
+    return option_bit(rep, "ExtendOptionCode", index, 32)
+
+
+def has_option_code(rep):
+    """Whether this board publishes the 16-wide capability map at all."""
+    return _option_token(rep, "OptionCode") is not None
+
+
+def has_extend_option_code(rep):
+    """Whether this board publishes the 32-wide capability map at all.
+
+    Its own name in the app is "Single RAC new option code, as old option code
+    is full", and every RAC-class dump on record carries it while the FAC/CAC
+    ones carry only the older map with values small enough that RAC bit
+    positions read as zeros. So its presence is the closest thing available to
+    "this is the family those bit positions were documented for" -- a proxy,
+    not a proof, and used only to decide whether to read the map at all.
+    """
+    return _option_token(rep, "ExtendOptionCode") is not None
+
+
 def is_legacy_board(resources):
     """True for the board generation whose airflow lives in /airflow/vs/0
     rather than /wind/strength/vs/0 -- every AC dump on record has one shape
@@ -322,6 +375,65 @@ def _option_number_write(prefix, factor=1):
         )
 
     return write
+
+
+def _good_sleep_write(payload, rep, href=None):
+    """Good Sleep needs its mode token in the same write as its duration.
+
+    `Sleep_<n>` on its own is answered 2.04 Changed and then thrown away:
+    measured on an ARTIK051_KRAC_18K, writing `["Sleep_4"]` left the token at
+    `Sleep_0` at both +8s and +45s, while the same value written together with
+    `Comode_Sleep` held. So the number is a parameter of the mode, not a
+    setting of its own, and the appliance's app never sends one without the
+    other either.
+
+    Which mode token goes with it depends on nano wind, the way the app decides
+    it: nano and Good Sleep share the single `Comode_` slot, so running both is
+    `Comode_NanoSleep`, and switching the timer off while nano is on leaves nano
+    running rather than turning everything off.
+    """
+    half_hours = round(float(payload) * 2)
+    nano = _option_token(rep, "Comode") in ("Nano", "NanoSleep")
+    if half_hours:
+        comode = "Comode_NanoSleep" if nano else "Comode_Sleep"
+    else:
+        comode = "Comode_Nano" if nano else "Comode_Off"
+    return (
+        ["mode", "vs", "0"],
+        {"x.com.samsung.da.options": [comode, f"Sleep_{half_hours}"]},
+    )
+
+
+# What the appliance itself picks when a Good Sleep mode is asked for with no
+# duration to go with it: writing a bare `Comode_Nano` over a live
+# `Comode_Sleep`/`Sleep_4` came back as `Comode_NanoSleep`/`Sleep_16`. Used only
+# when a sleep preset is selected while the timer reads 0.
+_DEFAULT_SLEEP_HALF_HOURS = 16
+
+
+def _preset_options(code, rep):
+    """The options array for a legacy preset write.
+
+    One `Comode_` token has to express both nano wind and Good Sleep, so
+    selecting nano while the timer is running means `Comode_NanoSleep` -- and it
+    has to carry the duration, because the board otherwise supplies its own.
+    Measured: `["Comode_Nano"]` written over `Comode_Sleep`/`Sleep_4` came back
+    as `Comode_NanoSleep`/`Sleep_16`, silently turning the user's two hours into
+    eight. Writing the pair keeps the two hours.
+
+    Leaving a sleep mode needs no such care: the board zeroes the duration by
+    itself. Measured on the same unit -- a bare `["Comode_Off"]` written over
+    `Comode_Sleep`/`Sleep_4` read back as `Comode_Off`/`Sleep_0` at +8s and +38s
+    -- so the `none` preset cannot leave a stale token behind for the next nano
+    selection to pick up as a running timer.
+    """
+    sleep = _option_token(rep, "Sleep")
+    running = sleep not in (None, "0")
+    if code == "Nano" and running:
+        code = "NanoSleep"
+    if code in ("Sleep", "NanoSleep"):
+        return [f"Comode_{code}", f"Sleep_{sleep if running else _DEFAULT_SLEEP_HALF_HOURS}"]
+    return option_write("Comode", code)
 
 
 def _odor_controller_active(rep):
@@ -404,7 +516,7 @@ def _climate_write(payload, rep, href=None):
     if kind == "swing_legacy":
         return (["airflow", "vs", "0"], {"x.com.samsung.da.direction": value})
     if kind == "preset_legacy":
-        return (["mode", "vs", "0"], {"x.com.samsung.da.options": option_write("Comode", value)})
+        return (["mode", "vs", "0"], {"x.com.samsung.da.options": _preset_options(value, rep)})
     if kind == "preset":
         return (["mode", "convenient", "vs", "0"], {"x.com.samsung.da.modes": value})
     return None
@@ -555,7 +667,7 @@ CLIMATE = Capability(
             key="good_sleep",
             rep_fn=_option_token_num("Sleep", divisor=2),
             exists_fn=_has_option_token("Sleep"),
-            write_fn=_option_number_write("Sleep", factor=2),
+            write_fn=_good_sleep_write,
             native_min=0,
             native_max=12,
             step=0.5,

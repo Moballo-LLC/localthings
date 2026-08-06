@@ -235,12 +235,50 @@ def test_good_sleep_is_hours_while_the_token_counts_half_hours():
     assert (desc.native_max, desc.step) == (12, 0.5)
     assert desc.write_fn(2.5, {}) == (
         ["mode", "vs", "0"],
-        {"x.com.samsung.da.options": ["Sleep_5"]},
+        {"x.com.samsung.da.options": ["Comode_Sleep", "Sleep_5"]},
     )
     # 12 hours is the app's maximum and has to be reachable -- it was not while
     # the token was published as hours.
-    assert desc.write_fn(12, {})[1]["x.com.samsung.da.options"] == ["Sleep_24"]
-    assert desc.write_fn(0, {})[1]["x.com.samsung.da.options"] == ["Sleep_0"]
+    assert desc.write_fn(12, {})[1]["x.com.samsung.da.options"] == ["Comode_Sleep", "Sleep_24"]
+
+
+def _options(rep_options):
+    return {"x.com.samsung.da.options": list(rep_options)}
+
+
+def test_good_sleep_write_carries_the_mode_token_the_duration_belongs_to():
+    """`Sleep_<n>` on its own does nothing. Measured on an ARTIK051_KRAC_18K:
+    writing `["Sleep_4"]` was answered 2.04 Changed and the token still read
+    `Sleep_0` at +8s and +45s, while `["Comode_Sleep", "Sleep_4"]` held. The
+    duration is a parameter of the mode, so both go in one write -- which is
+    also the only form the appliance's own app sends."""
+    desc = _desc(_load_device(FIXTURE), "good_sleep")
+
+    assert desc.write_fn(2, _options(["Comode_Off", "Sleep_0"])) == (
+        ["mode", "vs", "0"],
+        {"x.com.samsung.da.options": ["Comode_Sleep", "Sleep_4"]},
+    )
+    # Off means leaving the mode as well as zeroing the duration.
+    assert desc.write_fn(0, _options(["Comode_Sleep", "Sleep_4"]))[1] == _options(
+        ["Comode_Off", "Sleep_0"]
+    )
+
+
+def test_good_sleep_and_nano_wind_share_one_token():
+    """Nano wind and Good Sleep are one Comode_ slot, so running both is
+    Comode_NanoSleep -- the board produces that code by itself when nano is
+    asked for while the timer runs. Turning the timer off then has to leave nano
+    running rather than switching the mode off entirely, which is how the app
+    reads it back."""
+    desc = _desc(_load_device(FIXTURE), "good_sleep")
+
+    for comode in ("Comode_Nano", "Comode_NanoSleep"):
+        assert desc.write_fn(2, _options([comode, "Sleep_0"]))[1] == _options(
+            ["Comode_NanoSleep", "Sleep_4"]
+        )
+    assert desc.write_fn(0, _options(["Comode_NanoSleep", "Sleep_4"]))[1] == _options(
+        ["Comode_Nano", "Sleep_0"]
+    )
 
 
 def test_filter_alarm_time_reads_the_threshold_and_writes_one_token():
@@ -387,17 +425,22 @@ def test_preset_comes_from_the_comode_token():
     resources = _load_device(FIXTURE)
     entity = _climate(resources)
     assert entity.preset_mode == "none"  # Comode_Off in the fixture
-    # Codes learned by driving this unit through its cloud integration and
-    # reading the token back. They go through the same dynamic resolver as a
-    # real convenient resource's supportedModes, so 'Nano' resolves to the
-    # existing 'nano' preset -- already labelled WindFree in the catalog.
+    # The codes go through the same dynamic resolver as a real convenient
+    # resource's supportedModes, so 'Nano' resolves to the existing 'nano' preset
+    # -- already labelled WindFree in the catalog. Which of them are offered
+    # depends on the HVAC mode and on the unit's own capability bits; the fixture
+    # is in Cool, and test_presets_follow_the_hvac_mode_and_the_capability_bits
+    # covers every mode.
     assert entity.preset_modes == [
         "none",
         "nano",
+        "speed",
+        "2step",
         "quiet",
         "comfort",
-        "2step",
-        "speed",
+        "smart",
+        "sleep",
+        "nanosleep",
     ]
 
     options = resources["/mode/vs/0"]["x.com.samsung.da.options"]
@@ -415,6 +458,252 @@ async def test_preset_write_uses_the_token_path():
     await entity.async_set_preset_mode("nano")
 
     assert coordinator.commands[-1][1] == ("preset_legacy", "Nano")
+
+
+def test_the_sleep_modes_are_presets_too():
+    """Good Sleep lives in the same Comode_ slot as the presets, so a unit
+    running it reports a code that was not in the list -- and a preset_mode
+    outside preset_modes is not a state HA allows. Verified against a live unit:
+    with the board on Comode_Sleep, the entity reported preset_mode 'sleep'
+    while preset_modes offered only none/nano/quiet/comfort/2step/speed."""
+    resources = _load_device(FIXTURE)
+    assert _climate(resources).preset_modes[-2:] == ["sleep", "nanosleep"]
+
+    for token, preset in (("Comode_Sleep", "sleep"), ("Comode_NanoSleep", "nanosleep")):
+        options = resources["/mode/vs/0"]["x.com.samsung.da.options"]
+        resources["/mode/vs/0"]["x.com.samsung.da.options"] = [
+            token if option.startswith("Comode_") else option for option in options
+        ]
+        entity = _climate(resources)
+        assert entity.preset_mode == preset
+        assert preset in entity.preset_modes
+
+
+def test_boards_without_the_sleep_token_do_not_get_the_sleep_presets():
+    """The codes come with the Sleep_ token; a unit that has no such token has
+    nothing to report them from."""
+    resources = _load_device(FIXTURE)
+    options = resources["/mode/vs/0"]["x.com.samsung.da.options"]
+    resources["/mode/vs/0"]["x.com.samsung.da.options"] = [
+        option for option in options if not option.startswith("Sleep_")
+    ]
+    presets = _climate(resources).preset_modes
+    assert "sleep" not in presets and "nanosleep" not in presets
+
+
+def _in_mode(mode, fixture=FIXTURE):
+    resources = _load_device(fixture)
+    resources["/mode/vs/0"]["x.com.samsung.da.modes"] = [mode]
+    return _climate(resources).preset_modes
+
+
+def test_presets_follow_the_hvac_mode_and_the_capability_bits():
+    """The fixture's own OptionCode_35882 / ExtendOptionCode_7 say: WindFree yes
+    (eoc[31]), 18K yes (eoc[30]), Quiet yes (oc[10]), Turbo/Comfort in Heat yes
+    (oc[12]), d'light no (oc[2]), Single User no (oc[3], oc[11]).
+
+    Its owner read the same lists off the remote and the appliance's app --
+    2-Step/Fast Turbo/Comfort/Quiet/WindFree in Cool, Fast Turbo/Comfort/Quiet in
+    Heat with WindFree impossible, WindFree alone in Dry and Fan, nothing in Auto
+    beyond WindFree (which the app reaches by switching to Cool) -- and the
+    appliance itself refused Comode_Nano in Auto and accepted it in Cool.
+    """
+    assert _in_mode("Cool") == [
+        "none",
+        "nano",
+        "speed",
+        "2step",
+        "quiet",
+        "comfort",
+        "smart",
+        "sleep",
+        "nanosleep",
+    ]
+    # Heat: no WindFree at all, and no Smart Saver (Cool-only).
+    heat = _in_mode("Heat")
+    assert "nano" not in heat
+    assert "smart" not in heat
+    assert [c for c in ("speed", "comfort", "quiet") if c in heat] == ["speed", "comfort", "quiet"]
+    # Dry and Fan: WindFree is the only one, and it keeps the mode.
+    for mode in ("Dry", "Wind"):
+        assert _in_mode(mode) == ["none", "nano"]
+    # Auto: WindFree only because this is an 18K model.
+    assert _in_mode("Auto") == ["none", "nano"]
+    # d'light Cool is a live rule and this unit's oc[2] denies it everywhere.
+    for mode in ("Cool", "Heat", "Dry", "Wind", "Auto"):
+        assert "dlightcool" not in _in_mode(mode), mode
+
+
+def test_a_board_with_only_the_old_map_keeps_the_unconditional_list():
+    """One map is not enough to judge by. `airconditioner_artik051_dongle_fac_18k`
+    is a legacy board that publishes OptionCode and no ExtendOptionCode, so every
+    eoc-gated rule would read None -- and None means "this board does not publish
+    the map", not "the feature is absent". Deriving from it would have cost that
+    unit WindFree in every mode, and left it with ['none'] alone in its own
+    fixture mode.
+
+    Its OptionCode is also 521, three orders of magnitude below the RAC-class
+    values these bit positions were read from, which is the second reason not to
+    interpret it: the FAC and CAC families use the field differently.
+    """
+    resources = _load_device("airconditioner_artik051_dongle_fac_18k")
+    options = resources["/mode/vs/0"]["x.com.samsung.da.options"]
+    assert any(o.startswith("OptionCode_") for o in options)
+    assert not any(o.startswith("ExtendOptionCode_") for o in options)
+
+    baseline = ["none", "nano", "quiet", "comfort", "2step", "speed"]
+    for mode in ("Auto", "Cool", "Heat", "Dry", "Wind"):
+        resources["/mode/vs/0"]["x.com.samsung.da.modes"] = [mode]
+        assert _climate(resources).preset_modes == baseline, mode
+
+
+def test_the_other_board_with_both_maps_still_derives():
+    """`airconditioner_artik051_krac_energy` is the same model as the fixture
+    above with a different OptionCode (56378), and carries both maps -- so it
+    stays on the derived path rather than the fallback."""
+    presets = _in_mode("Cool", fixture="airconditioner_artik051_krac_energy")
+    assert presets[:1] == ["none"]
+    assert "nano" in presets and "smart" in presets
+    assert presets != ["none", "nano", "quiet", "comfort", "2step", "speed"]
+
+
+def test_an_unknown_hvac_mode_falls_back_instead_of_deriving():
+    """An HVAC mode these rules have never seen is the same "cannot judge" case
+    as an absent map, so it gets the same answer rather than a derived-but-wrong
+    one. Reachable with a partial or malformed rep, where `modes` is missing."""
+    resources = _load_device(FIXTURE)
+    for modes in ([], ["CoolClean"]):
+        resources["/mode/vs/0"]["x.com.samsung.da.modes"] = modes
+        assert _climate(resources).preset_modes == [
+            "none",
+            "nano",
+            "quiet",
+            "comfort",
+            "2step",
+            "speed",
+        ], modes
+
+
+async def test_aicomfort_neither_offers_nano_nor_switches_the_mode():
+    """The app disables WindFree in AIComfort, so it is not offered -- and the
+    Cool-first write is therefore Auto-only, with no unreachable branch for a
+    mode that can never ask for it."""
+    resources = _load_device(FIXTURE)
+    resources["/mode/vs/0"]["x.com.samsung.da.modes"] = ["AIComfort"]
+    coordinator = _FakeCoordinator(resources)
+    entity = _climate(resources, coordinator)
+
+    assert "nano" not in entity.preset_modes
+    await entity.async_set_preset_mode("quiet")
+    assert [payload for _, payload in coordinator.commands] == [("preset_legacy", "Quiet")]
+
+
+def test_a_bit_that_is_zero_removes_its_preset():
+    """oc[12] is what puts Fast Turbo and Comfort in Heat; without it the app
+    hides both, and so does this."""
+    resources = _load_device(FIXTURE)
+    options = resources["/mode/vs/0"]["x.com.samsung.da.options"]
+    # 35882 with oc[12] cleared, everything else untouched.
+    assert format(35882, "016b")[12] == "1"
+    cleared = int(format(35882, "016b")[:12] + "0" + format(35882, "016b")[13:], 2)
+    resources["/mode/vs/0"]["x.com.samsung.da.options"] = [
+        f"OptionCode_{cleared}" if option.startswith("OptionCode_") else option
+        for option in options
+    ]
+    resources["/mode/vs/0"]["x.com.samsung.da.modes"] = ["Heat"]
+    presets = _climate(resources).preset_modes
+    assert "speed" not in presets and "comfort" not in presets
+    assert "quiet" in presets  # oc[10], untouched
+
+
+def test_a_board_without_the_bit_maps_keeps_the_unconditional_list():
+    """An absent map is not a claim that nothing is supported -- issue #136's unit
+    of this same model publishes a different token set, and a board that omits
+    OptionCode entirely must not lose every preset."""
+    resources = _load_device(FIXTURE)
+    options = resources["/mode/vs/0"]["x.com.samsung.da.options"]
+    resources["/mode/vs/0"]["x.com.samsung.da.options"] = [
+        option for option in options if not option.startswith(("OptionCode_", "ExtendOptionCode_"))
+    ]
+    resources["/mode/vs/0"]["x.com.samsung.da.modes"] = ["Auto"]
+    assert _climate(resources).preset_modes == [
+        "none",
+        "nano",
+        "quiet",
+        "comfort",
+        "2step",
+        "speed",
+    ]
+
+
+def test_the_active_code_is_always_listed_even_where_the_rules_deny_it():
+    """A remote can put the unit in a mode these rules would not offer -- and a
+    preset_mode outside preset_modes is not a state HA allows, so the appliance
+    has the last word. Measured: Comode_2Step was accepted and held while the
+    unit was in Auto, where neither the remote nor the app offers it."""
+    resources = _load_device(FIXTURE)
+    options = resources["/mode/vs/0"]["x.com.samsung.da.options"]
+    resources["/mode/vs/0"]["x.com.samsung.da.options"] = [
+        "Comode_2Step" if option.startswith("Comode_") else option for option in options
+    ]
+    resources["/mode/vs/0"]["x.com.samsung.da.modes"] = ["Auto"]
+    entity = _climate(resources)
+    assert entity.preset_mode == "2step"
+    assert "2step" in entity.preset_modes
+
+
+async def test_nano_in_auto_switches_the_board_to_cool_first():
+    """Comode_Nano written while the unit is in Auto is answered 2.04 Changed and
+    dropped; the same token after a separate mode write holds. Putting modes and
+    options in one POST does not work either, so the mode goes first, on its own.
+    """
+    resources = _load_device(FIXTURE)
+    resources["/mode/vs/0"]["x.com.samsung.da.modes"] = ["Auto"]
+    coordinator = _FakeCoordinator(resources)
+    entity = _climate(resources, coordinator)
+
+    await entity.async_set_preset_mode("nano")
+
+    assert [payload for _, payload in coordinator.commands] == [
+        ("mode", "Cool"),
+        ("preset_legacy", "Nano"),
+    ]
+
+
+async def test_nano_outside_auto_writes_only_the_preset():
+    """In Cool the token holds on its own, so nothing else is sent -- and in Dry
+    the mode must be left alone, since WindFree keeps it."""
+    for mode in ("Cool", "Dry"):
+        resources = _load_device(FIXTURE)
+        resources["/mode/vs/0"]["x.com.samsung.da.modes"] = [mode]
+        coordinator = _FakeCoordinator(resources)
+        await _climate(resources, coordinator).async_set_preset_mode("nano")
+        assert [payload for _, payload in coordinator.commands] == [("preset_legacy", "Nano")], mode
+
+
+def test_nano_preset_keeps_a_running_good_sleep_at_its_own_duration():
+    """Writing a bare Comode_Nano over a live Comode_Sleep/Sleep_4 came back as
+    Comode_NanoSleep/Sleep_16 -- the board upgrades the code by itself and then
+    supplies a duration of its own, turning two hours into eight without anyone
+    asking. Sending the pair keeps the user's value."""
+    from custom_components.localthings.registry.capabilities.airconditioner import _climate_write
+
+    assert _climate_write(("preset_legacy", "Nano"), _options(["Comode_Sleep", "Sleep_4"]))[
+        1
+    ] == _options(["Comode_NanoSleep", "Sleep_4"])
+    # Idle timer: nano is just nano, exactly as before.
+    assert _climate_write(("preset_legacy", "Nano"), _options(["Comode_Off", "Sleep_0"]))[
+        1
+    ] == _options(["Comode_Nano"])
+    # A sleep preset selected outright has no duration to reuse, so it takes the
+    # one the appliance itself falls back to (Sleep_16, eight hours).
+    assert _climate_write(("preset_legacy", "Sleep"), _options(["Comode_Off", "Sleep_0"]))[
+        1
+    ] == _options(["Comode_Sleep", "Sleep_16"])
+    # Any other preset is untouched by all of this.
+    assert _climate_write(("preset_legacy", "Quiet"), _options(["Comode_Sleep", "Sleep_4"]))[
+        1
+    ] == _options(["Comode_Quiet"])
 
 
 async def test_newer_boards_keep_the_resource_paths():
