@@ -777,7 +777,7 @@ class LocalThingsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id=step_id,
-            data_schema=schema,
+            data_schema=self.add_suggested_values_to_schema(schema, user_input),
             errors=errors,
         )
 
