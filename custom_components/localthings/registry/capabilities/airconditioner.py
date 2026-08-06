@@ -420,6 +420,12 @@ def _preset_options(code, rep):
     Measured: `["Comode_Nano"]` written over `Comode_Sleep`/`Sleep_4` came back
     as `Comode_NanoSleep`/`Sleep_16`, silently turning the user's two hours into
     eight. Writing the pair keeps the two hours.
+
+    Leaving a sleep mode needs no such care: the board zeroes the duration by
+    itself. Measured on the same unit -- a bare `["Comode_Off"]` written over
+    `Comode_Sleep`/`Sleep_4` read back as `Comode_Off`/`Sleep_0` at +8s and +38s
+    -- so the `none` preset cannot leave a stale token behind for the next nano
+    selection to pick up as a running timer.
     """
     sleep = _option_token(rep, "Sleep")
     running = sleep not in (None, "0")
