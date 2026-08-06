@@ -529,11 +529,73 @@ def test_presets_follow_the_hvac_mode_and_the_capability_bits():
         assert _in_mode(mode) == ["none", "nano"]
     # Auto: WindFree only because this is an 18K model.
     assert _in_mode("Auto") == ["none", "nano"]
-    # Nothing offers what the bits deny, in any mode.
+    # d'light Cool is a live rule and this unit's oc[2] denies it everywhere.
     for mode in ("Cool", "Heat", "Dry", "Wind", "Auto"):
-        presets = _in_mode(mode)
-        assert "dlightcool" not in presets, mode
-        assert "singleuser" not in presets, mode
+        assert "dlightcool" not in _in_mode(mode), mode
+
+
+def test_a_board_with_only_the_old_map_keeps_the_unconditional_list():
+    """One map is not enough to judge by. `airconditioner_artik051_dongle_fac_18k`
+    is a legacy board that publishes OptionCode and no ExtendOptionCode, so every
+    eoc-gated rule would read None -- and None means "this board does not publish
+    the map", not "the feature is absent". Deriving from it would have cost that
+    unit WindFree in every mode, and left it with ['none'] alone in its own
+    fixture mode.
+
+    Its OptionCode is also 521, three orders of magnitude below the RAC-class
+    values these bit positions were read from, which is the second reason not to
+    interpret it: the FAC and CAC families use the field differently.
+    """
+    resources = _load_device("airconditioner_artik051_dongle_fac_18k")
+    options = resources["/mode/vs/0"]["x.com.samsung.da.options"]
+    assert any(o.startswith("OptionCode_") for o in options)
+    assert not any(o.startswith("ExtendOptionCode_") for o in options)
+
+    baseline = ["none", "nano", "quiet", "comfort", "2step", "speed"]
+    for mode in ("Auto", "Cool", "Heat", "Dry", "Wind"):
+        resources["/mode/vs/0"]["x.com.samsung.da.modes"] = [mode]
+        assert _climate(resources).preset_modes == baseline, mode
+
+
+def test_the_other_board_with_both_maps_still_derives():
+    """`airconditioner_artik051_krac_energy` is the same model as the fixture
+    above with a different OptionCode (56378), and carries both maps -- so it
+    stays on the derived path rather than the fallback."""
+    presets = _in_mode("Cool", fixture="airconditioner_artik051_krac_energy")
+    assert presets[:1] == ["none"]
+    assert "nano" in presets and "smart" in presets
+    assert presets != ["none", "nano", "quiet", "comfort", "2step", "speed"]
+
+
+def test_an_unknown_hvac_mode_falls_back_instead_of_deriving():
+    """An HVAC mode these rules have never seen is the same "cannot judge" case
+    as an absent map, so it gets the same answer rather than a derived-but-wrong
+    one. Reachable with a partial or malformed rep, where `modes` is missing."""
+    resources = _load_device(FIXTURE)
+    for modes in ([], ["CoolClean"]):
+        resources["/mode/vs/0"]["x.com.samsung.da.modes"] = modes
+        assert _climate(resources).preset_modes == [
+            "none",
+            "nano",
+            "quiet",
+            "comfort",
+            "2step",
+            "speed",
+        ], modes
+
+
+async def test_aicomfort_neither_offers_nano_nor_switches_the_mode():
+    """The app disables WindFree in AIComfort, so it is not offered -- and the
+    Cool-first write is therefore Auto-only, with no unreachable branch for a
+    mode that can never ask for it."""
+    resources = _load_device(FIXTURE)
+    resources["/mode/vs/0"]["x.com.samsung.da.modes"] = ["AIComfort"]
+    coordinator = _FakeCoordinator(resources)
+    entity = _climate(resources, coordinator)
+
+    assert "nano" not in entity.preset_modes
+    await entity.async_set_preset_mode("quiet")
+    assert [payload for _, payload in coordinator.commands] == [("preset_legacy", "Quiet")]
 
 
 def test_a_bit_that_is_zero_removes_its_preset():

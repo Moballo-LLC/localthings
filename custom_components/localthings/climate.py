@@ -81,6 +81,8 @@ from .registry.capabilities.airconditioner import (
 )
 from .registry.capabilities.airconditioner import (
     extend_option_code_bit,
+    has_extend_option_code,
+    has_option_code,
     is_legacy_board,
     option_code_bit,
 )
@@ -282,6 +284,13 @@ class LocalThingsClimate(LocalThingsEntity, ClimateEntity):
     # token these codes come with.
     _LEGACY_SLEEP_PRESET_CODES = ("Sleep", "NanoSleep")
 
+    # HVAC modes _legacy_preset_codes() has a rule for. Anything else is a mode
+    # this transcription has never seen, which is the same "cannot judge" case as
+    # a board that publishes no capability map -- and gets the same fallback.
+    _LEGACY_KNOWN_HVAC = frozenset(
+        {"Cool", "Heat", "HeatClean", "Dry", "Fan", "Wind", "Auto", _AI_COMFORT_MODE}
+    )
+
     # Which comfort modes a legacy board offers in which HVAC mode, and which of
     # them it has at all. Both come from the appliance rather than from a table
     # per model: the unit publishes its capabilities as two bit maps in
@@ -292,41 +301,65 @@ class LocalThingsClimate(LocalThingsEntity, ClimateEntity):
     #
     # Confirmed against an ARTIK051_KRAC_18K whose owner read the same lists off
     # the remote and the app: WindFree in Cool/Dry/Fan and (being an 18K model)
-    # Auto but never Heat, Fast Turbo and Comfort in Heat because oc[12] is set,
-    # and no d'light or Single User anywhere because oc[2], oc[3] and oc[11] are
-    # zero -- the appliance refuses both of those locally too.
+    # Auto but never Heat, and Fast Turbo and Comfort in Heat because oc[12] is
+    # set. d'light Cool is gated the same way on oc[2], which is zero here -- and
+    # the appliance refuses the token locally too.
+    #
+    # Single User is deliberately not modelled, though the app does gate it on
+    # oc[3] / oc[11]: it has no token of its own. The app's own Single User
+    # command sends `Comode_Smart` -- the Smart Saver token -- with a hardcoded
+    # 24 desired alongside it, so there is nothing to write that would be
+    # distinguishable from the Smart preset below, and no name to give it that
+    # the appliance would recognise.
 
     def _legacy_preset_codes(self, hvac: str, options: list) -> list[str]:
-        """Comfort-mode codes this unit offers in this HVAC mode."""
+        """Comfort-mode codes this unit offers in this HVAC mode.
+
+        Derived only for boards that publish *both* capability maps. One map on
+        its own is not enough: every eoc-gated rule would then read None, and
+        None means "this board does not publish the map", never "the feature is
+        absent". The FAC/CAC boards on record carry only the older map, with
+        values small enough that RAC bit positions all read as zeros, so
+        requiring both also keeps these rules inside the family they were
+        documented for.
+
+        Within the derived path, a bit that cannot be read (a malformed or
+        over-wide token) is treated as permission rather than denial for the
+        codes the unconditional list already carried -- losing a working preset
+        to a parsing failure is worse than offering one too many. Codes that were
+        never in that list (d'light) still need their bit to be explicitly set.
+        """
         rep = self._rep(MODE_HREF)
-        cool = hvac in ("Cool", _AI_COMFORT_MODE)
-        heat = hvac in ("Heat", "HeatClean")
-        # An absent bit map is not a claim that nothing is supported, so a board
-        # that publishes no OptionCode keeps the older unconditional list.
-        if option_code_bit(rep, 1) is None and extend_option_code_bit(rep, 31) is None:
+        if (
+            not has_option_code(rep)
+            or not has_extend_option_code(rep)
+            or hvac not in self._LEGACY_KNOWN_HVAC
+        ):
             return list(self._LEGACY_PRESET_CODES)
 
+        cool = hvac in ("Cool", _AI_COMFORT_MODE)
+        heat = hvac in ("Heat", "HeatClean")
         codes = ["Off"]
-        # WindFree: shown on eoc[31], disabled in Heat, in AIComfort, and in Auto
-        # unless this is an 18K model (eoc[30]) -- the app switches such a unit to
-        # Cool instead, which is what _legacy_preset_needs_cool does.
+        # WindFree: shown on eoc[31]; disabled in Heat, in AIComfort, and in Auto
+        # unless this is an 18K model (eoc[30]), where the app switches to Cool for
+        # it instead -- which is what _legacy_preset_needs_cool does.
         nano_mode_ok = not heat and hvac != _AI_COMFORT_MODE
         if hvac == "Auto":
-            nano_mode_ok = bool(extend_option_code_bit(rep, 30))
-        if extend_option_code_bit(rep, 31) and nano_mode_ok:
+            nano_mode_ok = extend_option_code_bit(rep, 30) is not False
+        if extend_option_code_bit(rep, 31) is not False and nano_mode_ok:
             codes.append("Nano")
-        if cool or (heat and option_code_bit(rep, 12)):  # Fast Turbo, oc[12] in Heat
+        if cool or (heat and option_code_bit(rep, 12) is not False):  # Fast Turbo
             codes.append("Speed")
         if cool:
             codes.append("2Step")
-        if cool and option_code_bit(rep, 2):  # d'light Cool
+        if cool and option_code_bit(rep, 2):  # d'light Cool -- needs the bit set
             codes.append("DlightCool")
         # Quiet reads oc[10] with no mode condition in the app, but the owner of
         # the unit above sees it in Cool and Heat only, on the remote as well as
         # in the app -- the observation wins over the reading.
-        if option_code_bit(rep, 10) and (cool or heat):
+        if option_code_bit(rep, 10) is not False and (cool or heat):
             codes.append("Quiet")
-        if (cool or heat) and not (heat and not option_code_bit(rep, 12)):  # Comfort
+        if cool or (heat and option_code_bit(rep, 12) is not False):  # Comfort
             codes.append("Comfort")
         # Smart Saver has no bit of its own and the app hides it from every single
         # RAC outright (showSaverOption = false), yet the appliance accepts it and
@@ -354,13 +387,11 @@ class LocalThingsClimate(LocalThingsEntity, ClimateEntity):
         if active is None:
             return {}
 
-        codes = self._legacy_preset_codes(
-            str(_first(self._rep(MODE_HREF).get(_MODES_FIELD))), options
-        )
+        codes = self._legacy_preset_codes(_first(self._rep(MODE_HREF).get(_MODES_FIELD)), options)
         # Whatever the unit is actually running has to be listed whether the
-        # table expects it there or not -- a preset_mode outside preset_modes is
+        # rules expect it there or not -- a preset_mode outside preset_modes is
         # not a state HA allows, and the appliance has the last word on what it
-        # is doing (a remote can put it in a mode this table would not offer).
+        # is doing (a remote can put it in a mode these rules would not offer).
         if active not in codes:
             codes.append(active)
         return {_MODES_FIELD: [active], _SUPPORTED_FIELD: codes}
@@ -716,8 +747,13 @@ class LocalThingsClimate(LocalThingsEntity, ClimateEntity):
         Comode_Off at +8s and +45s), and putting `modes: Cool` in the *same* POST
         does not help -- the mode moves and the token is still dropped, so the
         board judges the option against the mode it was in. Sent as its own write
-        first, it holds. The appliance's own app does the same thing for the same
-        reason (its nano command carries `modes: Cool` only in Auto/AIComfort).
+        first, it holds. The appliance's own app pairs `modes: Cool` with its nano
+        command for the same reason.
+
+        Auto only. The app's builder also covers AIComfort, but its
+        `updateOptionsList()` disables the WindFree button there outright, so that
+        pairing can never fire -- and `_legacy_preset_codes()` likewise does not
+        offer `Nano` in AIComfort, which would leave such a branch unreachable.
 
         The pause is measured, not padding: back to back (same session, no gap at
         all) the token was dropped again, two seconds apart it held. Three is that
@@ -726,9 +762,13 @@ class LocalThingsClimate(LocalThingsEntity, ClimateEntity):
         """
         if not self._legacy_preset() or code != "Nano":
             return
-        if _first(self._rep(MODE_HREF).get(_MODES_FIELD)) not in ("Auto", _AI_COMFORT_MODE):
+        if _first(self._rep(MODE_HREF).get(_MODES_FIELD)) != "Auto":
             return
-        await self.coordinator.async_send_command(self._bound, ("mode", "Cool"))
+        # Same resolver the rest of the platform uses -- the device code for an HA
+        # mode is read off the unit's own supportedModes rather than assumed.
+        await self.coordinator.async_send_command(
+            self._bound, ("mode", self._device_code_for_hvac(HVACMode.COOL))
+        )
         await asyncio.sleep(_NANO_AFTER_MODE_DELAY)
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:

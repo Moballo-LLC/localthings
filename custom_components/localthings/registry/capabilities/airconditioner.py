@@ -280,6 +280,24 @@ def extend_option_code_bit(rep, index):
     return option_bit(rep, "ExtendOptionCode", index, 32)
 
 
+def has_option_code(rep):
+    """Whether this board publishes the 16-wide capability map at all."""
+    return _option_token(rep, "OptionCode") is not None
+
+
+def has_extend_option_code(rep):
+    """Whether this board publishes the 32-wide capability map at all.
+
+    Its own name in the app is "Single RAC new option code, as old option code
+    is full", and every RAC-class dump on record carries it while the FAC/CAC
+    ones carry only the older map with values small enough that RAC bit
+    positions read as zeros. So its presence is the closest thing available to
+    "this is the family those bit positions were documented for" -- a proxy,
+    not a proof, and used only to decide whether to read the map at all.
+    """
+    return _option_token(rep, "ExtendOptionCode") is not None
+
+
 def is_legacy_board(resources):
     """True for the board generation whose airflow lives in /airflow/vs/0
     rather than /wind/strength/vs/0 -- every AC dump on record has one shape
