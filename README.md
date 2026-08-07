@@ -142,7 +142,9 @@ The response has one `results` entry per write, with `before`/`after` reps and a
 }
 ```
 
-`verify_after` (0-60s, default 0, omit to skip) is what actually answers the "did it stick" question: after the sequence finishes, it waits that long and then re-reads every distinct href the sequence touched, reporting the result under `verified`, keyed by canonical href. `changed` tells you the write was accepted and reflected immediately; `held` tells you whether it was still there N seconds later, or whether the board quietly put it back — issue #300's exact symptom. Where an href was written more than once in a sequence, `held` compares against the *last* payload sent to it.
+`verify_after` (0-60s, default 0, omit to skip) is what actually answers the "did it stick" question: after the sequence finishes, it waits that long and then re-reads every distinct href the sequence touched, reporting the result under `verified`, keyed by canonical href. `changed` tells you the write was accepted and reflected immediately; `held` tells you whether it was still there N seconds later, or whether the board quietly put it back — issue #300's exact symptom. Where an href was written more than once in a sequence, `held` compares against the *last* payload sent to it. A `held` of `null` means the re-read itself didn't come back (check `code` next to it) — unknown, deliberately not reported as a revert.
+
+If the session drops partway through a sequence, the action raises rather than returning, and the error names how many writes completed and which — the appliance is left holding a partial sequence, so knowing where it stopped is the difference between a usable result and starting over blind.
 
 `read_resource` is the read half, and it's deliberately not just a cache lookup:
 

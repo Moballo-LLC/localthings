@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, patch
 import cbor2
 import pytest
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -343,6 +343,129 @@ async def test_write_resource_translates_href_for_indexed_subdevice(hass, coordi
     result = response["results"][0]
     assert result["href"] == "/mode/vs/0"
     assert result["actual_href"] == "/mode/vs/1"
+
+
+async def test_write_resource_normalizes_href_before_subdevice_translation(hass, coordinator):
+    """A trailing slash must not silently retarget the write at the master.
+
+    `Subdevice.to_actual` is a textual transform that rewrites only a
+    trailing '0' segment, so '/mode/vs/0/' passes through it unchanged and
+    then normalizes downstream to the master's '/mode/vs/0' -- landing on
+    the wrong cavity while still answering 2.04. Nothing in the response
+    would have given that away.
+    """
+    sub = Subdevice(kind="indexed", key="1", seed_path=("device", "1"))
+    coordinator.subdevices = [sub]
+    dev_reg = dr.async_get(hass)
+    device = dev_reg.async_get_or_create(
+        config_entry_id=coordinator._entry.entry_id,
+        identifiers=coordinator.device_info_for(sub)["identifiers"],
+    )
+    fake = _FakeSession()
+    coordinator._session = fake
+
+    response = await _call_write(
+        hass, device.id, writes=[{"href": "/mode/vs/0/", "payload": {"x": 1}}]
+    )
+
+    assert fake.post_calls[0][0] == ["mode", "vs", "1"]
+    result = response["results"][0]
+    assert result["href"] == "/mode/vs/0"
+    assert result["actual_href"] == "/mode/vs/1"
+
+
+async def test_write_resource_verified_is_keyed_by_canonical_href_for_subdevice(hass, coordinator):
+    """`verified` promises canonical keys; the coordinator reports actual
+    ones, so the translation back has to line up with what was sent."""
+    sub = Subdevice(kind="indexed", key="1", seed_path=("device", "1"))
+    coordinator.subdevices = [sub]
+    dev_reg = dr.async_get(hass)
+    device = dev_reg.async_get_or_create(
+        config_entry_id=coordinator._entry.entry_id,
+        identifiers=coordinator.device_info_for(sub)["identifiers"],
+    )
+    fake = _FakeSession()
+    fake.queue_get("/mode/vs/1", {"x": 1})
+    coordinator._session = fake
+
+    response = await _call_write(
+        hass,
+        device.id,
+        writes=[{"href": "/mode/vs/0", "payload": {"x": 1}}],
+        verify_after=1,
+    )
+
+    assert list(response["verified"]) == ["/mode/vs/0"]
+    assert response["verified"]["/mode/vs/0"]["held"] is True
+
+
+async def test_write_resource_failure_midway_names_the_writes_that_landed(
+    hass, coordinator, device_id
+):
+    """A drop partway through leaves the appliance holding a partial
+    sequence; the error has to say how far it got, or the operator can't
+    tell what state the device is in without starting over blind."""
+
+    class _DropsOnSecondWrite(_FakeSession):
+        def post(self, path_segs, payload, timeout=None):
+            if len(self.post_calls) == 1:
+                raise OSError("session dropped")
+            return super().post(path_segs, payload, timeout)
+
+    coordinator._session = _DropsOnSecondWrite()
+
+    with pytest.raises(HomeAssistantError) as excinfo:
+        await _call_write(
+            hass,
+            device_id,
+            writes=[
+                {"href": "/mode/vs/0", "payload": {"a": 1}},
+                {"href": "/temperatures/vs/0", "payload": {"b": 2}},
+                {"href": "/operational/state/vs/0", "payload": {"c": 3}},
+            ],
+        )
+
+    message = str(excinfo.value)
+    assert "1 of 3" in message
+    assert "/mode/vs/0" in message
+    # Entities still get pulled back in line with whatever did land.
+    coordinator.async_request_refresh.assert_awaited()
+
+
+async def test_write_resource_held_is_none_when_the_verify_read_fails(hass, coordinator, device_id):
+    """A re-read that doesn't come back is not evidence of a revert.
+
+    _raw_read_blocking answers a non-2.05 with an empty rep, and every
+    payload comparison against {} is False -- so without this, a 4.04 or a
+    dropped verify read is reported as `held: false`, indistinguishable
+    from the board quietly putting the old value back. That distinction is
+    the whole reason verify_after exists (issue #300).
+    """
+
+    class _FailingVerifyRead(_FakeSession):
+        def get(self, path_segs, timeout=None):
+            self.get_calls.append(list(path_segs))
+            # The write's own follow-up GET succeeds; the later verify
+            # re-read of the same href is the one that fails.
+            if len(self.get_calls) == 1:
+                return 0x45, cbor2.dumps({"x": 1})
+            return 0x84, b""
+
+    coordinator._session = _FailingVerifyRead()
+
+    response = await _call_write(
+        hass,
+        device_id,
+        writes=[{"href": "/mode/vs/0", "payload": {"x": 1}}],
+        verify_after=1,
+    )
+
+    verified = response["verified"]["/mode/vs/0"]
+    assert verified["held"] is None
+    assert verified["code"] == "4.04"
+    # The immediate readback still saw the value land -- only the delayed
+    # confirmation is unknown, and the two must not be conflated.
+    assert response["results"][0]["changed"] is True
 
 
 # ----------------------------------------------------------------------

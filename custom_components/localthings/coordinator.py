@@ -114,6 +114,22 @@ def _href_to_path_segs(href: str) -> list[str]:
     return [s for s in str(href).strip("/").split("/") if s]
 
 
+def normalize_href(href: str) -> str:
+    """A user-typed href in the one canonical spelling the rest of the debug
+    path assumes: exactly one leading slash, no trailing slash, no empty
+    segments.
+
+    Public because services.py has to normalize *before* handing an href to
+    `Subdevice.to_actual` (issue #300). That transform is purely textual --
+    an indexed subdevice rewrites only a trailing '0' segment -- so
+    '/mode/vs/0/' slips through it unchanged and then normalizes here to
+    '/mode/vs/0', silently landing the write on the master's resource
+    instead of the subdevice's while still reporting 2.04. Normalizing on
+    the way in makes the two agree.
+    """
+    return "/" + "/".join(_href_to_path_segs(href))
+
+
 def _coap_code_str(code: int) -> str:
     """Raw CoAP response code -> its 'C.DD' rendering (e.g. 0x44 -> '2.04'),
     the class/detail split RFC 7252 §12.1.2 defines. `raw_code` is kept
@@ -1280,30 +1296,55 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         results: list[dict[str, Any]] = []
         last_payload_by_href: dict[str, dict] = {}
-        async with self._session_lock:
-            for i, (path_segs, href, payload, settle) in enumerate(parsed):
-                before = self.resource(href)
-                code, after = await self.hass.async_add_executor_job(
-                    self._raw_write_blocking, path_segs, payload, href
-                )
-                last_payload_by_href[href] = payload
-                results.append(
-                    {
-                        "href": href,
-                        "code": _coap_code_str(code),
-                        "raw_code": code,
-                        "accepted": _coap_accepted(code),
-                        "before": before,
-                        "after": after,
-                        "changed": all(after.get(k) == v for k, v in payload.items()),
-                    }
-                )
-                # settle is "how long to wait before the next write" -- the
-                # last item has no next write, so it gets no wait here;
-                # verify_after (below) is the equivalent wait after the
-                # sequence as a whole.
-                if settle and i < len(parsed) - 1:
-                    await asyncio.sleep(settle)
+        try:
+            async with self._session_lock:
+                for i, (path_segs, href, payload, settle) in enumerate(parsed):
+                    before = self.resource(href)
+                    code, after = await self.hass.async_add_executor_job(
+                        self._raw_write_blocking, path_segs, payload, href
+                    )
+                    last_payload_by_href[href] = payload
+                    results.append(
+                        {
+                            "href": href,
+                            "code": _coap_code_str(code),
+                            "raw_code": code,
+                            "accepted": _coap_accepted(code),
+                            "before": before,
+                            "after": after,
+                            "changed": all(after.get(k) == v for k, v in payload.items()),
+                        }
+                    )
+                    # settle is "how long to wait before the next write" -- the
+                    # last item has no next write, so it gets no wait here;
+                    # verify_after (below) is the equivalent wait after the
+                    # sequence as a whole.
+                    #
+                    # Held across this wait, unlike verify_after's below: a
+                    # poll landing between two writes is exactly what this
+                    # sequence exists to rule out, since it blurs which write
+                    # the appliance was reacting to. Bounded by the caps above
+                    # -- 10 writes x 30s is the worst a caller can ask for.
+                    if settle and i < len(parsed) - 1:
+                        await asyncio.sleep(settle)
+        except Exception as err:
+            # A session drop partway leaves the appliance holding whatever
+            # already landed. Raising bare would throw that away, and knowing
+            # which writes got through is the difference between a usable
+            # probe result and having to start the sequence over blind.
+            done = ", ".join(r["href"] for r in results) or "none"
+            self._log.warning(
+                "raw write sequence failed after %d of %d writes (completed: %s): %s",
+                len(results),
+                len(parsed),
+                done,
+                err,
+            )
+            await self.async_request_refresh()
+            raise HomeAssistantError(
+                f"Raw write sequence failed after {len(results)} of {len(parsed)} writes "
+                f"(completed: {done}). The appliance may be holding a partial sequence."
+            ) from err
 
         response: dict[str, Any] = {"results": results}
         if verify_after > 0:
@@ -1319,12 +1360,22 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     vcode, vrep = await self.hass.async_add_executor_job(
                         self._raw_read_blocking, _href_to_path_segs(href), href
                     )
+                    # `held` is None, not False, when the re-read itself
+                    # didn't come back with a representation to compare.
+                    # _raw_read_blocking answers a non-2.05 with an empty
+                    # rep, against which every payload comparison is False --
+                    # so a 4.04 or a dropped read would otherwise be reported
+                    # as "the board reverted your write", which is the exact
+                    # distinction verify_after exists to draw.
+                    read_ok = _coap_accepted(vcode) and bool(vrep)
                     verified[href] = {
                         "code": _coap_code_str(vcode),
                         "raw_code": vcode,
                         "rep": vrep,
-                        "held": all(
-                            vrep.get(k) == v for k, v in last_payload_by_href[href].items()
+                        "held": (
+                            all(vrep.get(k) == v for k, v in last_payload_by_href[href].items())
+                            if read_ok
+                            else None
                         ),
                     }
             response["verified"] = verified
