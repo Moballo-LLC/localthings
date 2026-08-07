@@ -1402,6 +1402,15 @@ LIGHT_STATEFUL = Capability(
 # device gating -- absent on every other family's dump. Write contract
 # extrapolated from this file's other plain On/Off options-array fields
 # (AIR_PURIFY, AUTO_CLEAN); not confirmed live.
+#
+# NOT the same WindFree already modeled elsewhere: on regular AC boards,
+# WindFree is a `Comode_Nano` token inside /mode/vs/0's options[], surfaced
+# as a climate preset (climate.py's _LEGACY_PRESET_CODES/preset_mode) with
+# real coupling to hvac_mode (disabled in Heat/AIComfort/Auto, timing rules
+# on legacy boards). This device's windfree/windsleep are bare booleans on
+# their own hrefs with no such coupling evidenced -- same feature name,
+# different wire mechanism, so plain switches rather than folding into
+# climate.py's preset machinery.
 WINDFREE = Capability(
     href="/modeoption/windfree/vs/0",
     poll_tier="warm",
