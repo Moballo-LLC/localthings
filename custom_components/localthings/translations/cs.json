@@ -538,6 +538,9 @@
           "mute": "Ztlumeno"
         }
       },
+      "energy_saving_mode": {
+        "name": "Režim úspory energie"
+      },
       "air_purifier_sound_mode": {
         "name": "Zvukový režim",
         "state": {
@@ -786,6 +789,12 @@
           "direct": "Přímý",
           "indirect": "Nepřímý"
         }
+      },
+      "energy_saving_state": {
+        "name": "Stav úspory energie"
+      },
+      "energy_saving_operating_status": {
+        "name": "Provozní stav úspory energie"
       },
       "current_temp_c": {
         "name": "Teplota"
@@ -1039,6 +1048,9 @@
       },
       "absence_power_saving_active": {
         "name": "Úspora energie při nepřítomnosti aktivní"
+      },
+      "absence_clean": {
+        "name": "Čištění při nepřítomnosti"
       },
       "motion_detect_wind_active": {
         "name": "Vyhýbání se proudu vzduchu při pohybu aktivní"

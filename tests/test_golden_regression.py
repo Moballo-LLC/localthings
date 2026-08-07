@@ -6,12 +6,12 @@ import pytest
 GOLDEN = Path(__file__).parent / "fixtures" / "golden"
 
 
-def _new_state_keys(name, resources):
+def _new_state_keys(name, resources, device_types=()):
     from custom_components.localthings.registry.adapter import flatten
     from custom_components.localthings.registry.by_type import resolve
     from custom_components.localthings.registry.discovery import discover
 
-    reg = resolve(resources)
+    reg = resolve(resources, device_types=device_types)
     if reg is None:
         from custom_components.localthings.registry.registry import CAPABILITIES
 
@@ -127,6 +127,24 @@ def test_registry_reproduces_golden_state_keys_for_airconditioner():
     resources = _load_device("airconditioner")
     golden = json.loads((GOLDEN / "airconditioner.json").read_text())
     state_keys = _new_state_keys("airconditioner", resources)
+    assert set(state_keys) == set(golden["state_keys"]), (
+        f"state_keys mismatch:\n"
+        f"  extra:   {sorted(set(state_keys) - set(golden['state_keys']))}\n"
+        f"  missing: {sorted(set(golden['state_keys']) - set(state_keys))}"
+    )
+
+
+def test_registry_reproduces_golden_state_keys_for_airconditioner_ailp_fac():
+    """AILP_DA-AC-FAC-02011_0000 (issue #319) has no board-token match --
+    resolves purely via /oic/d's oic.d.airconditioner type, exercising the
+    device_types-only path through resolve()."""
+    from tests.conftest import _load_device
+
+    resources = _load_device("airconditioner_ailp_fac")
+    golden = json.loads((GOLDEN / "airconditioner_ailp_fac.json").read_text())
+    state_keys = _new_state_keys(
+        "airconditioner_ailp_fac", resources, device_types=("oic.wk.d", "oic.d.airconditioner")
+    )
     assert set(state_keys) == set(golden["state_keys"]), (
         f"state_keys mismatch:\n"
         f"  extra:   {sorted(set(state_keys) - set(golden['state_keys']))}\n"
@@ -1095,10 +1113,10 @@ def test_registry_reproduces_golden_state_keys_for_airconditioner_cac():
     0.16.0 when oneUiVersion detection was dropped, since 'CAC' had never
     been added to the modelNum board-token table. Resolved via the new 'CAC'
     token onto the existing airconditioner registry. Not fully covered yet --
-    ten hrefs remain unbound (edge lighting, PM1 filter, stateful light,
-    absence-clean, four sound-settings resources, smart-sensing-cooling, UV
-    LED), all genuinely new to this board generation and out of scope for
-    the routing fix; see test_airconditioner_cac.py for the documented gap."""
+    five hrefs remain unbound (edge lighting, stateful light, absence-clean,
+    sound-optimization, smart-sensing-cooling), all genuinely new to this
+    board generation and out of scope for the routing fix; see
+    test_airconditioner_cac.py for the documented gap."""
     from tests.conftest import _load_device
 
     resources = _load_device("airconditioner_cac")

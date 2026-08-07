@@ -538,6 +538,9 @@
           "mute": "Stil"
         }
       },
+      "energy_saving_mode": {
+        "name": "Energiebesparingsmodus"
+      },
       "air_purifier_sound_mode": {
         "name": "Geluidsmodus",
         "state": {
@@ -786,6 +789,12 @@
           "direct": "Direct",
           "indirect": "Indirect"
         }
+      },
+      "energy_saving_state": {
+        "name": "Energiebesparing status"
+      },
+      "energy_saving_operating_status": {
+        "name": "Bedrijfsstatus energiebesparing"
       },
       "current_temp_c": {
         "name": "Temperatuur"
@@ -1039,6 +1048,9 @@
       },
       "absence_power_saving_active": {
         "name": "Energiebesparing bij afwezigheid actief"
+      },
+      "absence_clean": {
+        "name": "Reiniging bij afwezigheid"
       },
       "motion_detect_wind_active": {
         "name": "Bewegingsdetectie luchtstroomvermijding actief"

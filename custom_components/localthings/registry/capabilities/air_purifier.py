@@ -441,6 +441,10 @@ SOUND_VOLUME = Capability(
             field="level",
             icon="mdi:volume-medium",
             entity_category="config",
+            # Some boards (issue #319's AC) report minLevel/resolution but no
+            # maxLevel -- native_max_fn would silently collapse to 0, giving a
+            # slider with no real range instead of no entity at all.
+            exists_fn=lambda rep, resources: "maxLevel" in rep,
             native_min_fn=lambda rep: int_or_none(rep.get("minLevel")) or 0,
             native_max_fn=lambda rep: int_or_none(rep.get("maxLevel")) or 0,
             step_fn=lambda rep: int_or_none(rep.get("resolution")) or 1,

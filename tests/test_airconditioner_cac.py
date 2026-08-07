@@ -6,12 +6,18 @@ token -- this board was the one exception (its oneUiVersion self-reports
 "7.0 Air conditioner", but 'CAC' had never been added to the board-token
 table), so it silently fell back to common caps and lost its climate entity.
 
-This dump is NOT fully covered yet -- eight hrefs remain unbound (edge
-lighting, a second stateful light resource, absence-clean, four
-`/settings/sound/*` resources, smart-sensing-cooling), all genuinely new to
-this board generation. That's a real device-support gap, left documented
-here rather than guessed at, per the 'don't guess' rule -- fixing the
-routing regression was the scope of #191.
+This dump is NOT fully covered yet -- five hrefs remain unbound (edge
+lighting, a second stateful light resource, absence-clean,
+`/settings/sound/optimization/vs/0`, smart-sensing-cooling), all genuinely
+new to this board generation. That's a real device-support gap, left
+documented here rather than guessed at, per the 'don't guess' rule --
+fixing the routing regression was the scope of #191.
+
+/settings/sound/mode/vs/0, /settings/sound/output/vs/0 and
+/settings/sound/volume/vs/0 used to be on this list too, until issue #319
+(a sibling TP1X_DA-AC-FAC-class board) supplied a live dump for them --
+airconditioner.SOUND_MODE and the reused air_purifier.SOUND_OUTPUT/
+SOUND_VOLUME now cover all three here as well.
 
 /uvled/vs/0 and /filter/airdustPM1filter/vs/0 used to be on this list too,
 until issue #270 (TP1X_FAC_TIME_23K) added real capabilities for both --
@@ -30,10 +36,7 @@ _STILL_UNBOUND = frozenset(
         "/edgelighting/vs/0",
         "/light/stateful/vs/0",
         "/mds/absenceclean/vs/0",
-        "/settings/sound/mode/vs/0",
         "/settings/sound/optimization/vs/0",
-        "/settings/sound/output/vs/0",
-        "/settings/sound/volume/vs/0",
         "/smartsensingcooling/vs/0",
     }
 )

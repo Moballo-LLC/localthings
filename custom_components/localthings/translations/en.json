@@ -538,6 +538,9 @@
           "mute": "Mute"
         }
       },
+      "energy_saving_mode": {
+        "name": "Energy saving mode"
+      },
       "air_purifier_sound_mode": {
         "name": "Sound mode",
         "state": {
@@ -786,6 +789,12 @@
           "direct": "Direct",
           "indirect": "Indirect"
         }
+      },
+      "energy_saving_state": {
+        "name": "Energy saving state"
+      },
+      "energy_saving_operating_status": {
+        "name": "Energy saving operating status"
       },
       "current_temp_c": {
         "name": "Temperature"
@@ -1039,6 +1048,9 @@
       },
       "absence_power_saving_active": {
         "name": "Absence power saving active"
+      },
+      "absence_clean": {
+        "name": "Absence clean"
       },
       "motion_detect_wind_active": {
         "name": "Motion-detect wind avoidance active"

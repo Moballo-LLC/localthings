@@ -1167,6 +1167,91 @@ HUMIDITY = Capability(
     ),
 )
 
+# TP1X_DA-AC-FAC-class additions (issue #319): resources the CAC-class board
+# (issue #191) also reports but left as a documented gap -- this dump gives
+# the live supportedModes/mode shapes those needed.
+
+# Same {mode, supportedModes: [On, Off]} shape as air_purifier.DISPLAY on the
+# sibling TP1X_DA-AC-AIR board; shares that capability rather than
+# duplicating it.
+SOUND_MODE = Capability(
+    href="/settings/sound/mode/vs/0",
+    poll_tier="cold",
+    entities=(
+        # Values seen (mute/tone/voice) are exactly laundry.SOUND_MODE's
+        # vocabulary, so this shares that catalog entry -- but reads the
+        # live supportedModes field rather than laundry's static tuple,
+        # since this resource carries one (issue #319).
+        SelectDesc(
+            key="sound_mode",
+            field="mode",
+            icon="mdi:volume-high",
+            entity_category="config",
+            options_field="supportedModes",
+            write_fn=lambda p, rep, href=None: (
+                ["settings", "sound", "mode", "vs", "0"],
+                {"mode": p},
+            ),
+        ),
+    ),
+)
+
+# Absence-detection auto air clean (issue #319) -- a plain On/Off toggle,
+# sibling feature to ABSENCE_POWER_SAVING above but on its own href.
+ABSENCE_CLEAN = Capability(
+    href="/csi/absenceclean/vs/0",
+    poll_tier="cold",
+    entities=(
+        SwitchDesc(
+            key="absence_clean",
+            field="mode",
+            icon="mdi:broom",
+            entity_category="config",
+            value_fn=lambda v: v == "On",
+            write_fn=lambda p, rep, href=None: (
+                ["csi", "absenceclean", "vs", "0"],
+                {"mode": "On" if p == "On" else "Off"},
+            ),
+        ),
+    ),
+)
+
+# Energy-saving schedule (issue #319). `mode` is a device-chosen preset
+# (e.g. Cooling_60/Off_180) with no confirmed unit for the trailing number
+# (minutes seen elsewhere on this board are unprefixed ints, not
+# underscore-suffixed) -- exposed as a select over the live options rather
+# than translating labels we can't confirm. `state`/`operatingStatus` stay
+# bare diagnostic passthroughs for the same reason.
+ENERGY_SAVING = Capability(
+    href="/csi/energysaving/vs/0",
+    poll_tier="cold",
+    entities=(
+        SelectDesc(
+            key="energy_saving_mode",
+            field="mode",
+            icon="mdi:leaf",
+            entity_category="config",
+            options_field="supportedModes",
+            write_fn=lambda p, rep, href=None: (
+                ["csi", "energysaving", "vs", "0"],
+                {"mode": p},
+            ),
+        ),
+        SensorDesc(
+            key="energy_saving_state",
+            field="state",
+            icon="mdi:leaf",
+            entity_category="diagnostic",
+        ),
+        SensorDesc(
+            key="energy_saving_operating_status",
+            field="operatingStatus",
+            icon="mdi:leaf",
+            entity_category="diagnostic",
+        ),
+    ),
+)
+
 # /sensors/vs/0 items[] carry live air-quality readings. CleanLevel is
 # corroborated as numeric by a top-level x.com.samsung.da.cleanLevel scalar,
 # so it's a measurement; the others stay string diagnostics (see
@@ -1250,6 +1335,20 @@ _AC_IGNORED = [
     # registry.subdevices.enumerate_subdevices, hence the entry here rather
     # than a coverage gap.
     "/multidevice/vs/0",
+    # TP1X_DA-AC-FAC-class-only (issue #319), same reasoning as
+    # air_purifier.COVERAGE's duplicate of these hrefs -- scoped here rather
+    # than promoted to the global ignore list since it'd collide with
+    # families that do bind some of these.
+    "/dnd/autosleep/vs/0",  # every field its inert default; needs a schedule editor
+    "/outdoorsharing/vs/0",  # empty on this dump -- outdoor-unit sharing plumbing
+    "/lifestyle/survey/vs/0",  # {list: [""]} placeholder, nothing to expose
+    # supportedVoices list only -- no live selection field to read a current
+    # value from, unlike SOUND_MODE/SOUND_OUTPUT above.
+    "/settings/sound/voice/vs/0",
+    # rssi/wifiFrequency (network housekeeping) plus an unconfirmed
+    # 48-slot absenceInfo P/A history blob with no documented meaning --
+    # don't guess what it encodes.
+    "/csi/information/vs/0",
 ]
 
 # Built as bare no-entity caps; folded into the AC registry (not global).
