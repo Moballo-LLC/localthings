@@ -231,6 +231,25 @@ def test_registry_reproduces_golden_state_keys_for_water_purifier_coffee():
     )
 
 
+def test_registry_reproduces_golden_state_keys_for_gas_cooktop_tp2x_ks():
+    """TP2X_DA-KS-COOKTOP-000001 (issue #314) -- routes via
+    for_device_by_resources' DeviceType_/OperationState signature, same as
+    the original cooktop fixture. /alarms/vs/0 and /kidslock/vs/0 were the
+    dump's only unbound hrefs; both are common.UNIVERSAL shapes this
+    registry now picks up individually (common.ALARMS,
+    common.KIDS_LOCK_VS_FALLBACK)."""
+    from tests.conftest import _load_device
+
+    resources = _load_device("gas_cooktop_tp2x_ks")
+    golden = json.loads((GOLDEN / "gas_cooktop_tp2x_ks.json").read_text())
+    state_keys = _new_state_keys("gas_cooktop_tp2x_ks", resources)
+    assert set(state_keys) == set(golden["state_keys"]), (
+        f"state_keys mismatch:\n"
+        f"  extra:   {sorted(set(state_keys) - set(golden['state_keys']))}\n"
+        f"  missing: {sorted(set(golden['state_keys']) - set(state_keys))}"
+    )
+
+
 def test_registry_reproduces_golden_state_keys_for_cooktop():
     from tests.conftest import _load_device
 
