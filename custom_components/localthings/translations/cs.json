@@ -692,6 +692,14 @@
           "high": "Vysoký",
           "low": "Nízký"
         }
+      },
+      "ventilation_mode": {
+        "name": "Režim",
+        "state": {
+          "purification": "Čištění",
+          "ventilation": "Větrání",
+          "smartventilation": "Chytré větrání"
+        }
       }
     },
     "sensor": {
@@ -1246,6 +1254,12 @@
       },
       "indicator_light": {
         "name": "Kontrolka"
+      },
+      "windfree": {
+        "name": "Režim Wind-Free"
+      },
+      "windsleep": {
+        "name": "Noční režim"
       }
     },
     "time": {

@@ -58,6 +58,16 @@ REGISTRY = DeviceRegistry(
             airconditioner.ENERGY_SAVING,
             airconditioner.EDGE_LIGHTING,
             airconditioner.LIGHT_STATEFUL,
+            # System Fresh Air Ventilator (PR #316, ACA-KR-TP2-21-AN9000):
+            # WINDFREE/WINDSLEEP are this device's own hrefs; HEPA_FILTER/
+            # DEVICE_ACTIVE reuse air_purifier.py's identical shapes.
+            # AIR_LEVEL_CHECK is not this-device-specific -- see its
+            # removal from _AC_IGNORED above.
+            airconditioner.WINDFREE,
+            airconditioner.WINDSLEEP,
+            air_purifier.HEPA_FILTER,
+            air_purifier.DEVICE_ACTIVE,
+            air_purifier.AIR_LEVEL_CHECK,
             *airconditioner.COVERAGE,
         ]
     ),

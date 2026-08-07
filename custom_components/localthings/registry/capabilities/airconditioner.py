@@ -206,6 +206,28 @@ def _mode_options(rep):
     return opts if isinstance(opts, (list, tuple)) else ()
 
 
+# Samsung's "System Fresh Air Ventilator" (PR #316, model
+# ACA-KR-TP2-21-AN9000, vid DA-AC-DIFFUSER-01001) self-reports oic.d.
+# airconditioner and routes through this same CLIMATE capability, but its
+# /mode/vs/0 supportedModes are Purification/Ventilation/SmartVentilation --
+# none of which climate.py's HVAC-mode table knows, so hvac_mode collapses
+# to a single stuck value with no way to tell the three apart. Gated to
+# devices whose *entire* supported-mode set is this vocabulary, so it can't
+# false-positive on a real AC's Cool/Heat/Dry list.
+_VENTILATION_MODE_VALUES = frozenset(("Purification", "Ventilation", "SmartVentilation"))
+
+
+def _is_ventilation_mode_device(rep, resources):
+    supported = rep.get("x.com.samsung.da.supportedModes")
+    if not isinstance(supported, (list, tuple)) or not supported:
+        return False
+    return set(supported) <= _VENTILATION_MODE_VALUES
+
+
+def _ventilation_mode_write(payload, rep, href=None):
+    return ["mode", "vs", "0"], {"x.com.samsung.da.modes": [payload]}
+
+
 def _has_display_light_option(rep, resources):
     """True when the panel light lives in /mode/vs/0's `Light_*` option
     token rather than a dedicated /light/vs/0 switch -- the two encodings
@@ -531,6 +553,17 @@ CLIMATE = Capability(
             translation_key="airconditioner",
             rep_fn=_first_mode,
             write_fn=_climate_write,
+        ),
+        # Purification/Ventilation/SmartVentilation mode select (PR #316) --
+        # _is_ventilation_mode_device gates this to devices using that
+        # vocabulary exclusively, so a real AC's climate card is unaffected.
+        SelectDesc(
+            key="ventilation_mode",
+            rep_fn=_first_mode,
+            exists_fn=_is_ventilation_mode_device,
+            options_field="x.com.samsung.da.supportedModes",
+            icon="mdi:air-filter",
+            write_fn=_ventilation_mode_write,
         ),
         # Panel light switch for boards that encode it in /mode/vs/0's options
         # instead of a dedicated /light/vs/0 (see _has_display_light_option).
@@ -1364,6 +1397,47 @@ LIGHT_STATEFUL = Capability(
     ),
 )
 
+# Wind-Free / Wind-Sleep mode toggles (PR #316, ACA-KR-TP2-21-AN9000). Each
+# on its own dedicated href, so unlike ventilation_mode above these need no
+# device gating -- absent on every other family's dump. Write contract
+# extrapolated from this file's other plain On/Off options-array fields
+# (AIR_PURIFY, AUTO_CLEAN); not confirmed live.
+WINDFREE = Capability(
+    href="/modeoption/windfree/vs/0",
+    poll_tier="warm",
+    entities=(
+        SwitchDesc(
+            key="windfree",
+            field="x.com.samsung.da.windfree",
+            icon="mdi:leaf",
+            entity_category="config",
+            value_fn=lambda v: v == "On",
+            write_fn=lambda p, rep, href=None: (
+                ["modeoption", "windfree", "vs", "0"],
+                {"x.com.samsung.da.windfree": "On" if p == "On" else "Off"},
+            ),
+        ),
+    ),
+)
+
+WINDSLEEP = Capability(
+    href="/modeoption/windsleep/vs/0",
+    poll_tier="warm",
+    entities=(
+        SwitchDesc(
+            key="windsleep",
+            field="x.com.samsung.da.windsleep",
+            icon="mdi:sleep",
+            entity_category="config",
+            value_fn=lambda v: v == "On",
+            write_fn=lambda p, rep, href=None: (
+                ["modeoption", "windsleep", "vs", "0"],
+                {"x.com.samsung.da.windsleep": "On" if p == "On" else "Off"},
+            ),
+        ),
+    ),
+)
+
 # /sensors/vs/0 items[] carry live air-quality readings. CleanLevel is
 # corroborated as numeric by a top-level x.com.samsung.da.cleanLevel scalar,
 # so it's a measurement; the others stay string diagnostics (see
@@ -1400,6 +1474,27 @@ AIR_QUALITY = Capability(
                 ("super_fine_dust", "mdi:weather-fog", "SuperFineDust"),
             )
         ),
+        # CO2 (PR #316, ACA-KR-TP2-21-AN9000) -- a type this file's other AC
+        # families don't report. Same field/shape air_monitor.SENSORS
+        # already models with device_class='carbon_dioxide'/unit='ppm', so
+        # this matches that descriptor rather than guessing fresh -- unlike
+        # the pm10/pm25/pm1 mapping air_monitor.py's own docstring
+        # deliberately rejects for the three dust-type keys above (Samsung's
+        # two-tier PM10/PM2.5 convention doesn't confirm where a third tier
+        # or PM1 fits), ppm for a field literally named CO2 isn't a guess of
+        # that kind.
+        SensorDesc(
+            key="co2",
+            field="x.com.samsung.da.items",
+            icon="mdi:molecule-co2",
+            entity_category="diagnostic",
+            device_class="carbon_dioxide",
+            state_class="measurement",
+            unit="ppm",
+            exists_fn=_has_sensor_type("CO2"),
+            enabled_default=False,
+            value_fn=lambda items: _int(_sensor_item_value(items, "CO2")),
+        ),
     ),
 )
 
@@ -1419,7 +1514,12 @@ _AC_IGNORED = [
     # state or documented write contract. /option/muteonce/vs/0 and
     # /selfcheck/vs/0 are deliberately NOT here -- see MUTE_ONCE above and
     # common.SELF_CHECK, both of which have a confirmed, modelable contract.
-    "/airlevelcheck/vs/0",  # periodic air-quality sensing scheduler plumbing
+    # /airlevelcheck/vs/0 is deliberately NOT here either (PR #316):
+    # despite this list's old description of it as "scheduler plumbing",
+    # both the CAC and TP1X_DA_AC_RAC_01011 fixtures already carry real,
+    # populated periodicSensingActivationState/autoExeState values here --
+    # the AI-Purify feature air_purifier.AIR_LEVEL_CHECK already models,
+    # reused below rather than reinvented.
     "/aisleep/vs/0",  # AI-sleep feedback state (no actionable control)
     "/availablecontrolsets/vs/0",  # opaque hex-encoded control-set bitmap
     "/da/softreset/vs/0",  # soft-reset trigger plumbing

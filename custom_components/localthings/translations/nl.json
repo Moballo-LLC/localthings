@@ -692,6 +692,14 @@
           "high": "Hoog",
           "low": "Laag"
         }
+      },
+      "ventilation_mode": {
+        "name": "Modus",
+        "state": {
+          "purification": "Zuivering",
+          "ventilation": "Ventilatie",
+          "smartventilation": "Slimme ventilatie"
+        }
       }
     },
     "sensor": {
@@ -1246,6 +1254,12 @@
       },
       "indicator_light": {
         "name": "Indicatorlampje"
+      },
+      "windfree": {
+        "name": "Wind-Free modus"
+      },
+      "windsleep": {
+        "name": "Slaapmodus"
       }
     },
     "time": {

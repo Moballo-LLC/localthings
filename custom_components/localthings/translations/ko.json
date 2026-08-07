@@ -692,6 +692,14 @@
           "high": "높음",
           "low": "낮음"
         }
+      },
+      "ventilation_mode": {
+        "name": "모드",
+        "state": {
+          "purification": "청정",
+          "ventilation": "환기",
+          "smartventilation": "스마트환기"
+        }
       }
     },
     "sensor": {
@@ -1246,6 +1254,12 @@
       },
       "indicator_light": {
         "name": "표시등"
+      },
+      "windfree": {
+        "name": "무풍 모드"
+      },
+      "windsleep": {
+        "name": "취침 모드"
       }
     },
     "time": {

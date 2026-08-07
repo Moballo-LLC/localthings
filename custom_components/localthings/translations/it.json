@@ -692,6 +692,14 @@
           "high": "Alta",
           "low": "Bassa"
         }
+      },
+      "ventilation_mode": {
+        "name": "Modalità",
+        "state": {
+          "purification": "Purificazione",
+          "ventilation": "Ventilazione",
+          "smartventilation": "Ventilazione intelligente"
+        }
       }
     },
     "sensor": {
@@ -1246,6 +1254,12 @@
       },
       "indicator_light": {
         "name": "Spia luminosa"
+      },
+      "windfree": {
+        "name": "Modalità Wind-Free"
+      },
+      "windsleep": {
+        "name": "Modalità notte"
       }
     },
     "time": {

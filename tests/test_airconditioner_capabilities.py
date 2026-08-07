@@ -221,6 +221,19 @@ def test_tp1x_climate_entity_is_bound():
     assert len(climate) == 1 and climate[0].href == "/mode/vs/0"
 
 
+def test_tp1x_airlevelcheck_binds_real_ai_purify_state():
+    """This fixture's /airlevelcheck/vs/0 has real, populated
+    periodicSensing*/autoExeState values too (PR #316's finding that
+    _AC_IGNORED's old "scheduler plumbing" description was wrong wasn't
+    specific to one board) -- air_purifier.AIR_LEVEL_CHECK now covers it."""
+    reg, resources = _ac_tp1x()
+    state = flatten(discover(resources, reg.capabilities, reg.pattern_capabilities), resources)
+    assert state["periodic_air_sensing"] is True
+    assert state["sensing_mode"] == "Alarm"
+    assert state["sensing_interval"] == 30  # 1800s
+    assert state["air_sensing_state"] == "NonProcessing"
+
+
 def test_tp2x_rac_20k_model_resolves_via_model_fallback():
     """TP2X_RAC_20K (issue #37) reports no oneUiVersion and no '_PRAC_' token
     -- resolved via the '_RAC_' modelNum fallback added for this device."""

@@ -33,6 +33,13 @@ until issue #270 (TP1X_FAC_TIME_23K) added real capabilities for both --
 this board's own live filterUsage/filterStatus data on the PM1 filter binds
 through the same exists_fn-gated entities #270's dump (which has neither
 field) leaves empty.
+
+/airlevelcheck/vs/0 was never on this unbound list (this fixture's rep
+already carried a full set of periodicSensing*/autoExeState fields), but
+until PR #316 it was globally ignored by airconditioner.py's own
+_AC_IGNORED as "scheduler plumbing" -- this fixture's own populated values
+were the proof that description was wrong. air_purifier.AIR_LEVEL_CHECK
+now covers it (see test_airlevelcheck_binds_real_ai_purify_state below).
 """
 
 from custom_components.localthings.registry.adapter import flatten
@@ -83,6 +90,21 @@ def test_mds_absenceclean_shares_csi_absenceclean_key():
     bound = discover(resources, reg.capabilities, reg.pattern_capabilities)
     state = flatten(bound, resources)
     assert state["absence_clean"] is False
+
+
+def test_airlevelcheck_binds_real_ai_purify_state():
+    """This fixture's /airlevelcheck/vs/0 has real, populated values --
+    periodic_air_sensing on, sensing_mode 'Alarm' -- confirming
+    air_purifier.AIR_LEVEL_CHECK binds real AI-Purify state here rather
+    than the inert plumbing _AC_IGNORED used to describe."""
+    resources = _resources()
+    reg = _reg(resources)
+    bound = discover(resources, reg.capabilities, reg.pattern_capabilities)
+    state = flatten(bound, resources)
+    assert state["periodic_air_sensing"] is True
+    assert state["sensing_mode"] == "Alarm"
+    assert state["sensing_interval"] == 30  # 1800s
+    assert state["air_sensing_state"] == "NonProcessing"
 
 
 def test_non_legacy_board_uses_the_generic_energy_scale():
