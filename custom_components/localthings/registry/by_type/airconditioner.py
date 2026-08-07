@@ -55,6 +55,8 @@ REGISTRY = DeviceRegistry(
             airconditioner.SOUND_MODE,
             airconditioner.ABSENCE_CLEAN,
             airconditioner.ENERGY_SAVING,
+            airconditioner.EDGE_LIGHTING,
+            airconditioner.LIGHT_STATEFUL,
             *airconditioner.COVERAGE,
         ]
     ),

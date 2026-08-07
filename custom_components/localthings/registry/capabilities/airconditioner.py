@@ -1252,6 +1252,86 @@ ENERGY_SAVING = Capability(
     ),
 )
 
+# TP1X_DA-AC-CAC-01001-class additions (issue #288, six System A/C cassette
+# units on the same board test_airconditioner_cac.py's coverage-gap test
+# documents). `convenientMode`/`operatingOption` stay unexposed -- present
+# on every dump seen but no evidence of what either actually controls.
+EDGE_LIGHTING = Capability(
+    href="/edgelighting/vs/0",
+    poll_tier="cold",
+    entities=(
+        SwitchDesc(
+            key="edge_lighting",
+            field="status",
+            icon="mdi:led-strip",
+            entity_category="config",
+            value_fn=lambda v: v == "On",
+            write_fn=lambda p, rep, href=None: (
+                ["edgelighting", "vs", "0"],
+                {"status": "On" if p == "On" else "Off"},
+            ),
+        ),
+        SelectDesc(
+            key="edge_lighting_mode",
+            field="mode",
+            icon="mdi:led-strip-variant",
+            entity_category="config",
+            options_field="modeSupportedList",
+            write_fn=lambda p, rep, href=None: (
+                ["edgelighting", "vs", "0"],
+                {"mode": p},
+            ),
+        ),
+        # Color temperature in Kelvin (3000K/4000K/6500K), not a hue -- a
+        # select over the live-reported codes rather than a light color_temp
+        # entity, consistent with this project's other Kelvin-coded selects.
+        SelectDesc(
+            key="edge_lighting_color",
+            field="colorOption",
+            icon="mdi:palette",
+            entity_category="config",
+            options_field="colorSupportedList",
+            write_fn=lambda p, rep, href=None: (
+                ["edgelighting", "vs", "0"],
+                {"colorOption": p},
+            ),
+        ),
+    ),
+)
+
+# Second, distinct light resource on this board generation -- an
+# always-on-style indicator light with its own status/mode, not to be
+# confused with EDGE_LIGHTING (a different href/rep entirely) or
+# DISPLAY_LIGHT (/light/vs/0's ambient mood light).
+LIGHT_STATEFUL = Capability(
+    href="/light/stateful/vs/0",
+    poll_tier="cold",
+    entities=(
+        SwitchDesc(
+            key="indicator_light",
+            field="status",
+            icon="mdi:led-on",
+            entity_category="config",
+            value_fn=lambda v: v == "On",
+            write_fn=lambda p, rep, href=None: (
+                ["light", "stateful", "vs", "0"],
+                {"status": "On" if p == "On" else "Off"},
+            ),
+        ),
+        SelectDesc(
+            key="indicator_light_mode",
+            field="mode",
+            icon="mdi:led-variant-on",
+            entity_category="config",
+            options_field="supportedModes",
+            write_fn=lambda p, rep, href=None: (
+                ["light", "stateful", "vs", "0"],
+                {"mode": p},
+            ),
+        ),
+    ),
+)
+
 # /sensors/vs/0 items[] carry live air-quality readings. CleanLevel is
 # corroborated as numeric by a top-level x.com.samsung.da.cleanLevel scalar,
 # so it's a measurement; the others stay string diagnostics (see

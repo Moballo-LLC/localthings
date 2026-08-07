@@ -668,6 +668,15 @@
       },
       "freezer_temperature_setpoint": {
         "name": "Teplota mrazicí zóny"
+      },
+      "edge_lighting_mode": {
+        "name": "Režim okrajového osvětlení"
+      },
+      "edge_lighting_color": {
+        "name": "Barva okrajového osvětlení"
+      },
+      "indicator_light_mode": {
+        "name": "Režim kontrolky"
       }
     },
     "sensor": {
@@ -1216,6 +1225,12 @@
       },
       "ventilation_alarm": {
         "name": "Alarm větrání"
+      },
+      "edge_lighting": {
+        "name": "Okrajové osvětlení"
+      },
+      "indicator_light": {
+        "name": "Kontrolka"
       }
     },
     "time": {

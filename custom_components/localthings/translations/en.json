@@ -668,6 +668,15 @@
       },
       "freezer_temperature_setpoint": {
         "name": "Freezer temperature"
+      },
+      "edge_lighting_mode": {
+        "name": "Edge lighting mode"
+      },
+      "edge_lighting_color": {
+        "name": "Edge lighting color"
+      },
+      "indicator_light_mode": {
+        "name": "Indicator light mode"
       }
     },
     "sensor": {
@@ -1216,6 +1225,12 @@
       },
       "ventilation_alarm": {
         "name": "Ventilation alarm"
+      },
+      "edge_lighting": {
+        "name": "Edge lighting"
+      },
+      "indicator_light": {
+        "name": "Indicator light"
       }
     },
     "time": {

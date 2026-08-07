@@ -1173,10 +1173,10 @@ def test_registry_reproduces_golden_state_keys_for_airconditioner_cac():
     0.16.0 when oneUiVersion detection was dropped, since 'CAC' had never
     been added to the modelNum board-token table. Resolved via the new 'CAC'
     token onto the existing airconditioner registry. Not fully covered yet --
-    five hrefs remain unbound (edge lighting, stateful light, absence-clean,
-    sound-optimization, smart-sensing-cooling), all genuinely new to this
-    board generation and out of scope for the routing fix; see
-    test_airconditioner_cac.py for the documented gap."""
+    three hrefs remain unbound (absence-clean, sound-optimization,
+    smart-sensing-cooling), all genuinely new to this board generation and
+    out of scope for the routing fix; see test_airconditioner_cac.py for
+    the documented gap."""
     from tests.conftest import _load_device
 
     resources = _load_device("airconditioner_cac")

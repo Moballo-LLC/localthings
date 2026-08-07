@@ -793,6 +793,15 @@
       },
       "freezer_temperature_setpoint": {
         "name": "Temperatura del congelador"
+      },
+      "edge_lighting_mode": {
+        "name": "Modo de iluminación perimetral"
+      },
+      "edge_lighting_color": {
+        "name": "Color de iluminación perimetral"
+      },
+      "indicator_light_mode": {
+        "name": "Modo de luz indicadora"
       }
     },
     "sensor": {
@@ -1341,6 +1350,12 @@
       },
       "ventilation_alarm": {
         "name": "Alarma de ventilación"
+      },
+      "edge_lighting": {
+        "name": "Iluminación perimetral"
+      },
+      "indicator_light": {
+        "name": "Luz indicadora"
       }
     },
     "time": {

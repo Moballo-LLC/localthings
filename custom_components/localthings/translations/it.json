@@ -668,6 +668,15 @@
       },
       "freezer_temperature_setpoint": {
         "name": "Temperatura freezer"
+      },
+      "edge_lighting_mode": {
+        "name": "Modalità illuminazione perimetrale"
+      },
+      "edge_lighting_color": {
+        "name": "Colore illuminazione perimetrale"
+      },
+      "indicator_light_mode": {
+        "name": "Modalità spia luminosa"
       }
     },
     "sensor": {
@@ -1216,6 +1225,12 @@
       },
       "ventilation_alarm": {
         "name": "Allarme ventilazione"
+      },
+      "edge_lighting": {
+        "name": "Illuminazione perimetrale"
+      },
+      "indicator_light": {
+        "name": "Spia luminosa"
       }
     },
     "time": {

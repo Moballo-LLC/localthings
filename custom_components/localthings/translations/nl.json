@@ -668,6 +668,15 @@
       },
       "freezer_temperature_setpoint": {
         "name": "Temperatuur vriesgedeelte"
+      },
+      "edge_lighting_mode": {
+        "name": "Randverlichtingsmodus"
+      },
+      "edge_lighting_color": {
+        "name": "Randverlichtingskleur"
+      },
+      "indicator_light_mode": {
+        "name": "Indicatorlampjemodus"
       }
     },
     "sensor": {
@@ -1216,6 +1225,12 @@
       },
       "ventilation_alarm": {
         "name": "Ventilatiealarm"
+      },
+      "edge_lighting": {
+        "name": "Randverlichting"
+      },
+      "indicator_light": {
+        "name": "Indicatorlampje"
       }
     },
     "time": {
