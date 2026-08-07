@@ -1252,14 +1252,24 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
 
     async def async_raw_write_sequence(
-        self, writes: list[dict], *, verify_after: float = 0.0
+        self,
+        writes: list[dict],
+        *,
+        verify_after: float = 0.0,
+        hold_session_lock: bool = True,
     ) -> dict[str, Any]:
         """Debug-only ordered multi-write (issue #300): a Samsung wall oven
         board discards settings writes while idle and only keeps them once
         a cycle is already running, which no single-write debug pass can
-        probe for. This owns the whole sequence -- every write shares one
-        `_session_lock` hold, so a poll can never interleave mid-sequence
-        and blur which write is responsible for what the device does next.
+        probe for.
+
+        `hold_session_lock` (default) keeps `_session_lock` for the whole
+        sequence, settle waits included, so nothing interleaves between
+        steps and blurs which write the appliance reacted to -- at the cost
+        of blocking polls and entity writes for the sequence's full length
+        (up to 10 x 30s). Pass False to take the lock per write and release
+        it across the waits, for a long sequence where a stalled poll costs
+        more than an interleaved read.
 
         `writes` are already on-the-wire hrefs: subdevice translation
         (canonical -> actual) is services.py's job, not this method's --
@@ -1288,13 +1298,20 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         results: list[dict[str, Any]] = []
         last_payload_by_href: dict[str, dict] = {}
+        # Exactly one of these is the real lock, never both -- asyncio.Lock
+        # isn't reentrant, so nesting the same one would deadlock.
+        outer_lock = self._session_lock if hold_session_lock else contextlib.nullcontext()
         try:
-            async with self._session_lock:
+            async with outer_lock:
                 for i, (path_segs, href, payload, settle) in enumerate(parsed):
-                    before = self.resource(href)
-                    code, after = await self.hass.async_add_executor_job(
-                        self._raw_write_blocking, path_segs, payload, href
+                    per_write_lock = (
+                        contextlib.nullcontext() if hold_session_lock else self._session_lock
                     )
+                    async with per_write_lock:
+                        before = self.resource(href)
+                        code, after = await self.hass.async_add_executor_job(
+                            self._raw_write_blocking, path_segs, payload, href
+                        )
                     last_payload_by_href[href] = payload
                     results.append(
                         {
@@ -1307,10 +1324,9 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             "changed": all(after.get(k) == v for k, v in payload.items()),
                         }
                     )
-                    # The lock is deliberately held across this wait, unlike
-                    # verify_after's below: a poll landing between two writes
-                    # blurs which one the appliance reacted to, which is what
-                    # the sequence exists to rule out. The caps bound it.
+                    # Under the default this wait happens inside the lock, so
+                    # nothing lands between two writes to blur which one the
+                    # appliance reacted to; see hold_session_lock above.
                     if settle and i < len(parsed) - 1:
                         await asyncio.sleep(settle)
         except Exception as err:

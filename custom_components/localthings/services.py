@@ -31,6 +31,7 @@ ATTR_PAYLOAD = "payload"
 ATTR_SETTLE = "settle"
 ATTR_WRITES = "writes"
 ATTR_VERIFY_AFTER = "verify_after"
+ATTR_HOLD_SESSION_LOCK = "hold_session_lock"
 ATTR_DEVICE_ID = "device_id"
 
 _WRITE_ITEM_SCHEMA = vol.Schema(
@@ -58,6 +59,7 @@ _WRITE_RESOURCE_SCHEMA = vol.Schema(
         **cv.TARGET_SERVICE_FIELDS,
         vol.Required(ATTR_WRITES): vol.All(cv.ensure_list, [_WRITE_ITEM_SCHEMA]),
         vol.Optional(ATTR_VERIFY_AFTER): vol.Coerce(float),
+        vol.Optional(ATTR_HOLD_SESSION_LOCK): cv.boolean,
     }
 )
 
@@ -129,7 +131,9 @@ async def _async_write_resource(hass: HomeAssistant, call: ServiceCall) -> Servi
         for canonical, w in zip(canonicals, writes_in, strict=True)
     ]
     sequence = await coordinator.async_raw_write_sequence(
-        raw_writes, verify_after=call.data.get(ATTR_VERIFY_AFTER, 0.0)
+        raw_writes,
+        verify_after=call.data.get(ATTR_VERIFY_AFTER, 0.0),
+        hold_session_lock=call.data.get(ATTR_HOLD_SESSION_LOCK, True),
     )
 
     results = [

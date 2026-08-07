@@ -32,6 +32,19 @@ write_resource:
         ["Bake"]}, "settle": 3}]
       selector:
         object:
+    hold_session_lock:
+      name: Hold the session for the whole sequence
+      description: >-
+        Keep the device session for the entire sequence, settle delays
+        included, so nothing else -- a routine poll, another entity's write
+        -- can land between two steps and blur which write the appliance
+        was reacting to. On by default. Turning it off takes the session
+        per write and frees it across the waits, which lets entities keep
+        updating during a long sequence at the cost of that certainty.
+      required: false
+      default: true
+      selector:
+        boolean:
     verify_after:
       name: Verify after
       description: >-

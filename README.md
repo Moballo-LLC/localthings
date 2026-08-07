@@ -123,7 +123,9 @@ data:
 
 Mind the shapes: what you write is sent verbatim, so the field names and types have to be the ones that resource actually uses. `/mode/vs/0` takes `modes` as an *array* on this board; a bare string, or the singular `mode`, is a different field the device will simply ignore. `read_resource` (below) with no `href` is the quickest way to see the real shape of everything before you write to any of it.
 
-Each write in `writes` (1-10 of them) needs `href` and a non-empty `payload`, sent verbatim as a partial-rep POST — this bypasses the remote-control-off block and every `write_fn`/`validate_fn` a normal entity write goes through, and sends exactly the fields you give it, so it can misconfigure your appliance if you get it wrong. `settle` (0-30s, default 0) is how long to wait *after* that write before starting the next one. The whole sequence runs under a single lock, so a routine poll can't land in the middle of it and blur which write is responsible for what the device does next.
+Each write in `writes` (1-10 of them) needs `href` and a non-empty `payload`, sent verbatim as a partial-rep POST — this bypasses the remote-control-off block and every `write_fn`/`validate_fn` a normal entity write goes through, and sends exactly the fields you give it, so it can misconfigure your appliance if you get it wrong. `settle` (0-30s, default 0) is how long to wait *after* that write before starting the next one.
+
+By default the whole sequence holds the device session from the first write to the last, settle delays included, so a routine poll or another entity's write can't land between two steps and blur which write the appliance was reacting to. The cost is that nothing else on that device updates until the sequence ends — up to 10 × 30s if you ask for the maximum of both. Set `hold_session_lock: false` to take the session per write and release it across the waits instead, trading that certainty for a device whose entities keep updating throughout.
 
 The response has one `results` entry per write, with `before`/`after` reps and a `changed` flag (every key/value in `payload` present and equal in the immediate readback):
 

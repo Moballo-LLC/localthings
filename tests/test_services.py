@@ -188,6 +188,61 @@ async def test_write_resource_settle_honored_between_writes(hass, coordinator, d
     assert [call.args[0] for call in mock_sleep.call_args_list] == [2.0, 5.0]
 
 
+async def test_write_resource_holds_the_session_across_settle_by_default(
+    hass, coordinator, device_id
+):
+    """The default keeps the session for the whole sequence so nothing lands
+    between two writes -- asserted on the lock's real state during the wait,
+    not merely on the flag being accepted."""
+    coordinator._session = _FakeSession()
+    locked_during_settle = []
+
+    async def _record(_delay):
+        locked_during_settle.append(coordinator._session_lock.locked())
+
+    with patch(_SLEEP_TARGET, new=_record):
+        await _call_write(
+            hass,
+            device_id,
+            writes=[
+                {"href": "/a/vs/0", "payload": {"x": 1}, "settle": 2},
+                {"href": "/b/vs/0", "payload": {"x": 2}},
+            ],
+        )
+
+    assert locked_during_settle == [True]
+    # ...and it's handed back afterward, rather than leaked to the next call.
+    assert not coordinator._session_lock.locked()
+
+
+async def test_write_resource_releases_the_session_across_settle_when_asked(
+    hass, coordinator, device_id
+):
+    """hold_session_lock=False frees the session across the waits, so polls
+    and entity writes keep working through a long sequence."""
+    coordinator._session = _FakeSession()
+    locked_during_settle = []
+
+    async def _record(_delay):
+        locked_during_settle.append(coordinator._session_lock.locked())
+
+    with patch(_SLEEP_TARGET, new=_record):
+        response = await _call_write(
+            hass,
+            device_id,
+            writes=[
+                {"href": "/a/vs/0", "payload": {"x": 1}, "settle": 2},
+                {"href": "/b/vs/0", "payload": {"x": 2}},
+            ],
+            hold_session_lock=False,
+        )
+
+    assert locked_during_settle == [False]
+    assert not coordinator._session_lock.locked()
+    # Both writes still go out, in order -- only the locking differs.
+    assert [r["href"] for r in response["results"]] == ["/a/vs/0", "/b/vs/0"]
+
+
 async def test_write_resource_changed_true_when_readback_matches_payload(
     hass, coordinator, device_id
 ):
