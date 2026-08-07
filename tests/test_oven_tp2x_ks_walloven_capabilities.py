@@ -20,6 +20,7 @@ _DEVICE_TYPES = ("oic.wk.d", "oic.d.oven")
 def _bound():
     resources = _load_device("oven_tp2x_ks_walloven")
     reg = resolve(resources, device_types=_DEVICE_TYPES)
+    assert reg is not None
     return discover(resources, reg.capabilities, reg.pattern_capabilities), resources
 
 
@@ -31,6 +32,7 @@ def test_oic_device_type_resolves_to_oven_registry():
 def test_no_unbound_hrefs():
     resources = _load_device("oven_tp2x_ks_walloven")
     reg = resolve(resources, device_types=_DEVICE_TYPES)
+    assert reg is not None
     unbound = []
     discover(resources, reg.capabilities, reg.pattern_capabilities, log=unbound.append)
     assert unbound == []

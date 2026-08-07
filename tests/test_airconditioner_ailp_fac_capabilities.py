@@ -44,6 +44,7 @@ def _resources():
 def _bound():
     resources = _resources()
     reg = resolve(resources, device_types=_DEVICE_TYPES)
+    assert reg is not None
     return discover(resources, reg.capabilities, reg.pattern_capabilities), resources
 
 
@@ -68,6 +69,7 @@ def test_board_token_resolves_to_airconditioner_registry():
 def test_no_unbound_hrefs():
     resources = _resources()
     reg = resolve(resources, device_types=_DEVICE_TYPES)
+    assert reg is not None
     unbound = []
     discover(resources, reg.capabilities, reg.pattern_capabilities, log=unbound.append)
     assert unbound == []

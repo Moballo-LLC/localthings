@@ -19,6 +19,7 @@ from tests.conftest import _load_device
 def _bound():
     resources = _load_device("gas_cooktop_tp2x_ks")
     reg = resolve(resources)
+    assert reg is not None
     return discover(resources, reg.capabilities, reg.pattern_capabilities), resources
 
 
@@ -31,6 +32,7 @@ def test_resolves_to_gas_cooktop_registry():
 def test_no_unbound_hrefs():
     _, resources = _bound()
     reg = resolve(resources)
+    assert reg is not None
     unbound = []
     discover(resources, reg.capabilities, reg.pattern_capabilities, log=unbound.append)
     assert unbound == []

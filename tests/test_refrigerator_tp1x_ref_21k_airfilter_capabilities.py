@@ -15,6 +15,7 @@ from tests.conftest import _load_device
 def _bound():
     resources = _load_device("refrigerator_tp1x_ref_21k_airfilter")
     reg = resolve(resources)
+    assert reg is not None
     return discover(resources, reg.capabilities, reg.pattern_capabilities), resources
 
 
@@ -22,6 +23,7 @@ def test_no_unbound_hrefs():
     _, resources = _bound()
     unbound = []
     reg = resolve(resources)
+    assert reg is not None
     discover(resources, reg.capabilities, reg.pattern_capabilities, log=unbound.append)
     assert unbound == []
 
