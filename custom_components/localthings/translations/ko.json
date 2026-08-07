@@ -1417,6 +1417,24 @@
     },
     "command_failed": {
       "message": "재연결 후에도 {href} 명령이 실패했습니다: {error}"
+    },
+    "debug_too_many_writes": {
+      "message": "1~10개의 쓰기를 지정하세요."
+    },
+    "debug_settle_out_of_range": {
+      "message": "settle 값은 0에서 30초 사이여야 합니다."
+    },
+    "debug_verify_after_out_of_range": {
+      "message": "verify_after 값은 0에서 60초 사이여야 합니다."
+    },
+    "service_device_target_invalid": {
+      "message": "이 서비스는 정확히 하나의 대상 기기가 필요합니다."
+    },
+    "service_device_not_found": {
+      "message": "해당 대상에 일치하는 기기를 찾을 수 없습니다."
+    },
+    "service_device_not_loaded": {
+      "message": "이 기기는 아직 연결되지 않았습니다. 로드된 후 다시 시도하세요."
     }
   }
 }

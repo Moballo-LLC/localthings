@@ -1417,6 +1417,24 @@
     },
     "command_failed": {
       "message": "Het commando naar {href} is ook na opnieuw verbinden mislukt: {error}"
+    },
+    "debug_too_many_writes": {
+      "message": "Geef tussen de 1 en 10 schrijfacties op."
+    },
+    "debug_settle_out_of_range": {
+      "message": "settle moet tussen 0 en 30 seconden liggen."
+    },
+    "debug_verify_after_out_of_range": {
+      "message": "verify_after moet tussen 0 en 60 seconden liggen."
+    },
+    "service_device_target_invalid": {
+      "message": "Deze service vereist precies één doelapparaat."
+    },
+    "service_device_not_found": {
+      "message": "Er is geen bijpassend apparaat gevonden voor dat doel."
+    },
+    "service_device_not_loaded": {
+      "message": "Dit apparaat is nog niet verbonden. Probeer het opnieuw zodra het is geladen."
     }
   }
 }

@@ -20,6 +20,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.core import callback
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
@@ -55,6 +56,7 @@ from .const import (
     PROBE_GET_TIMEOUT_S,
     PROBE_MAX_WORKERS,
     PROBE_PORT_RANGE,
+    SERVICE_WRITE_RESOURCE,
 )
 
 _TEXT = TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT))
@@ -925,8 +927,33 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
                 return self._show_debug_edit_form(
                     href, current, {"payload": "empty_payload"}, payload
                 )
+            # Goes through the write_resource service (issue #300), not
+            # coord.async_raw_write directly, so there is exactly one code
+            # path that performs a raw write. MAIN's own device -- the
+            # panel's href dropdown already lists actual hrefs off
+            # coord.last_resources, and MAIN.to_actual is identity, so
+            # this preserves the panel's existing behavior byte for byte.
+            dev = dr.async_get(self.hass).async_get_device(
+                identifiers=coord.device_info["identifiers"]
+            )
+            if dev is None:
+                return self.async_abort(reason="not_loaded")
             try:
-                code, new_rep = await coord.async_raw_write(href, payload)
+                response = await self.hass.services.async_call(
+                    DOMAIN,
+                    SERVICE_WRITE_RESOURCE,
+                    {"writes": [{"href": href, "payload": payload}]},
+                    target={"device_id": dev.id},
+                    blocking=True,
+                    return_response=True,
+                )
+                results = (response or {}).get("results")
+                first = results[0] if isinstance(results, list) and results else None
+                raw_code = first.get("raw_code") if isinstance(first, dict) else None
+                after = first.get("after") if isinstance(first, dict) else None
+                if not isinstance(raw_code, int) or not isinstance(after, dict):
+                    raise RuntimeError("write_resource service returned an unexpected shape")
+                code, new_rep = raw_code, after
             except Exception:
                 _LOGGER.exception("debug raw write failed for %s", href)
                 return self._show_debug_edit_form(href, current, {"base": "write_failed"}, payload)

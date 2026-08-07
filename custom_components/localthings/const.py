@@ -96,3 +96,9 @@ SUMMARY_INTERVAL_S = 30.0
 DEVICE_SUPPORT_ISSUE_URL = (
     "https://github.com/mbillow/localthings/issues/new?template=device-support.yml"
 )
+
+# Service names (services.py), shared with config_flow.py so the
+# options-flow debug panel calls the exact same service a user could call
+# from an automation (issue #300) -- one code path performs a raw write.
+SERVICE_WRITE_RESOURCE = "write_resource"
+SERVICE_READ_RESOURCE = "read_resource"
