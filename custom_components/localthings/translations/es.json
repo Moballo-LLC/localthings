@@ -122,6 +122,24 @@
     },
     "command_failed": {
       "message": "El comando para {href} falló incluso después de reconectar: {error}"
+    },
+    "debug_too_many_writes": {
+      "message": "Proporciona entre 1 y 10 escrituras."
+    },
+    "debug_settle_out_of_range": {
+      "message": "settle debe estar entre 0 y 30 segundos."
+    },
+    "debug_verify_after_out_of_range": {
+      "message": "verify_after debe estar entre 0 y 60 segundos."
+    },
+    "service_device_target_invalid": {
+      "message": "Este servicio requiere exactamente un dispositivo de destino."
+    },
+    "service_device_not_found": {
+      "message": "No se encontró ningún dispositivo coincidente para ese destino."
+    },
+    "service_device_not_loaded": {
+      "message": "Este dispositivo aún no está conectado. Vuelve a intentarlo cuando se haya cargado."
     }
   },
   "entity": {

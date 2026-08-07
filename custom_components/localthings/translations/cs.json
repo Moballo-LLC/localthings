@@ -1417,6 +1417,24 @@
     },
     "command_failed": {
       "message": "Příkaz pro {href} selhal i po opětovném připojení: {error}"
+    },
+    "debug_too_many_writes": {
+      "message": "Zadejte 1 až 10 zápisů."
+    },
+    "debug_settle_out_of_range": {
+      "message": "Hodnota settle musí být mezi 0 a 30 sekundami."
+    },
+    "debug_verify_after_out_of_range": {
+      "message": "Hodnota verify_after musí být mezi 0 a 60 sekundami."
+    },
+    "service_device_target_invalid": {
+      "message": "Tato služba vyžaduje přesně jedno cílové zařízení."
+    },
+    "service_device_not_found": {
+      "message": "Pro tento cíl nebylo nalezeno žádné odpovídající zařízení."
+    },
+    "service_device_not_loaded": {
+      "message": "Toto zařízení ještě není připojeno. Zkuste to znovu, až se načte."
     }
   }
 }

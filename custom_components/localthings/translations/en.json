@@ -1417,6 +1417,24 @@
     },
     "command_failed": {
       "message": "The command to {href} failed even after reconnecting: {error}"
+    },
+    "debug_too_many_writes": {
+      "message": "Provide between 1 and 10 writes."
+    },
+    "debug_settle_out_of_range": {
+      "message": "settle must be between 0 and 30 seconds."
+    },
+    "debug_verify_after_out_of_range": {
+      "message": "verify_after must be between 0 and 60 seconds."
+    },
+    "service_device_target_invalid": {
+      "message": "This service requires exactly one target device."
+    },
+    "service_device_not_found": {
+      "message": "No matching device was found for that target."
+    },
+    "service_device_not_loaded": {
+      "message": "This device isn't connected yet. Try again once it has loaded."
     }
   }
 }

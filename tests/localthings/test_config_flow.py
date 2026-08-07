@@ -1036,9 +1036,10 @@ async def test_options_flow_debug_edit_writes_and_shows_result(
     hass: HomeAssistant,
     mock_coordinator_session,
 ) -> None:
-    """Picking an href, then submitting a payload, drives
-    coordinator.async_raw_write and lands on the result menu with the
-    device's response."""
+    """Picking an href, then submitting a payload, calls the write_resource
+    service (issue #300) -- which drives
+    coordinator.async_raw_write_sequence -- and lands on the result menu
+    with the device's response."""
     entry = MockConfigEntry(domain=DOMAIN, data=ENTRY_DATA, unique_id=f"localthings_{MOCK_SERIAL}")
     entry.add_to_hass(hass)
     await hass.config_entries.async_setup(entry.entry_id)
@@ -1056,8 +1057,20 @@ async def test_options_flow_debug_edit_writes_and_shows_result(
     assert result["step_id"] == "debug_edit"
 
     with patch(
-        "custom_components.localthings.coordinator.LocalThingsCoordinator.async_raw_write",
-        return_value=(0x44, {"a": 1}),
+        "custom_components.localthings.coordinator.LocalThingsCoordinator.async_raw_write_sequence",
+        return_value={
+            "results": [
+                {
+                    "href": "/washer/vs/0",
+                    "code": "2.04",
+                    "raw_code": 0x44,
+                    "accepted": True,
+                    "before": {},
+                    "after": {"a": 1},
+                    "changed": True,
+                }
+            ]
+        },
     ):
         result = await hass.config_entries.options.async_configure(
             result["flow_id"],
@@ -1123,8 +1136,20 @@ async def test_options_flow_finish_preserves_existing_options(
         user_input={"href": "/washer/vs/0"},
     )
     with patch(
-        "custom_components.localthings.coordinator.LocalThingsCoordinator.async_raw_write",
-        return_value=(0x44, {"a": 1}),
+        "custom_components.localthings.coordinator.LocalThingsCoordinator.async_raw_write_sequence",
+        return_value={
+            "results": [
+                {
+                    "href": "/washer/vs/0",
+                    "code": "2.04",
+                    "raw_code": 0x44,
+                    "accepted": True,
+                    "before": {},
+                    "after": {"a": 1},
+                    "changed": True,
+                }
+            ]
+        },
     ):
         result = await hass.config_entries.options.async_configure(
             result["flow_id"],

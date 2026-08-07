@@ -100,6 +100,60 @@ def _local_source_port(host: str) -> int:
     return DTLS_LOCAL_PORT_BASE + offset
 
 
+# Debug raw write/read caps (issue #300) -- generous enough for a real
+# probing session (the wall-oven reporter's own sequences run well under
+# 10 steps) while bounding how long one service call can hold up polling.
+_DEBUG_MAX_WRITES = 10
+_DEBUG_MAX_SETTLE_S = 30.0
+_DEBUG_MAX_VERIFY_AFTER_S = 60.0
+
+
+def _href_to_path_segs(href: str) -> list[str]:
+    """'/mode/vs/0' -> ['mode', 'vs', '0'], the shape `sess.get`/`sess.post`
+    take. Shared by every raw debug read/write path."""
+    return [s for s in str(href).strip("/").split("/") if s]
+
+
+def _coap_code_str(code: int) -> str:
+    """Raw CoAP response code -> its 'C.DD' rendering (e.g. 0x44 -> '2.04'),
+    the class/detail split RFC 7252 §12.1.2 defines. `raw_code` is kept
+    alongside it in every debug response so a caller can format it
+    differently."""
+    return f"{code >> 5}.{code & 0x1F:02d}"
+
+
+def _coap_accepted(code: int) -> bool:
+    """True for a 2.xx class CoAP response."""
+    return (code >> 5) == 2
+
+
+def _validate_debug_write_item(item: dict) -> tuple[list[str], str, dict, float]:
+    """The checks `async_raw_write` has always applied to a single write
+    (issue #54), reused per-item by `async_raw_write_sequence` (issue
+    #300). Payload is checked before href, matching the original
+    single-write order -- not load-bearing for any test, just avoiding a
+    silent behavior change in the refactor."""
+    payload = item.get("payload")
+    if not isinstance(payload, dict) or not payload:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="debug_payload_empty",
+        )
+    path_segs = _href_to_path_segs(item.get("href", ""))
+    if not path_segs:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="resource_href_required",
+        )
+    settle = item.get("settle") or 0.0
+    if not 0 <= settle <= _DEBUG_MAX_SETTLE_S:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="debug_settle_out_of_range",
+        )
+    return path_segs, "/" + "/".join(path_segs), payload, settle
+
+
 class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Manages one Samsung appliance: session, discovery, polling."""
 
@@ -1119,10 +1173,12 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         await self.async_request_refresh()
 
     # ------------------------------------------------------------------
-    # Debug raw write (issue #54): a power-user escape hatch for the
-    # options-flow debug panel to POST an arbitrary partial body without a
-    # new release. Deliberately bypasses the remote-control block and all
-    # write_fn/validate_fn above -- use with care.
+    # Debug raw write/read (issue #54, extended for issue #300): a
+    # power-user escape hatch shared by the options-flow debug panel and
+    # the write_resource/read_resource services (services.py) for probing
+    # a device's write contract directly. Deliberately bypasses the
+    # remote-control block and all write_fn/validate_fn above -- use with
+    # care.
     # ------------------------------------------------------------------
 
     def _raw_write_blocking(self, path_segs: list[str], body: dict, href: str) -> tuple[int, dict]:
@@ -1148,17 +1204,34 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._log.debug("raw write follow-up read failed: %s", e)
         return code, new_rep
 
-    async def async_raw_write(self, href: str, body: dict) -> tuple[int, dict]:
-        """Debug-only arbitrary write (issue #54). Bypasses remote-control
-        and write_fn/validate_fn; sends `body` verbatim as a partial-rep
-        PATCH to `href`. Returns (coap_code, new_rep) read back right
-        after."""
-        if not isinstance(body, dict) or not body:
-            raise ServiceValidationError(
-                translation_domain=DOMAIN,
-                translation_key="debug_payload_empty",
-            )
-        path_segs = [s for s in href.strip("/").split("/") if s]
+    def _raw_read_blocking(self, path_segs: list[str], href: str) -> tuple[int, dict]:
+        """Debug primitive: a live GET, deliberately bypassing the cache
+        (issue #300) -- the cache can be up to a poll interval stale,
+        exactly the staleness that makes testing whether a write held or
+        got silently reverted by the board unreliable. Blocking -- runs in
+        executor."""
+        if self._session is None:
+            self._connect_session()
+        sess = self._session
+        if sess is None:
+            raise RuntimeError("no session")
+        code, payload = sess.get(path_segs, timeout=10.0)
+        rep: dict = {}
+        if code == 0x45 and payload:
+            try:
+                body = cbor2.loads(payload)
+            except Exception as e:
+                self._log.debug("raw read decode failed for %s: %s", href, e)
+                body = None
+            if isinstance(body, dict):
+                self._observe.apply(href, body, source="poll")
+                rep = body
+        return code, rep
+
+    async def async_raw_read(self, href: str) -> tuple[int, dict]:
+        """Debug-only live GET (issue #300, backs the read_resource
+        service). Same href validation as async_raw_write."""
+        path_segs = _href_to_path_segs(href)
         if not path_segs:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
@@ -1166,10 +1239,110 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
         norm_href = "/" + "/".join(path_segs)
         async with self._session_lock:
-            code, new_rep = await self.hass.async_add_executor_job(
-                self._raw_write_blocking, path_segs, body, norm_href
+            return await self.hass.async_add_executor_job(
+                self._raw_read_blocking, path_segs, norm_href
             )
+
+    async def async_raw_write_sequence(
+        self, writes: list[dict], *, verify_after: float = 0.0
+    ) -> dict[str, Any]:
+        """Debug-only ordered multi-write (issue #300): a Samsung wall oven
+        board discards settings writes while idle and only keeps them once
+        a cycle is already running, which no single-write debug pass can
+        probe for. This owns the whole sequence -- every write shares one
+        `_session_lock` hold, so a poll can never interleave mid-sequence
+        and blur which write is responsible for what the device does next.
+
+        `writes` are already on-the-wire hrefs: subdevice translation
+        (canonical -> actual) is services.py's job, not this method's --
+        this primitive has no notion of subdevices, same as the original
+        single-write async_raw_write never did.
+
+        `async_raw_write` below delegates here with a one-item sequence, so
+        its signature/return and tests/test_coordinator_raw_write.py stay
+        unchanged.
+        """
+        if not writes or len(writes) > _DEBUG_MAX_WRITES:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="debug_too_many_writes",
+            )
+        if not 0 <= verify_after <= _DEBUG_MAX_VERIFY_AFTER_S:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="debug_verify_after_out_of_range",
+            )
+        # Validate every item before touching the session -- a rejected
+        # call must fail before any write goes out (same posture the
+        # single-write path has always had; see
+        # test_raw_write_validation_errors_do_not_touch_the_session).
+        parsed = [_validate_debug_write_item(w) for w in writes]
+
+        results: list[dict[str, Any]] = []
+        last_payload_by_href: dict[str, dict] = {}
+        async with self._session_lock:
+            for i, (path_segs, href, payload, settle) in enumerate(parsed):
+                before = self.resource(href)
+                code, after = await self.hass.async_add_executor_job(
+                    self._raw_write_blocking, path_segs, payload, href
+                )
+                last_payload_by_href[href] = payload
+                results.append(
+                    {
+                        "href": href,
+                        "code": _coap_code_str(code),
+                        "raw_code": code,
+                        "accepted": _coap_accepted(code),
+                        "before": before,
+                        "after": after,
+                        "changed": all(after.get(k) == v for k, v in payload.items()),
+                    }
+                )
+                # settle is "how long to wait before the next write" -- the
+                # last item has no next write, so it gets no wait here;
+                # verify_after (below) is the equivalent wait after the
+                # sequence as a whole.
+                if settle and i < len(parsed) - 1:
+                    await asyncio.sleep(settle)
+
+        response: dict[str, Any] = {"results": results}
+        if verify_after > 0:
+            # Released, not held, across this wait: holding _session_lock
+            # through up to 60s would stall the summary poll for that whole
+            # window (same reasoning as _attempt_observe_mode's grace wait,
+            # issue #294). A poll interleaving here is harmless -- just
+            # another read of the same hrefs.
+            await asyncio.sleep(verify_after)
+            verified: dict[str, Any] = {}
+            async with self._session_lock:
+                for href in dict.fromkeys(r["href"] for r in results):
+                    vcode, vrep = await self.hass.async_add_executor_job(
+                        self._raw_read_blocking, _href_to_path_segs(href), href
+                    )
+                    verified[href] = {
+                        "code": _coap_code_str(vcode),
+                        "raw_code": vcode,
+                        "rep": vrep,
+                        "held": all(
+                            vrep.get(k) == v for k, v in last_payload_by_href[href].items()
+                        ),
+                    }
+            response["verified"] = verified
+
         # Hasten a summary poll so entities on other resources catch up
-        # too -- a debug write can affect siblings, not just its href.
+        # too -- a debug write can affect siblings, not just its href. Once
+        # per sequence, not per write: the whole point of ordering writes
+        # under one lock hold is to control exactly what the device sees
+        # and when, which a refresh racing in mid-sequence would undermine.
         await self.async_request_refresh()
-        return code, new_rep
+        return response
+
+    async def async_raw_write(self, href: str, body: dict) -> tuple[int, dict]:
+        """Debug-only arbitrary write (issue #54). Bypasses remote-control
+        and write_fn/validate_fn; sends `body` verbatim as a partial-rep
+        PATCH to `href`. Returns (coap_code, new_rep) read back right
+        after -- a thin single-write wrapper over async_raw_write_sequence
+        (issue #300)."""
+        sequence = await self.async_raw_write_sequence([{"href": href, "payload": body}])
+        only = sequence["results"][0]
+        return only["raw_code"], only["after"]
