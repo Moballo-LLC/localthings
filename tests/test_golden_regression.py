@@ -277,6 +277,24 @@ def test_registry_reproduces_golden_state_keys_for_tp1x_ref_21k_eu():
     )
 
 
+def test_registry_reproduces_golden_state_keys_for_tp1x_ref_21k_airfilter():
+    """TP1X_REF_21K, air-filter-equipped variant (issue #318) -- reports
+    /filter/airdustfilter/vs/0 (internal deodorizing filter), the one
+    unbound href on this dump. Unlike airconditioner.AIR_FILTER's
+    filterUsage/filterCapacity pair, this board's filterUsage is already a
+    0-100 percentage with no filterCapacity to divide by."""
+    from tests.conftest import _load_device
+
+    resources = _load_device("refrigerator_tp1x_ref_21k_airfilter")
+    golden = json.loads((GOLDEN / "refrigerator_tp1x_ref_21k_airfilter.json").read_text())
+    state_keys = _new_state_keys("refrigerator_tp1x_ref_21k_airfilter", resources)
+    assert set(state_keys) == set(golden["state_keys"]), (
+        f"state_keys mismatch:\n"
+        f"  extra:   {sorted(set(state_keys) - set(golden['state_keys']))}\n"
+        f"  missing: {sorted(set(golden['state_keys']) - set(state_keys))}"
+    )
+
+
 def test_registry_reproduces_golden_state_keys_for_range_hood():
     from tests.conftest import _load_device
 

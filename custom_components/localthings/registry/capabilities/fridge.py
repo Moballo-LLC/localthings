@@ -25,7 +25,7 @@ from ..entities import (
     SwitchDesc,
     TimeDesc,
 )
-from .common import normalize_temp_unit
+from .common import int_or_none, normalize_temp_unit
 
 # Display names for the beverage zone, flex zone, ice type, and
 # ice-making-status enums below live in translations/en.json, keyed by the
@@ -261,6 +261,39 @@ DOOR_ALERT = Capability(
                 ["settings", "sound", "alert", "door", "vs", "0"],
                 {"alert.door": p},
             ),
+        ),
+    ),
+)
+
+
+# Internal deodorizing filter (issue #318, TP1X_REF_21K). Same
+# filterUsage/filterStatus field pair as common.WATER_FILTER, but
+# filterUsage here is already a 0-100 percentage with no filterCapacity to
+# divide by (confirmed by filterStatus=="wash" at filterUsage=="100") --
+# 'air_'-prefixed keys so a fridge with both a water and an air filter gets
+# two distinct entities rather than a unique_id collision.
+AIR_FILTER = Capability(
+    href="/filter/airdustfilter/vs/0",
+    poll_tier="cold",
+    entities=(
+        SensorDesc(
+            key="air_filter_usage",
+            field="x.com.samsung.da.filterUsage",
+            unit="%",
+            state_class="measurement",
+            icon="mdi:air-filter",
+            entity_category="diagnostic",
+            value_fn=int_or_none,
+        ),
+        SensorDesc(
+            key="air_filter_status",
+            field="x.com.samsung.da.filterStatus",
+            device_class="enum",
+            options=("normal", "wash", "replace"),
+            translation_key="filter_status",
+            icon="mdi:air-filter",
+            entity_category="diagnostic",
+            value_fn=lambda v: v.lower() if isinstance(v, str) else v,
         ),
     ),
 )
