@@ -116,14 +116,9 @@ async def _async_write_resource(hass: HomeAssistant, call: ServiceCall) -> Servi
     writes_in: list[dict[str, Any]] = call.data[ATTR_WRITES]
 
     # Canonical -> actual translation happens here, not in the coordinator
-    # (issue #177): the coordinator's raw-write primitive has no notion of
-    # subdevices, only the hrefs it's told to hit -- identity transform for
-    # MAIN, so a device targeting MAIN behaves exactly as it always has.
-    #
-    # Normalized first: to_actual is a textual transform, so an un-normalized
-    # '/mode/vs/0/' passes through it untouched and only gets tidied up
-    # downstream, quietly hitting the master's resource instead of the
-    # subdevice's (see coordinator.normalize_href).
+    # (issue #177), whose raw-write primitive has no notion of subdevices --
+    # identity transform for MAIN. Normalized first, or a trailing slash
+    # slips past to_actual onto the master (see coordinator.normalize_href).
     canonicals = [normalize_href(w[ATTR_HREF]) for w in writes_in]
     raw_writes = [
         {
@@ -153,8 +148,8 @@ async def _async_write_resource(hass: HomeAssistant, call: ServiceCall) -> Servi
     response: dict[str, Any] = {"device_id": device_id, "results": results}
     if "verified" in sequence:
         # Keyed off the same normalized canonicals the sequence was built
-        # from, so the lookup can't miss and hand back an actual href where
-        # the documented contract promises a canonical one.
+        # from, so the lookup can't miss and return an actual href where the
+        # contract promises a canonical one.
         canonical_by_actual = {subdevice.to_actual(c): c for c in canonicals}
         response["verified"] = {
             canonical_by_actual.get(actual_href, actual_href): verified

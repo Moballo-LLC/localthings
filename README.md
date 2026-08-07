@@ -102,15 +102,14 @@ Each device has its own **Configure** option in Settings > Devices & Services, u
 
 Two HA actions, `localthings.write_resource` and `localthings.read_resource`, talk to a device's OCF resources directly instead of through this integration's entity model. They exist for two overlapping jobs: pinning down a device-specific write contract (the reverse-engineering work `docs/investigations/` and the provenance comments throughout `registry/capabilities/` are all about), and driving a resource this integration doesn't model as an entity yet, without waiting on a release.
 
-Both target a device (`target: device:`, filtered to `integration: localthings` in the picker) and resolve to exactly one appliance — targeting an area or label that expands to more than one LocalThings device is rejected rather than silently fanned out across all of them. `href` is always canonical (e.g. `/mode/vs/0`); if the device you targeted is a subdevice — an oven's second cavity, an AC's second indoor unit — it's translated to the real on-the-wire href for you (`/mode/vs/1`, say), and the response reports both forms so there's no ambiguity about what was actually sent.
+Both take a `device_id` (a device picker filtered to this integration) and resolve to exactly one appliance — a target that expands to more than one LocalThings device is rejected rather than silently fanned out across all of them. `href` is always canonical (e.g. `/mode/vs/0`); if the device you targeted is a subdevice — an oven's second cavity, an AC's second indoor unit — it's translated to the real on-the-wire href for you (`/mode/vs/1`, say), and the response reports both forms so there's no ambiguity about what was actually sent.
 
 `write_resource` exists because a single write, one at a time, isn't enough to probe some boards. Issue #300's Samsung wall oven answers `2.04 Changed` to a settings write while idle and then silently reverts it — the write only sticks once a cycle is already running. Finding what actually triggers a cycle needs an *ordered sequence* of writes to different resources, with real delays between them, and a way to check afterward whether anything actually held:
 
 ```yaml
 action: localthings.write_resource
-target:
-  device_id: abc123...
 data:
+  device_id: abc123...
   writes:
     - href: /mode/vs/0
       payload:
@@ -150,9 +149,8 @@ If the session drops partway through a sequence, the action raises rather than r
 
 ```yaml
 action: localthings.read_resource
-target:
-  device_id: abc123...
 data:
+  device_id: abc123...
   href: /mode/vs/0
 ```
 

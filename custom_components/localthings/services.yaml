@@ -10,10 +10,14 @@ write_resource:
     it can misconfigure your appliance. Prefer a real entity, or the Debug
     write panel in the integration's Configure menu, for anything this
     integration already models.
-  target:
-    device:
-      integration: localthings
   fields:
+    device_id:
+      name: Device
+      description: The appliance to write to, or one of its subdevices.
+      required: true
+      selector:
+        device:
+          integration: localthings
     writes:
       name: Writes
       description: >-
@@ -52,10 +56,14 @@ read_resource:
     deliberately not the cache, which can be up to a poll interval stale --
     or omit it to get the cached snapshot of every resource this
     integration currently tracks on that device.
-  target:
-    device:
-      integration: localthings
   fields:
+    device_id:
+      name: Device
+      description: The appliance to read from, or one of its subdevices.
+      required: true
+      selector:
+        device:
+          integration: localthings
     href:
       name: Resource href
       description: >-

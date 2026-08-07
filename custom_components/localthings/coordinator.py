@@ -115,18 +115,10 @@ def _href_to_path_segs(href: str) -> list[str]:
 
 
 def normalize_href(href: str) -> str:
-    """A user-typed href in the one canonical spelling the rest of the debug
-    path assumes: exactly one leading slash, no trailing slash, no empty
-    segments.
-
-    Public because services.py has to normalize *before* handing an href to
-    `Subdevice.to_actual` (issue #300). That transform is purely textual --
-    an indexed subdevice rewrites only a trailing '0' segment -- so
-    '/mode/vs/0/' slips through it unchanged and then normalizes here to
-    '/mode/vs/0', silently landing the write on the master's resource
-    instead of the subdevice's while still reporting 2.04. Normalizing on
-    the way in makes the two agree.
-    """
+    """A user-typed href in one canonical spelling. Public because
+    services.py must normalize before `Subdevice.to_actual`, which rewrites
+    only a trailing '0' segment: '/mode/vs/0/' slips through it unchanged
+    and would land on the master's resource, not the subdevice's."""
     return "/" + "/".join(_href_to_path_segs(href))
 
 
@@ -1315,23 +1307,15 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             "changed": all(after.get(k) == v for k, v in payload.items()),
                         }
                     )
-                    # settle is "how long to wait before the next write" -- the
-                    # last item has no next write, so it gets no wait here;
-                    # verify_after (below) is the equivalent wait after the
-                    # sequence as a whole.
-                    #
-                    # Held across this wait, unlike verify_after's below: a
-                    # poll landing between two writes is exactly what this
-                    # sequence exists to rule out, since it blurs which write
-                    # the appliance was reacting to. Bounded by the caps above
-                    # -- 10 writes x 30s is the worst a caller can ask for.
+                    # The lock is deliberately held across this wait, unlike
+                    # verify_after's below: a poll landing between two writes
+                    # blurs which one the appliance reacted to, which is what
+                    # the sequence exists to rule out. The caps bound it.
                     if settle and i < len(parsed) - 1:
                         await asyncio.sleep(settle)
         except Exception as err:
-            # A session drop partway leaves the appliance holding whatever
-            # already landed. Raising bare would throw that away, and knowing
-            # which writes got through is the difference between a usable
-            # probe result and having to start the sequence over blind.
+            # A drop partway leaves the appliance holding whatever already
+            # landed, so the error has to say which writes got through.
             done = ", ".join(r["href"] for r in results) or "none"
             self._log.warning(
                 "raw write sequence failed after %d of %d writes (completed: %s): %s",
@@ -1360,12 +1344,9 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     vcode, vrep = await self.hass.async_add_executor_job(
                         self._raw_read_blocking, _href_to_path_segs(href), href
                     )
-                    # `held` is None, not False, when the re-read itself
-                    # didn't come back with a representation to compare.
-                    # _raw_read_blocking answers a non-2.05 with an empty
-                    # rep, against which every payload comparison is False --
-                    # so a 4.04 or a dropped read would otherwise be reported
-                    # as "the board reverted your write", which is the exact
+                    # None, not False, when the re-read brought back nothing
+                    # to compare: every comparison against an empty rep is
+                    # False, which would report a 4.04 as a revert -- the one
                     # distinction verify_after exists to draw.
                     read_ok = _coap_accepted(vcode) and bool(vrep)
                     verified[href] = {
