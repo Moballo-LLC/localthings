@@ -24,8 +24,8 @@ write_resource:
         (0-30, default 0).
       required: true
       example: >-
-        [{"href": "/mode/vs/0", "payload": {"x.com.samsung.da.mode":
-        "Bake"}, "settle": 3}]
+        [{"href": "/mode/vs/0", "payload": {"x.com.samsung.da.modes":
+        ["Bake"]}, "settle": 3}]
       selector:
         object:
     verify_after:

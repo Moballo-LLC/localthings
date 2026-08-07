@@ -112,19 +112,17 @@ target:
   device_id: abc123...
 data:
   writes:
-    - href: /course/vs/0
-      payload:
-        x.com.samsung.da.course: "01"
-      settle: 3
     - href: /mode/vs/0
       payload:
-        x.com.samsung.da.mode: Bake
+        x.com.samsung.da.modes: ["Bake"]
       settle: 5
-    - href: /power/vs/0
+    - href: /operational/state/vs/0
       payload:
-        x.com.samsung.da.power: "On"
+        x.com.samsung.da.state: "Run"
   verify_after: 30
 ```
+
+Mind the shapes: what you write is sent verbatim, so the field names and types have to be the ones that resource actually uses. `/mode/vs/0` takes `modes` as an *array* on this board; a bare string, or the singular `mode`, is a different field the device will simply ignore. `read_resource` (below) with no `href` is the quickest way to see the real shape of everything before you write to any of it.
 
 Each write in `writes` (1-10 of them) needs `href` and a non-empty `payload`, sent verbatim as a partial-rep POST — this bypasses the remote-control-off block and every `write_fn`/`validate_fn` a normal entity write goes through, and sends exactly the fields you give it, so it can misconfigure your appliance if you get it wrong. `settle` (0-30s, default 0) is how long to wait *after* that write before starting the next one. The whole sequence runs under a single lock, so a routine poll can't land in the middle of it and blur which write is responsible for what the device does next.
 
@@ -134,12 +132,12 @@ The response has one `results` entry per write, with `before`/`after` reps and a
 {
   "device_id": "abc123...",
   "results": [
-    {"href": "/course/vs/0", "actual_href": "/course/vs/0", "code": "2.04", "raw_code": 68,
+    {"href": "/mode/vs/0", "actual_href": "/mode/vs/0", "code": "2.04", "raw_code": 68,
      "accepted": true, "before": {...}, "after": {...}, "changed": true},
     ...
   ],
   "verified": {
-    "/power/vs/0": {"code": "2.05", "raw_code": 69, "rep": {...}, "held": false}
+    "/mode/vs/0": {"code": "2.05", "raw_code": 69, "rep": {...}, "held": false}
   }
 }
 ```
@@ -199,8 +197,8 @@ custom_components/localthings/
   coordinator.py          Polling + push update coordination, stale-state fallback, write dispatch
   observe.py              CoAP OBSERVE (push-mode) support layered on the coordinator
   diagnostics.py           Redacted diagnostics download (device state + coverage metadata)
-  services.py               write_resource/read_resource actions (device resolution, href translation)
-  services.yaml              Selectors/descriptions for the two services above
+  services.py              write_resource/read_resource actions (device resolution, href translation)
+  services.yaml            Selectors/descriptions for the two services above
   const.py                 Domain, config keys, probe ports
   entity.py                Base entity wiring capability registry -> HA entity
   sensor.py / binary_sensor.py / switch.py / number.py / select.py / button.py / time.py / fan.py / climate.py / water_heater.py
