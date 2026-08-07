@@ -206,6 +206,28 @@ def _mode_options(rep):
     return opts if isinstance(opts, (list, tuple)) else ()
 
 
+# Samsung's "System Fresh Air Ventilator" (PR #316, model
+# ACA-KR-TP2-21-AN9000, vid DA-AC-DIFFUSER-01001) self-reports oic.d.
+# airconditioner and routes through this same CLIMATE capability, but its
+# /mode/vs/0 supportedModes are Purification/Ventilation/SmartVentilation --
+# none of which climate.py's HVAC-mode table knows, so hvac_mode collapses
+# to a single stuck value with no way to tell the three apart. Gated to
+# devices whose *entire* supported-mode set is this vocabulary, so it can't
+# false-positive on a real AC's Cool/Heat/Dry list.
+_VENTILATION_MODE_VALUES = frozenset(("Purification", "Ventilation", "SmartVentilation"))
+
+
+def _is_ventilation_mode_device(rep, resources):
+    supported = rep.get("x.com.samsung.da.supportedModes")
+    if not isinstance(supported, (list, tuple)) or not supported:
+        return False
+    return set(supported) <= _VENTILATION_MODE_VALUES
+
+
+def _ventilation_mode_write(payload, rep, href=None):
+    return ["mode", "vs", "0"], {"x.com.samsung.da.modes": [payload]}
+
+
 def _has_display_light_option(rep, resources):
     """True when the panel light lives in /mode/vs/0's `Light_*` option
     token rather than a dedicated /light/vs/0 switch -- the two encodings
@@ -531,6 +553,17 @@ CLIMATE = Capability(
             translation_key="airconditioner",
             rep_fn=_first_mode,
             write_fn=_climate_write,
+        ),
+        # Purification/Ventilation/SmartVentilation mode select (PR #316) --
+        # _is_ventilation_mode_device gates this to devices using that
+        # vocabulary exclusively, so a real AC's climate card is unaffected.
+        SelectDesc(
+            key="ventilation_mode",
+            rep_fn=_first_mode,
+            exists_fn=_is_ventilation_mode_device,
+            options_field="x.com.samsung.da.supportedModes",
+            icon="mdi:air-filter",
+            write_fn=_ventilation_mode_write,
         ),
         # Panel light switch for boards that encode it in /mode/vs/0's options
         # instead of a dedicated /light/vs/0 (see _has_display_light_option).
@@ -1167,6 +1200,253 @@ HUMIDITY = Capability(
     ),
 )
 
+# TP1X_DA-AC-FAC-class additions (issue #319): most of these hrefs are the
+# same shapes air_purifier.py already models on the sibling TP1X_DA-AC-AIR
+# board (DISPLAY/SOUND_OUTPUT/SOUND_VOLUME, reused directly in the
+# registry); SOUND_MODE and the two below are genuinely new.
+
+SOUND_MODE = Capability(
+    href="/settings/sound/mode/vs/0",
+    poll_tier="cold",
+    entities=(
+        # Values seen (mute/tone/voice) are exactly laundry.SOUND_MODE's
+        # vocabulary, so this shares that catalog entry -- but reads the
+        # live supportedModes field rather than laundry's static tuple,
+        # since this resource carries one (issue #319).
+        #
+        # exists_fn is required, not optional here: this board's rep never
+        # reports a live 'mode' value ({"supportedModes": [...]} only), and
+        # entity.py's default field-presence gate would otherwise keep the
+        # select from ever registering -- adapter.flatten() (what the
+        # golden/tests read) has no such gate, so it would look bound while
+        # silently absent from HA. Register on supportedModes' presence
+        # instead; current_option reads unknown until the device reports
+        # 'mode' live.
+        SelectDesc(
+            key="sound_mode",
+            field="mode",
+            icon="mdi:volume-high",
+            entity_category="config",
+            options_field="supportedModes",
+            exists_fn=lambda rep, resources: bool(rep.get("supportedModes")),
+            write_fn=lambda p, rep, href=None: (
+                ["settings", "sound", "mode", "vs", "0"],
+                {"mode": p},
+            ),
+        ),
+    ),
+)
+
+# Absence-detection auto air clean (issue #319) -- a plain On/Off toggle,
+# sibling feature to ABSENCE_POWER_SAVING above but on its own href.
+ABSENCE_CLEAN = Capability(
+    href="/csi/absenceclean/vs/0",
+    poll_tier="cold",
+    entities=(
+        SwitchDesc(
+            key="absence_clean",
+            field="mode",
+            icon="mdi:broom",
+            entity_category="config",
+            value_fn=lambda v: v == "On",
+            write_fn=lambda p, rep, href=None: (
+                ["csi", "absenceclean", "vs", "0"],
+                {"mode": "On" if p == "On" else "Off"},
+            ),
+        ),
+    ),
+)
+
+# The CAC-class board (issue #191) reports the identical {mode,
+# supportedModes: [On, Off]} shape under /mds/absenceclean/vs/0 instead --
+# confirmed against that board's own fixture, not guessed. Shares
+# ABSENCE_CLEAN's key/translation: no dump has ever reported both hrefs
+# together, so there's nothing for the two to collide over in
+# adapter.flatten().
+MDS_ABSENCE_CLEAN = Capability(
+    href="/mds/absenceclean/vs/0",
+    poll_tier="cold",
+    entities=(
+        SwitchDesc(
+            key="absence_clean",
+            field="mode",
+            icon="mdi:broom",
+            entity_category="config",
+            value_fn=lambda v: v == "On",
+            write_fn=lambda p, rep, href=None: (
+                ["mds", "absenceclean", "vs", "0"],
+                {"mode": "On" if p == "On" else "Off"},
+            ),
+        ),
+    ),
+)
+
+# Energy-saving schedule (issue #319). `mode` is a device-chosen preset
+# (e.g. Cooling_60/Off_180) with no confirmed unit for the trailing number
+# (minutes seen elsewhere on this board are unprefixed ints, not
+# underscore-suffixed) -- exposed as a select over the live options rather
+# than translating labels we can't confirm. `state`/`operatingStatus` stay
+# bare diagnostic passthroughs for the same reason.
+ENERGY_SAVING = Capability(
+    href="/csi/energysaving/vs/0",
+    poll_tier="cold",
+    entities=(
+        SelectDesc(
+            key="energy_saving_mode",
+            field="mode",
+            icon="mdi:leaf",
+            entity_category="config",
+            options_field="supportedModes",
+            write_fn=lambda p, rep, href=None: (
+                ["csi", "energysaving", "vs", "0"],
+                {"mode": p},
+            ),
+        ),
+        SensorDesc(
+            key="energy_saving_state",
+            field="state",
+            icon="mdi:leaf",
+            entity_category="diagnostic",
+        ),
+        SensorDesc(
+            key="energy_saving_operating_status",
+            field="operatingStatus",
+            icon="mdi:leaf",
+            entity_category="diagnostic",
+        ),
+    ),
+)
+
+# TP1X_DA-AC-CAC-01001-class additions (issue #288, six System A/C cassette
+# units on the same board test_airconditioner_cac.py's coverage-gap test
+# documents). `convenientMode`/`operatingOption` stay unexposed -- present
+# on every dump seen but no evidence of what either actually controls.
+EDGE_LIGHTING = Capability(
+    href="/edgelighting/vs/0",
+    poll_tier="cold",
+    entities=(
+        SwitchDesc(
+            key="edge_lighting",
+            field="status",
+            icon="mdi:led-strip",
+            entity_category="config",
+            value_fn=lambda v: v == "On",
+            write_fn=lambda p, rep, href=None: (
+                ["edgelighting", "vs", "0"],
+                {"status": "On" if p == "On" else "Off"},
+            ),
+        ),
+        SelectDesc(
+            key="edge_lighting_mode",
+            field="mode",
+            icon="mdi:led-strip-variant",
+            entity_category="config",
+            options_field="modeSupportedList",
+            write_fn=lambda p, rep, href=None: (
+                ["edgelighting", "vs", "0"],
+                {"mode": p},
+            ),
+        ),
+        # Color temperature in Kelvin (3000K/4000K/6500K), not a hue -- a
+        # select over the live-reported codes rather than a light color_temp
+        # entity, consistent with this project's other Kelvin-coded selects.
+        SelectDesc(
+            key="edge_lighting_color",
+            field="colorOption",
+            icon="mdi:palette",
+            entity_category="config",
+            options_field="colorSupportedList",
+            write_fn=lambda p, rep, href=None: (
+                ["edgelighting", "vs", "0"],
+                {"colorOption": p},
+            ),
+        ),
+    ),
+)
+
+# Second, distinct light resource on this board generation -- an
+# always-on-style indicator light with its own status/mode, not to be
+# confused with EDGE_LIGHTING (a different href/rep entirely) or
+# DISPLAY_LIGHT (/light/vs/0's ambient mood light).
+LIGHT_STATEFUL = Capability(
+    href="/light/stateful/vs/0",
+    poll_tier="cold",
+    entities=(
+        SwitchDesc(
+            key="indicator_light",
+            field="status",
+            icon="mdi:led-on",
+            entity_category="config",
+            value_fn=lambda v: v == "On",
+            write_fn=lambda p, rep, href=None: (
+                ["light", "stateful", "vs", "0"],
+                {"status": "On" if p == "On" else "Off"},
+            ),
+        ),
+        SelectDesc(
+            key="indicator_light_mode",
+            field="mode",
+            icon="mdi:led-variant-on",
+            entity_category="config",
+            options_field="supportedModes",
+            write_fn=lambda p, rep, href=None: (
+                ["light", "stateful", "vs", "0"],
+                {"mode": p},
+            ),
+        ),
+    ),
+)
+
+# Wind-Free / Wind-Sleep mode toggles (PR #316, ACA-KR-TP2-21-AN9000). Each
+# on its own dedicated href, so unlike ventilation_mode above these need no
+# device gating -- absent on every other family's dump. Write contract
+# extrapolated from this file's other plain On/Off options-array fields
+# (AIR_PURIFY, AUTO_CLEAN); not confirmed live.
+#
+# NOT the same WindFree already modeled elsewhere: on regular AC boards,
+# WindFree is a `Comode_Nano` token inside /mode/vs/0's options[], surfaced
+# as a climate preset (climate.py's _LEGACY_PRESET_CODES/preset_mode) with
+# real coupling to hvac_mode (disabled in Heat/AIComfort/Auto, timing rules
+# on legacy boards). This device's windfree/windsleep are bare booleans on
+# their own hrefs with no such coupling evidenced -- same feature name,
+# different wire mechanism, so plain switches rather than folding into
+# climate.py's preset machinery.
+WINDFREE = Capability(
+    href="/modeoption/windfree/vs/0",
+    poll_tier="warm",
+    entities=(
+        SwitchDesc(
+            key="windfree",
+            field="x.com.samsung.da.windfree",
+            icon="mdi:leaf",
+            entity_category="config",
+            value_fn=lambda v: v == "On",
+            write_fn=lambda p, rep, href=None: (
+                ["modeoption", "windfree", "vs", "0"],
+                {"x.com.samsung.da.windfree": "On" if p == "On" else "Off"},
+            ),
+        ),
+    ),
+)
+
+WINDSLEEP = Capability(
+    href="/modeoption/windsleep/vs/0",
+    poll_tier="warm",
+    entities=(
+        SwitchDesc(
+            key="windsleep",
+            field="x.com.samsung.da.windsleep",
+            icon="mdi:sleep",
+            entity_category="config",
+            value_fn=lambda v: v == "On",
+            write_fn=lambda p, rep, href=None: (
+                ["modeoption", "windsleep", "vs", "0"],
+                {"x.com.samsung.da.windsleep": "On" if p == "On" else "Off"},
+            ),
+        ),
+    ),
+)
+
 # /sensors/vs/0 items[] carry live air-quality readings. CleanLevel is
 # corroborated as numeric by a top-level x.com.samsung.da.cleanLevel scalar,
 # so it's a measurement; the others stay string diagnostics (see
@@ -1203,6 +1483,27 @@ AIR_QUALITY = Capability(
                 ("super_fine_dust", "mdi:weather-fog", "SuperFineDust"),
             )
         ),
+        # CO2 (PR #316, ACA-KR-TP2-21-AN9000) -- a type this file's other AC
+        # families don't report. Same field/shape air_monitor.SENSORS
+        # already models with device_class='carbon_dioxide'/unit='ppm', so
+        # this matches that descriptor rather than guessing fresh -- unlike
+        # the pm10/pm25/pm1 mapping air_monitor.py's own docstring
+        # deliberately rejects for the three dust-type keys above (Samsung's
+        # two-tier PM10/PM2.5 convention doesn't confirm where a third tier
+        # or PM1 fits), ppm for a field literally named CO2 isn't a guess of
+        # that kind.
+        SensorDesc(
+            key="co2",
+            field="x.com.samsung.da.items",
+            icon="mdi:molecule-co2",
+            entity_category="diagnostic",
+            device_class="carbon_dioxide",
+            state_class="measurement",
+            unit="ppm",
+            exists_fn=_has_sensor_type("CO2"),
+            enabled_default=False,
+            value_fn=lambda items: _int(_sensor_item_value(items, "CO2")),
+        ),
     ),
 )
 
@@ -1222,7 +1523,12 @@ _AC_IGNORED = [
     # state or documented write contract. /option/muteonce/vs/0 and
     # /selfcheck/vs/0 are deliberately NOT here -- see MUTE_ONCE above and
     # common.SELF_CHECK, both of which have a confirmed, modelable contract.
-    "/airlevelcheck/vs/0",  # periodic air-quality sensing scheduler plumbing
+    # /airlevelcheck/vs/0 is deliberately NOT here either (PR #316):
+    # despite this list's old description of it as "scheduler plumbing",
+    # both the CAC and TP1X_DA_AC_RAC_01011 fixtures already carry real,
+    # populated periodicSensingActivationState/autoExeState values here --
+    # the AI-Purify feature air_purifier.AIR_LEVEL_CHECK already models,
+    # reused below rather than reinvented.
     "/aisleep/vs/0",  # AI-sleep feedback state (no actionable control)
     "/availablecontrolsets/vs/0",  # opaque hex-encoded control-set bitmap
     "/da/softreset/vs/0",  # soft-reset trigger plumbing
@@ -1250,6 +1556,24 @@ _AC_IGNORED = [
     # registry.subdevices.enumerate_subdevices, hence the entry here rather
     # than a coverage gap.
     "/multidevice/vs/0",
+    # TP1X_DA-AC-FAC-class-only (issue #319) -- scoped here rather than
+    # promoted to the global ignore list since it'd collide with families
+    # that do bind some of these. Only /dnd/autosleep/vs/0 has a precedent
+    # (air_purifier.COVERAGE ignores the same href for the same reason);
+    # the rest are new, each with its own reason below.
+    "/dnd/autosleep/vs/0",  # every field its inert default; needs a schedule editor
+    "/outdoorsharing/vs/0",  # empty on this dump -- outdoor-unit sharing plumbing
+    "/lifestyle/survey/vs/0",  # {list: [""]} placeholder, nothing to expose
+    # supportedVoices carries opaque numeric voice-pack IDs ("100"/"101")
+    # with no live current-selection field and, unlike SOUND_MODE's
+    # self-descriptive mute/tone/voice codes, no confirmed human-readable
+    # meaning to expose them under -- don't guess.
+    "/settings/sound/voice/vs/0",
+    # rssi/wifiFrequency (network housekeeping); lastEnergySavingTime and
+    # cleaningStartTime are inert '1900-01-00' placeholders on this dump;
+    # absenceInfo is an unconfirmed 48-slot P/A history blob with no
+    # documented meaning -- don't guess what it encodes.
+    "/csi/information/vs/0",
 ]
 
 # Built as bare no-entity caps; folded into the AC registry (not global).

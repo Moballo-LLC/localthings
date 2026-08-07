@@ -13,6 +13,7 @@ REGISTRY = DeviceRegistry(
             fridge.STATUS_LOCK,
             fridge.DOOR_ALERT,
             common.WATER_FILTER,
+            fridge.AIR_FILTER,
             dishwasher.DIAGNOSIS,
             fridge.ICEMAKER_NIGHTTIME,
             fridge.FLEX_ZONE,

@@ -6,18 +6,40 @@ token -- this board was the one exception (its oneUiVersion self-reports
 "7.0 Air conditioner", but 'CAC' had never been added to the board-token
 table), so it silently fell back to common caps and lost its climate entity.
 
-This dump is NOT fully covered yet -- eight hrefs remain unbound (edge
-lighting, a second stateful light resource, absence-clean, four
-`/settings/sound/*` resources, smart-sensing-cooling), all genuinely new to
-this board generation. That's a real device-support gap, left documented
-here rather than guessed at, per the 'don't guess' rule -- fixing the
-routing regression was the scope of #191.
+This dump is NOT fully covered yet -- two hrefs remain unbound
+(`/settings/sound/optimization/vs/0`, smart-sensing-cooling), both
+genuinely new to this board generation. That's a real device-support gap,
+left documented here rather than guessed at, per the 'don't guess' rule --
+fixing the routing regression was the scope of #191.
+
+/settings/sound/mode/vs/0, /settings/sound/output/vs/0 and
+/settings/sound/volume/vs/0 used to be on this list too, until issue #319
+(a sibling TP1X_DA-AC-FAC-class board) supplied a live dump for them --
+airconditioner.SOUND_MODE and the reused air_purifier.SOUND_OUTPUT/
+SOUND_VOLUME now cover all three here as well.
+
+/edgelighting/vs/0 and /light/stateful/vs/0 used to be on this list too,
+until issue #288 (six System A/C cassette units on this same board) gave
+real dump evidence for both -- airconditioner.EDGE_LIGHTING and
+LIGHT_STATEFUL now cover them.
+
+/mds/absenceclean/vs/0 used to be on this list too -- its {mode,
+supportedModes: [On, Off]} shape is byte-identical to issue #319's
+/csi/absenceclean/vs/0, confirmed on that sibling board rather than
+guessed, so airconditioner.MDS_ABSENCE_CLEAN now covers it too.
 
 /uvled/vs/0 and /filter/airdustPM1filter/vs/0 used to be on this list too,
 until issue #270 (TP1X_FAC_TIME_23K) added real capabilities for both --
 this board's own live filterUsage/filterStatus data on the PM1 filter binds
 through the same exists_fn-gated entities #270's dump (which has neither
 field) leaves empty.
+
+/airlevelcheck/vs/0 was never on this unbound list (this fixture's rep
+already carried a full set of periodicSensing*/autoExeState fields), but
+until PR #316 it was globally ignored by airconditioner.py's own
+_AC_IGNORED as "scheduler plumbing" -- this fixture's own populated values
+were the proof that description was wrong. air_purifier.AIR_LEVEL_CHECK
+now covers it (see test_airlevelcheck_binds_real_ai_purify_state below).
 """
 
 from custom_components.localthings.registry.adapter import flatten
@@ -27,13 +49,7 @@ from tests.conftest import _load_device
 
 _STILL_UNBOUND = frozenset(
     {
-        "/edgelighting/vs/0",
-        "/light/stateful/vs/0",
-        "/mds/absenceclean/vs/0",
-        "/settings/sound/mode/vs/0",
         "/settings/sound/optimization/vs/0",
-        "/settings/sound/output/vs/0",
-        "/settings/sound/volume/vs/0",
         "/smartsensingcooling/vs/0",
     }
 )
@@ -63,6 +79,32 @@ def test_documented_coverage_gap_is_exactly_this_set():
     unbound = []
     discover(resources, reg.capabilities, reg.pattern_capabilities, log=unbound.append)
     assert set(unbound) == _STILL_UNBOUND
+
+
+def test_mds_absenceclean_shares_csi_absenceclean_key():
+    """/mds/absenceclean/vs/0's mode=='Off' on this dump -- confirms
+    MDS_ABSENCE_CLEAN actually binds (not just that the href stops
+    reporting as unbound)."""
+    resources = _resources()
+    reg = _reg(resources)
+    bound = discover(resources, reg.capabilities, reg.pattern_capabilities)
+    state = flatten(bound, resources)
+    assert state["absence_clean"] is False
+
+
+def test_airlevelcheck_binds_real_ai_purify_state():
+    """This fixture's /airlevelcheck/vs/0 has real, populated values --
+    periodic_air_sensing on, sensing_mode 'Alarm' -- confirming
+    air_purifier.AIR_LEVEL_CHECK binds real AI-Purify state here rather
+    than the inert plumbing _AC_IGNORED used to describe."""
+    resources = _resources()
+    reg = _reg(resources)
+    bound = discover(resources, reg.capabilities, reg.pattern_capabilities)
+    state = flatten(bound, resources)
+    assert state["periodic_air_sensing"] is True
+    assert state["sensing_mode"] == "Alarm"
+    assert state["sensing_interval"] == 30  # 1800s
+    assert state["air_sensing_state"] == "NonProcessing"
 
 
 def test_non_legacy_board_uses_the_generic_energy_scale():

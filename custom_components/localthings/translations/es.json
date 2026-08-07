@@ -663,6 +663,9 @@
           "mute": "Silencio"
         }
       },
+      "energy_saving_mode": {
+        "name": "Modo de ahorro de energía"
+      },
       "air_purifier_sound_mode": {
         "name": "Modo de sonido",
         "state": {
@@ -790,6 +793,38 @@
       },
       "freezer_temperature_setpoint": {
         "name": "Temperatura del congelador"
+      },
+      "edge_lighting_mode": {
+        "name": "Modo de iluminación perimetral",
+        "state": {
+          "smart": "Inteligente",
+          "high": "Alto",
+          "low": "Bajo"
+        }
+      },
+      "edge_lighting_color": {
+        "name": "Color de iluminación perimetral",
+        "state": {
+          "3000k": "3000 K",
+          "4000k": "4000 K",
+          "6500k": "6500 K"
+        }
+      },
+      "indicator_light_mode": {
+        "name": "Modo de luz indicadora",
+        "state": {
+          "smart": "Inteligente",
+          "high": "Alto",
+          "low": "Bajo"
+        }
+      },
+      "ventilation_mode": {
+        "name": "Modo",
+        "state": {
+          "purification": "Purificación",
+          "ventilation": "Ventilación",
+          "smartventilation": "Ventilación inteligente"
+        }
       }
     },
     "sensor": {
@@ -908,6 +943,12 @@
           "direct": "Directo",
           "indirect": "Indirecto"
         }
+      },
+      "energy_saving_state": {
+        "name": "Estado de ahorro de energía"
+      },
+      "energy_saving_operating_status": {
+        "name": "Estado de funcionamiento del ahorro de energía"
       },
       "current_temp_c": {
         "name": "Temperatura"
@@ -1165,6 +1206,9 @@
       "absence_power_saving_active": {
         "name": "Ahorro por ausencia activo"
       },
+      "absence_clean": {
+        "name": "Limpieza por ausencia"
+      },
       "motion_detect_wind_active": {
         "name": "Evitación de viento por detección de movimiento activa"
       },
@@ -1329,6 +1373,18 @@
       },
       "ventilation_alarm": {
         "name": "Alarma de ventilación"
+      },
+      "edge_lighting": {
+        "name": "Iluminación perimetral"
+      },
+      "indicator_light": {
+        "name": "Luz indicadora"
+      },
+      "windfree": {
+        "name": "Modo Wind-Free"
+      },
+      "windsleep": {
+        "name": "Modo nocturno"
       }
     },
     "time": {

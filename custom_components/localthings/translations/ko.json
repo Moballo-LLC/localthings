@@ -538,6 +538,9 @@
           "mute": "음소거"
         }
       },
+      "energy_saving_mode": {
+        "name": "절전 모드"
+      },
       "air_purifier_sound_mode": {
         "name": "소리 모드",
         "state": {
@@ -665,6 +668,38 @@
       },
       "freezer_temperature_setpoint": {
         "name": "냉동실 온도"
+      },
+      "edge_lighting_mode": {
+        "name": "엣지 라이팅 모드",
+        "state": {
+          "smart": "스마트",
+          "high": "높음",
+          "low": "낮음"
+        }
+      },
+      "edge_lighting_color": {
+        "name": "엣지 라이팅 색상",
+        "state": {
+          "3000k": "3000 K",
+          "4000k": "4000 K",
+          "6500k": "6500 K"
+        }
+      },
+      "indicator_light_mode": {
+        "name": "표시등 모드",
+        "state": {
+          "smart": "스마트",
+          "high": "높음",
+          "low": "낮음"
+        }
+      },
+      "ventilation_mode": {
+        "name": "모드",
+        "state": {
+          "purification": "청정",
+          "ventilation": "환기",
+          "smartventilation": "스마트환기"
+        }
       }
     },
     "sensor": {
@@ -786,6 +821,12 @@
           "direct": "직접풍",
           "indirect": "간접풍"
         }
+      },
+      "energy_saving_state": {
+        "name": "절전 상태"
+      },
+      "energy_saving_operating_status": {
+        "name": "절전 작동 상태"
       },
       "current_temp_c": {
         "name": "온도"
@@ -1040,6 +1081,9 @@
       "absence_power_saving_active": {
         "name": "부재 절전 작동"
       },
+      "absence_clean": {
+        "name": "부재 청소"
+      },
       "motion_detect_wind_active": {
         "name": "모션 감지 바람 회피 작동"
       },
@@ -1204,6 +1248,18 @@
       },
       "ventilation_alarm": {
         "name": "환기 알림"
+      },
+      "edge_lighting": {
+        "name": "엣지 라이팅"
+      },
+      "indicator_light": {
+        "name": "표시등"
+      },
+      "windfree": {
+        "name": "무풍 모드"
+      },
+      "windsleep": {
+        "name": "취침 모드"
       }
     },
     "time": {

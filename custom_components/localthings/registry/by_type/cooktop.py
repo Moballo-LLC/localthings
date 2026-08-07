@@ -22,6 +22,12 @@ REGISTRY = DeviceRegistry(
             cooktop.COOKTOP_CONNECTED,
             cooktop.PAIRED_HOOD_STATUS,
             common.FIRMWARE_UPDATE,
+            # issue #314: /alarms/vs/0 and /kidslock/vs/0 are the same
+            # generic shapes common.UNIVERSAL already models elsewhere --
+            # picked individually rather than pulling in all of UNIVERSAL,
+            # matching this registry's existing hand-picked-common style.
+            common.ALARMS,
+            common.KIDS_LOCK_VS_FALLBACK,
         ]
     ),
 )

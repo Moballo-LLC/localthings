@@ -1,6 +1,6 @@
 """Oven device registry."""
 
-from ..capabilities import common, ignored, oven
+from ..capabilities import common, dishwasher, ignored, oven
 from ._base import DeviceRegistry, _build
 
 REGISTRY = DeviceRegistry(
@@ -18,6 +18,9 @@ REGISTRY = DeviceRegistry(
             oven.OVEN_CONNECTED,
             oven.OVEN_SPEC,
             oven.OVEN_RECIPE_COOK,
+            # issue #300: /diagnosis/vs/0 is the same diagnosisStart shape
+            # dishwasher.py and airconditioner.py already reuse.
+            dishwasher.DIAGNOSIS,
         ]
     ),
 )

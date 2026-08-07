@@ -538,6 +538,9 @@
           "mute": "Mute"
         }
       },
+      "energy_saving_mode": {
+        "name": "Energy saving mode"
+      },
       "air_purifier_sound_mode": {
         "name": "Sound mode",
         "state": {
@@ -665,6 +668,38 @@
       },
       "freezer_temperature_setpoint": {
         "name": "Freezer temperature"
+      },
+      "edge_lighting_mode": {
+        "name": "Edge lighting mode",
+        "state": {
+          "smart": "Smart",
+          "high": "High",
+          "low": "Low"
+        }
+      },
+      "edge_lighting_color": {
+        "name": "Edge lighting color",
+        "state": {
+          "3000k": "3000 K",
+          "4000k": "4000 K",
+          "6500k": "6500 K"
+        }
+      },
+      "indicator_light_mode": {
+        "name": "Indicator light mode",
+        "state": {
+          "smart": "Smart",
+          "high": "High",
+          "low": "Low"
+        }
+      },
+      "ventilation_mode": {
+        "name": "Mode",
+        "state": {
+          "purification": "Purification",
+          "ventilation": "Ventilation",
+          "smartventilation": "Smart Ventilation"
+        }
       }
     },
     "sensor": {
@@ -786,6 +821,12 @@
           "direct": "Direct",
           "indirect": "Indirect"
         }
+      },
+      "energy_saving_state": {
+        "name": "Energy saving state"
+      },
+      "energy_saving_operating_status": {
+        "name": "Energy saving operating status"
       },
       "current_temp_c": {
         "name": "Temperature"
@@ -1040,6 +1081,9 @@
       "absence_power_saving_active": {
         "name": "Absence power saving active"
       },
+      "absence_clean": {
+        "name": "Absence clean"
+      },
       "motion_detect_wind_active": {
         "name": "Motion-detect wind avoidance active"
       },
@@ -1204,6 +1248,18 @@
       },
       "ventilation_alarm": {
         "name": "Ventilation alarm"
+      },
+      "edge_lighting": {
+        "name": "Edge lighting"
+      },
+      "indicator_light": {
+        "name": "Indicator light"
+      },
+      "windfree": {
+        "name": "Wind-Free mode"
+      },
+      "windsleep": {
+        "name": "Sleep mode"
       }
     },
     "time": {

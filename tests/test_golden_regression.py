@@ -6,12 +6,12 @@ import pytest
 GOLDEN = Path(__file__).parent / "fixtures" / "golden"
 
 
-def _new_state_keys(name, resources):
+def _new_state_keys(name, resources, device_types=()):
     from custom_components.localthings.registry.adapter import flatten
     from custom_components.localthings.registry.by_type import resolve
     from custom_components.localthings.registry.discovery import discover
 
-    reg = resolve(resources)
+    reg = resolve(resources, device_types=device_types)
     if reg is None:
         from custom_components.localthings.registry.registry import CAPABILITIES
 
@@ -134,6 +134,49 @@ def test_registry_reproduces_golden_state_keys_for_airconditioner():
     )
 
 
+def test_registry_reproduces_golden_state_keys_for_airconditioner_ailp_fac():
+    """AILP_DA-AC-FAC-02011_0000 (issue #319) resolves both ways --
+    modelNum's 'FAC' board token and /oic/d's oic.d.airconditioner type
+    independently agree on the airconditioner registry. Passes
+    device_types through resolve() to exercise that agreement, not because
+    the board token is absent."""
+    from tests.conftest import _load_device
+
+    resources = _load_device("airconditioner_ailp_fac")
+    golden = json.loads((GOLDEN / "airconditioner_ailp_fac.json").read_text())
+    state_keys = _new_state_keys(
+        "airconditioner_ailp_fac", resources, device_types=("oic.wk.d", "oic.d.airconditioner")
+    )
+    assert set(state_keys) == set(golden["state_keys"]), (
+        f"state_keys mismatch:\n"
+        f"  extra:   {sorted(set(state_keys) - set(golden['state_keys']))}\n"
+        f"  missing: {sorted(set(golden['state_keys']) - set(state_keys))}"
+    )
+
+
+def test_registry_reproduces_golden_state_keys_for_oven_tp2x_ks_walloven():
+    """TP2X_DA-KS-WALLOVEN-000002 (issue #300), a steam-oven-class board
+    (water tank, descale, pyro-free) quite unlike the NV7000BS-class board
+    oven.py's write comments were written against. /diagnosis/vs/0 was the
+    dump's only unbound href, now covered via dishwasher.DIAGNOSIS. The
+    board's options[] also has no UpperLamp_ token at all -- confirms
+    LAMP's new exists_fn keeps it from registering a phantom switch here,
+    same fastpreheat/NaturalSteam-class gap issue #183 fixed on its
+    siblings."""
+    from tests.conftest import _load_device
+
+    resources = _load_device("oven_tp2x_ks_walloven")
+    golden = json.loads((GOLDEN / "oven_tp2x_ks_walloven.json").read_text())
+    state_keys = _new_state_keys(
+        "oven_tp2x_ks_walloven", resources, device_types=("oic.wk.d", "oic.d.oven")
+    )
+    assert set(state_keys) == set(golden["state_keys"]), (
+        f"state_keys mismatch:\n"
+        f"  extra:   {sorted(set(state_keys) - set(golden['state_keys']))}\n"
+        f"  missing: {sorted(set(golden['state_keys']) - set(state_keys))}"
+    )
+
+
 def test_registry_reproduces_golden_state_keys_for_dehumidifier():
     """TP1X_DA_AC_DHM_01001_0000 (issue #88, AY18CG7500GED) shares the DA_AC_
     board family with the room-AC models but carries the '_DHM_' token;
@@ -213,6 +256,25 @@ def test_registry_reproduces_golden_state_keys_for_water_purifier_coffee():
     )
 
 
+def test_registry_reproduces_golden_state_keys_for_gas_cooktop_tp2x_ks():
+    """TP2X_DA-KS-COOKTOP-000001 (issue #314) -- routes via
+    for_device_by_resources' DeviceType_/OperationState signature, same as
+    the original cooktop fixture. /alarms/vs/0 and /kidslock/vs/0 were the
+    dump's only unbound hrefs; both are common.UNIVERSAL shapes this
+    registry now picks up individually (common.ALARMS,
+    common.KIDS_LOCK_VS_FALLBACK)."""
+    from tests.conftest import _load_device
+
+    resources = _load_device("gas_cooktop_tp2x_ks")
+    golden = json.loads((GOLDEN / "gas_cooktop_tp2x_ks.json").read_text())
+    state_keys = _new_state_keys("gas_cooktop_tp2x_ks", resources)
+    assert set(state_keys) == set(golden["state_keys"]), (
+        f"state_keys mismatch:\n"
+        f"  extra:   {sorted(set(state_keys) - set(golden['state_keys']))}\n"
+        f"  missing: {sorted(set(golden['state_keys']) - set(state_keys))}"
+    )
+
+
 def test_registry_reproduces_golden_state_keys_for_cooktop():
     from tests.conftest import _load_device
 
@@ -252,6 +314,24 @@ def test_registry_reproduces_golden_state_keys_for_tp1x_ref_21k_eu():
     resources = _load_device("refrigerator_tp1x_ref_21k_eu")
     golden = json.loads((GOLDEN / "refrigerator_tp1x_ref_21k_eu.json").read_text())
     state_keys = _new_state_keys("refrigerator_tp1x_ref_21k_eu", resources)
+    assert set(state_keys) == set(golden["state_keys"]), (
+        f"state_keys mismatch:\n"
+        f"  extra:   {sorted(set(state_keys) - set(golden['state_keys']))}\n"
+        f"  missing: {sorted(set(golden['state_keys']) - set(state_keys))}"
+    )
+
+
+def test_registry_reproduces_golden_state_keys_for_tp1x_ref_21k_airfilter():
+    """TP1X_REF_21K, air-filter-equipped variant (issue #318) -- reports
+    /filter/airdustfilter/vs/0 (internal deodorizing filter), the one
+    unbound href on this dump. Unlike airconditioner.AIR_FILTER's
+    filterUsage/filterCapacity pair, this board's filterUsage is already a
+    0-100 percentage with no filterCapacity to divide by."""
+    from tests.conftest import _load_device
+
+    resources = _load_device("refrigerator_tp1x_ref_21k_airfilter")
+    golden = json.loads((GOLDEN / "refrigerator_tp1x_ref_21k_airfilter.json").read_text())
+    state_keys = _new_state_keys("refrigerator_tp1x_ref_21k_airfilter", resources)
     assert set(state_keys) == set(golden["state_keys"]), (
         f"state_keys mismatch:\n"
         f"  extra:   {sorted(set(state_keys) - set(golden['state_keys']))}\n"
@@ -1095,10 +1175,9 @@ def test_registry_reproduces_golden_state_keys_for_airconditioner_cac():
     0.16.0 when oneUiVersion detection was dropped, since 'CAC' had never
     been added to the modelNum board-token table. Resolved via the new 'CAC'
     token onto the existing airconditioner registry. Not fully covered yet --
-    ten hrefs remain unbound (edge lighting, PM1 filter, stateful light,
-    absence-clean, four sound-settings resources, smart-sensing-cooling, UV
-    LED), all genuinely new to this board generation and out of scope for
-    the routing fix; see test_airconditioner_cac.py for the documented gap."""
+    two hrefs remain unbound (sound-optimization, smart-sensing-cooling),
+    both genuinely new to this board generation and out of scope for the
+    routing fix; see test_airconditioner_cac.py for the documented gap."""
     from tests.conftest import _load_device
 
     resources = _load_device("airconditioner_cac")
