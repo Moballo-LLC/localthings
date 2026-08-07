@@ -670,13 +670,28 @@
         "name": "Temperatuur vriesgedeelte"
       },
       "edge_lighting_mode": {
-        "name": "Randverlichtingsmodus"
+        "name": "Randverlichtingsmodus",
+        "state": {
+          "smart": "Slim",
+          "high": "Hoog",
+          "low": "Laag"
+        }
       },
       "edge_lighting_color": {
-        "name": "Randverlichtingskleur"
+        "name": "Randverlichtingskleur",
+        "state": {
+          "3000k": "3000 K",
+          "4000k": "4000 K",
+          "6500k": "6500 K"
+        }
       },
       "indicator_light_mode": {
-        "name": "Indicatorlampjemodus"
+        "name": "Indicatorlampjemodus",
+        "state": {
+          "smart": "Slim",
+          "high": "Hoog",
+          "low": "Laag"
+        }
       }
     },
     "sensor": {

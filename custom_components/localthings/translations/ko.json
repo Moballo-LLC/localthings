@@ -670,13 +670,28 @@
         "name": "냉동실 온도"
       },
       "edge_lighting_mode": {
-        "name": "엣지 라이팅 모드"
+        "name": "엣지 라이팅 모드",
+        "state": {
+          "smart": "스마트",
+          "high": "높음",
+          "low": "낮음"
+        }
       },
       "edge_lighting_color": {
-        "name": "엣지 라이팅 색상"
+        "name": "엣지 라이팅 색상",
+        "state": {
+          "3000k": "3000 K",
+          "4000k": "4000 K",
+          "6500k": "6500 K"
+        }
       },
       "indicator_light_mode": {
-        "name": "표시등 모드"
+        "name": "표시등 모드",
+        "state": {
+          "smart": "스마트",
+          "high": "높음",
+          "low": "낮음"
+        }
       }
     },
     "sensor": {

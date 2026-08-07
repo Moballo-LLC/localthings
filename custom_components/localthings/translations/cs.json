@@ -670,13 +670,28 @@
         "name": "Teplota mrazicí zóny"
       },
       "edge_lighting_mode": {
-        "name": "Režim okrajového osvětlení"
+        "name": "Režim okrajového osvětlení",
+        "state": {
+          "smart": "Chytrý",
+          "high": "Vysoký",
+          "low": "Nízký"
+        }
       },
       "edge_lighting_color": {
-        "name": "Barva okrajového osvětlení"
+        "name": "Barva okrajového osvětlení",
+        "state": {
+          "3000k": "3000 K",
+          "4000k": "4000 K",
+          "6500k": "6500 K"
+        }
       },
       "indicator_light_mode": {
-        "name": "Režim kontrolky"
+        "name": "Režim kontrolky",
+        "state": {
+          "smart": "Chytrý",
+          "high": "Vysoký",
+          "low": "Nízký"
+        }
       }
     },
     "sensor": {

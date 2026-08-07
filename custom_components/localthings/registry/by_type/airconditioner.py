@@ -54,6 +54,7 @@ REGISTRY = DeviceRegistry(
             air_purifier.SOUND_VOLUME,
             airconditioner.SOUND_MODE,
             airconditioner.ABSENCE_CLEAN,
+            airconditioner.MDS_ABSENCE_CLEAN,
             airconditioner.ENERGY_SAVING,
             airconditioner.EDGE_LIGHTING,
             airconditioner.LIGHT_STATEFUL,

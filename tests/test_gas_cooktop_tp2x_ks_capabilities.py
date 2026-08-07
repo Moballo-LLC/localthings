@@ -45,11 +45,12 @@ def test_alarm_code_and_child_lock_bound():
     assert state["child_lock"] is True
 
 
-def test_advertises_six_burner_slots_only_three_of_which_are_real():
-    """Not a bug to fix -- the board's own /mode/vs/0 options genuinely
-    list six OperationState slots (issue #314); the reporter's physical
-    cooktop only has three. Locks in the current, documented behavior."""
-    bound, resources = _bound()
-    state = flatten(bound, resources)
-    for i in range(6):
-        assert f"burner_{i}_state" in state
+# The reporter's original complaint -- six advertised burner slots when
+# only three are physically present -- isn't tested here beyond what the
+# golden regression test already locks in (burner_0_state..burner_5_state
+# all present). It's expected, not a bug: the registry declares a generous
+# static superset of slots per cooktop.py's own comment, and this board's
+# /mode/vs/0 rep carries no field distinguishing a real slot from an
+# advertised-but-nonexistent one for a test to assert against -- the user
+# disabling the three extra entities is the correct fix, not something the
+# integration can filter automatically.

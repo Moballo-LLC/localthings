@@ -795,13 +795,28 @@
         "name": "Temperatura del congelador"
       },
       "edge_lighting_mode": {
-        "name": "Modo de iluminación perimetral"
+        "name": "Modo de iluminación perimetral",
+        "state": {
+          "smart": "Inteligente",
+          "high": "Alto",
+          "low": "Bajo"
+        }
       },
       "edge_lighting_color": {
-        "name": "Color de iluminación perimetral"
+        "name": "Color de iluminación perimetral",
+        "state": {
+          "3000k": "3000 K",
+          "4000k": "4000 K",
+          "6500k": "6500 K"
+        }
       },
       "indicator_light_mode": {
-        "name": "Modo de luz indicadora"
+        "name": "Modo de luz indicadora",
+        "state": {
+          "smart": "Inteligente",
+          "high": "Alto",
+          "low": "Bajo"
+        }
       }
     },
     "sensor": {

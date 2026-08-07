@@ -1167,13 +1167,11 @@ HUMIDITY = Capability(
     ),
 )
 
-# TP1X_DA-AC-FAC-class additions (issue #319): resources the CAC-class board
-# (issue #191) also reports but left as a documented gap -- this dump gives
-# the live supportedModes/mode shapes those needed.
+# TP1X_DA-AC-FAC-class additions (issue #319): most of these hrefs are the
+# same shapes air_purifier.py already models on the sibling TP1X_DA-AC-AIR
+# board (DISPLAY/SOUND_OUTPUT/SOUND_VOLUME, reused directly in the
+# registry); SOUND_MODE and the two below are genuinely new.
 
-# Same {mode, supportedModes: [On, Off]} shape as air_purifier.DISPLAY on the
-# sibling TP1X_DA-AC-AIR board; shares that capability rather than
-# duplicating it.
 SOUND_MODE = Capability(
     href="/settings/sound/mode/vs/0",
     poll_tier="cold",
@@ -1182,12 +1180,22 @@ SOUND_MODE = Capability(
         # vocabulary, so this shares that catalog entry -- but reads the
         # live supportedModes field rather than laundry's static tuple,
         # since this resource carries one (issue #319).
+        #
+        # exists_fn is required, not optional here: this board's rep never
+        # reports a live 'mode' value ({"supportedModes": [...]} only), and
+        # entity.py's default field-presence gate would otherwise keep the
+        # select from ever registering -- adapter.flatten() (what the
+        # golden/tests read) has no such gate, so it would look bound while
+        # silently absent from HA. Register on supportedModes' presence
+        # instead; current_option reads unknown until the device reports
+        # 'mode' live.
         SelectDesc(
             key="sound_mode",
             field="mode",
             icon="mdi:volume-high",
             entity_category="config",
             options_field="supportedModes",
+            exists_fn=lambda rep, resources: bool(rep.get("supportedModes")),
             write_fn=lambda p, rep, href=None: (
                 ["settings", "sound", "mode", "vs", "0"],
                 {"mode": p},
@@ -1210,6 +1218,30 @@ ABSENCE_CLEAN = Capability(
             value_fn=lambda v: v == "On",
             write_fn=lambda p, rep, href=None: (
                 ["csi", "absenceclean", "vs", "0"],
+                {"mode": "On" if p == "On" else "Off"},
+            ),
+        ),
+    ),
+)
+
+# The CAC-class board (issue #191) reports the identical {mode,
+# supportedModes: [On, Off]} shape under /mds/absenceclean/vs/0 instead --
+# confirmed against that board's own fixture, not guessed. Shares
+# ABSENCE_CLEAN's key/translation: no dump has ever reported both hrefs
+# together, so there's nothing for the two to collide over in
+# adapter.flatten().
+MDS_ABSENCE_CLEAN = Capability(
+    href="/mds/absenceclean/vs/0",
+    poll_tier="cold",
+    entities=(
+        SwitchDesc(
+            key="absence_clean",
+            field="mode",
+            icon="mdi:broom",
+            entity_category="config",
+            value_fn=lambda v: v == "On",
+            write_fn=lambda p, rep, href=None: (
+                ["mds", "absenceclean", "vs", "0"],
                 {"mode": "On" if p == "On" else "Off"},
             ),
         ),
@@ -1415,19 +1447,23 @@ _AC_IGNORED = [
     # registry.subdevices.enumerate_subdevices, hence the entry here rather
     # than a coverage gap.
     "/multidevice/vs/0",
-    # TP1X_DA-AC-FAC-class-only (issue #319), same reasoning as
-    # air_purifier.COVERAGE's duplicate of these hrefs -- scoped here rather
-    # than promoted to the global ignore list since it'd collide with
-    # families that do bind some of these.
+    # TP1X_DA-AC-FAC-class-only (issue #319) -- scoped here rather than
+    # promoted to the global ignore list since it'd collide with families
+    # that do bind some of these. Only /dnd/autosleep/vs/0 has a precedent
+    # (air_purifier.COVERAGE ignores the same href for the same reason);
+    # the rest are new, each with its own reason below.
     "/dnd/autosleep/vs/0",  # every field its inert default; needs a schedule editor
     "/outdoorsharing/vs/0",  # empty on this dump -- outdoor-unit sharing plumbing
     "/lifestyle/survey/vs/0",  # {list: [""]} placeholder, nothing to expose
-    # supportedVoices list only -- no live selection field to read a current
-    # value from, unlike SOUND_MODE/SOUND_OUTPUT above.
+    # supportedVoices carries opaque numeric voice-pack IDs ("100"/"101")
+    # with no live current-selection field and, unlike SOUND_MODE's
+    # self-descriptive mute/tone/voice codes, no confirmed human-readable
+    # meaning to expose them under -- don't guess.
     "/settings/sound/voice/vs/0",
-    # rssi/wifiFrequency (network housekeeping) plus an unconfirmed
-    # 48-slot absenceInfo P/A history blob with no documented meaning --
-    # don't guess what it encodes.
+    # rssi/wifiFrequency (network housekeeping); lastEnergySavingTime and
+    # cleaningStartTime are inert '1900-01-00' placeholders on this dump;
+    # absenceInfo is an unconfirmed 48-slot P/A history blob with no
+    # documented meaning -- don't guess what it encodes.
     "/csi/information/vs/0",
 ]
 

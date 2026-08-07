@@ -1,5 +1,6 @@
 {
   "state_keys": [
+    "absence_clean",
     "absence_power_saving_active",
     "absence_power_saving_mode",
     "air_filter_pm1_status",

@@ -135,9 +135,11 @@ def test_registry_reproduces_golden_state_keys_for_airconditioner():
 
 
 def test_registry_reproduces_golden_state_keys_for_airconditioner_ailp_fac():
-    """AILP_DA-AC-FAC-02011_0000 (issue #319) has no board-token match --
-    resolves purely via /oic/d's oic.d.airconditioner type, exercising the
-    device_types-only path through resolve()."""
+    """AILP_DA-AC-FAC-02011_0000 (issue #319) resolves both ways --
+    modelNum's 'FAC' board token and /oic/d's oic.d.airconditioner type
+    independently agree on the airconditioner registry. Passes
+    device_types through resolve() to exercise that agreement, not because
+    the board token is absent."""
     from tests.conftest import _load_device
 
     resources = _load_device("airconditioner_ailp_fac")
@@ -1173,10 +1175,9 @@ def test_registry_reproduces_golden_state_keys_for_airconditioner_cac():
     0.16.0 when oneUiVersion detection was dropped, since 'CAC' had never
     been added to the modelNum board-token table. Resolved via the new 'CAC'
     token onto the existing airconditioner registry. Not fully covered yet --
-    three hrefs remain unbound (absence-clean, sound-optimization,
-    smart-sensing-cooling), all genuinely new to this board generation and
-    out of scope for the routing fix; see test_airconditioner_cac.py for
-    the documented gap."""
+    two hrefs remain unbound (sound-optimization, smart-sensing-cooling),
+    both genuinely new to this board generation and out of scope for the
+    routing fix; see test_airconditioner_cac.py for the documented gap."""
     from tests.conftest import _load_device
 
     resources = _load_device("airconditioner_cac")

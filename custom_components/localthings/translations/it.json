@@ -670,13 +670,28 @@
         "name": "Temperatura freezer"
       },
       "edge_lighting_mode": {
-        "name": "Modalità illuminazione perimetrale"
+        "name": "Modalità illuminazione perimetrale",
+        "state": {
+          "smart": "Smart",
+          "high": "Alta",
+          "low": "Bassa"
+        }
       },
       "edge_lighting_color": {
-        "name": "Colore illuminazione perimetrale"
+        "name": "Colore illuminazione perimetrale",
+        "state": {
+          "3000k": "3000 K",
+          "4000k": "4000 K",
+          "6500k": "6500 K"
+        }
       },
       "indicator_light_mode": {
-        "name": "Modalità spia luminosa"
+        "name": "Modalità spia luminosa",
+        "state": {
+          "smart": "Smart",
+          "high": "Alta",
+          "low": "Bassa"
+        }
       }
     },
     "sensor": {

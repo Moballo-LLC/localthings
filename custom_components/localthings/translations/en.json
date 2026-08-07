@@ -670,13 +670,28 @@
         "name": "Freezer temperature"
       },
       "edge_lighting_mode": {
-        "name": "Edge lighting mode"
+        "name": "Edge lighting mode",
+        "state": {
+          "smart": "Smart",
+          "high": "High",
+          "low": "Low"
+        }
       },
       "edge_lighting_color": {
-        "name": "Edge lighting color"
+        "name": "Edge lighting color",
+        "state": {
+          "3000k": "3000 K",
+          "4000k": "4000 K",
+          "6500k": "6500 K"
+        }
       },
       "indicator_light_mode": {
-        "name": "Indicator light mode"
+        "name": "Indicator light mode",
+        "state": {
+          "smart": "Smart",
+          "high": "High",
+          "low": "Low"
+        }
       }
     },
     "sensor": {
