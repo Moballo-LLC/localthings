@@ -152,6 +152,29 @@ def test_registry_reproduces_golden_state_keys_for_airconditioner_ailp_fac():
     )
 
 
+def test_registry_reproduces_golden_state_keys_for_oven_tp2x_ks_walloven():
+    """TP2X_DA-KS-WALLOVEN-000002 (issue #300), a steam-oven-class board
+    (water tank, descale, pyro-free) quite unlike the NV7000BS-class board
+    oven.py's write comments were written against. /diagnosis/vs/0 was the
+    dump's only unbound href, now covered via dishwasher.DIAGNOSIS. The
+    board's options[] also has no UpperLamp_ token at all -- confirms
+    LAMP's new exists_fn keeps it from registering a phantom switch here,
+    same fastpreheat/NaturalSteam-class gap issue #183 fixed on its
+    siblings."""
+    from tests.conftest import _load_device
+
+    resources = _load_device("oven_tp2x_ks_walloven")
+    golden = json.loads((GOLDEN / "oven_tp2x_ks_walloven.json").read_text())
+    state_keys = _new_state_keys(
+        "oven_tp2x_ks_walloven", resources, device_types=("oic.wk.d", "oic.d.oven")
+    )
+    assert set(state_keys) == set(golden["state_keys"]), (
+        f"state_keys mismatch:\n"
+        f"  extra:   {sorted(set(state_keys) - set(golden['state_keys']))}\n"
+        f"  missing: {sorted(set(golden['state_keys']) - set(state_keys))}"
+    )
+
+
 def test_registry_reproduces_golden_state_keys_for_dehumidifier():
     """TP1X_DA_AC_DHM_01001_0000 (issue #88, AY18CG7500GED) shares the DA_AC_
     board family with the room-AC models but carries the '_DHM_' token;

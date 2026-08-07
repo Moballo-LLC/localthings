@@ -401,10 +401,17 @@ OVEN_MODE = Capability(
             value_fn=lambda v: v[0] if v else None,
             write_fn=_oven_mode_write,
         ),
+        # No exists_fn on the NV7000BS-class board this was proven against
+        # (UpperLamp_ is always in its options[]) -- but issue #300's
+        # steam-oven-class WALLOVEN board's options[] has no UpperLamp_
+        # token at all, so this was a phantom, always-off, write-does-
+        # nothing switch there. Same fastpreheat/NaturalSteam-class gap
+        # issue #183 already fixed on the other switches below.
         SwitchDesc(
             key="lamp",
             field="x.com.samsung.da.options",
             icon="mdi:track-light",
+            exists_fn=_has_option("UpperLamp"),
             value_fn=lambda opts: _option_value(opts, "UpperLamp") == "On",
             write_fn=_option_switch_write("UpperLamp"),
         ),
