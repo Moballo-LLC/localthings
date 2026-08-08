@@ -120,8 +120,6 @@ def test_fac_bora_wind_strength_codes_fit_the_standard_scale():
             return self.last_resources
 
         def learned_modes(self, href):
-            # Nothing learned in this stub -- issue #327's store lives on
-            # the real coordinator; climate._supported unions it in.
             return []
 
     resources = _load_device("airconditioner_fac_bora")

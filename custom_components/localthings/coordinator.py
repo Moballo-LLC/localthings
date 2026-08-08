@@ -40,7 +40,7 @@ from .const import (
     DTLS_LOCAL_PORT_BASE,
     SUMMARY_INTERVAL_S,
 )
-from .learned import LearnedModes
+from .learned import LEARNABLE, LearnedModes, persist
 from .observe import GRACE_PERIOD_S, MODE_OBSERVE, MODE_POLL, ObserveManager
 from .registry import CAPABILITIES
 from .registry.adapter import flatten
@@ -53,6 +53,7 @@ from .registry.capabilities.common import (
     remote_control_required_for_write,
 )
 from .registry.discovery import BoundEntity
+from .registry.entities import ClimateDesc
 from .registry.identity import (
     DeviceIdentity,
     device_display_name,
@@ -247,6 +248,9 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # supported (issue #327), restored from the entry so one learned
         # last week is still offered today. See learned.py.
         self._learned = LearnedModes(entry.data.get(CONF_LEARNED_MODES))
+        # Narrowed to this device's own climate hrefs once discovery has
+        # run -- see _refresh_learnable_hrefs.
+        self._learnable_hrefs: set[str] = set()
         self._observe.set_on_applied(self._on_rep_applied)
         self._push_pending = False
         self._push_pending_lock = threading.Lock()
@@ -349,13 +353,23 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self._entry.data.get(CONF_LEARNED_MODES):
             self._persist_learned()
 
-    def _canonical_href(self, actual: str) -> str:
-        """`actual` in the namespace the registry -- and so learned.LEARNABLE
-        -- is written against; identity for MAIN's own hrefs (issue #177)."""
-        for subdevice in self.subdevices:
-            if subdevice.owns(actual):
-                return subdevice.to_canonical(actual) or actual
-        return actual
+    def _refresh_learnable_hrefs(self) -> None:
+        """The actual hrefs learning applies to on this device: LEARNABLE's
+        canonical set, narrowed to the ones a climate entity is bound to
+        read back (climate._supported is the only consumer) and translated
+        through that entity's own subdevice (issue #177).
+
+        The href alone isn't a sufficient key here. `/mode/convenient/vs/0`
+        is also declared by the dehumidifier registry (explicitly
+        unmodeled) and the air purifier's (empty), so a global match would
+        persist a code for a resource that family will never offer.
+        """
+        self._learnable_hrefs = {
+            bound.subdevice.to_actual(href)
+            for bound in self.bound
+            if isinstance(bound.desc, ClimateDesc)
+            for href in LEARNABLE
+        }
 
     def _on_rep_applied(self, href: str, rep: dict, source: str) -> None:
         """ObserveManager.set_on_applied hook. Runs on whichever thread
@@ -364,23 +378,22 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         An 'optimistic' rep is the value this integration just wrote, not
         one the device reported, so there is nothing to learn from it."""
-        if source == "optimistic" or not self.learning_enabled:
+        if source == "optimistic" or href not in self._learnable_hrefs:
             return
-        if self._learned.observe(self._canonical_href(href), href, rep):
+        if not self.learning_enabled:
+            return
+        if new := self._learned.observe(href, rep):
             self._log.info(
                 "%s reported mode(s) it does not advertise as supported; "
                 "remembering %s so they stay selectable (issue #327)",
                 href,
-                self._learned.codes(href),
+                new,
             )
             self.hass.add_job(self._persist_learned)
 
     @callback
     def _persist_learned(self) -> None:
-        self.hass.config_entries.async_update_entry(
-            self._entry,
-            data={**self._entry.data, CONF_LEARNED_MODES: self._learned.snapshot()},
-        )
+        persist(self.hass, self._entry, self._learned.snapshot())
 
     def device_info_for(self, subdevice: Subdevice) -> DeviceInfo:
         """DeviceInfo for one logical subdevice on this connection (issue
@@ -802,6 +815,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.device_type_name = device_type_name
         self.bound = bound
         self._unbound_hrefs = unbound
+        self._refresh_learnable_hrefs()
 
         # The entry's stored identity wins; this poll's answer is only
         # adopted when nothing is stored (a legacy migration couldn't

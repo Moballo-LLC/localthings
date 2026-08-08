@@ -78,22 +78,18 @@ class ObserveManager:
         # have notified. Guards only `_notified` mutations + the `wait_for`.
         self._notify_cond = threading.Condition()
         self.fallback_hrefs: set[str] = set()
-        # Called with (href, merged_rep, source) after every accepted
-        # device update, on the applying thread -- see set_on_applied.
         self._on_applied: Callable[[str, dict, str], None] | None = None
         self._refresh_task: ObserveRefreshTask | None = None
         self._refresh_stop: threading.Event | None = None
         self._refresh_thread: threading.Thread | None = None
 
     def set_on_applied(self, callback: Callable[[str, dict, str], None]) -> None:
-        """Register a hook run after every rep this manager accepts, with
-        the merged rep that reached the cache.
+        """Hook run after every accepted rep, on the applying thread.
 
-        Unlike StateCache.set_on_change, which reports only that
-        *something* changed, this hands over the href and rep -- and fires
-        even when the rep matched what was already cached, which the
-        learned-modes store (learned.py) depends on: a device sitting in
-        an unadvertised mode sends an unchanged rep every poll.
+        Unlike StateCache.set_on_change it carries the href and rep, and
+        fires even when the rep is unchanged -- which learned.py needs, a
+        device sitting in an unadvertised mode re-sending the same rep
+        every poll.
         """
         self._on_applied = callback
 

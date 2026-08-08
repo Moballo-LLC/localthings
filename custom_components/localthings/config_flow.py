@@ -46,7 +46,6 @@ from .const import (
     CONF_LEAF_CERT_PEM,
     CONF_LEAF_KEY_PEM,
     CONF_LEARN_MODES,
-    CONF_LEARNED_MODES,
     CONF_MANUFACTURER,
     CONF_MODEL,
     CONF_PORT,
@@ -61,7 +60,8 @@ from .const import (
     PROBE_PORT_RANGE,
     SERVICE_WRITE_RESOURCE,
 )
-from .learned import LearnedModes
+from .learned import persist as learned_persist
+from .learned import stored as learned_stored
 
 _TEXT = TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT))
 _MULTILINE = TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True))
@@ -879,13 +879,12 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
         form; the description lists what's about to be forgotten.
         """
         coord = self._coordinator()
+        # learned.py owns the entry key and the persisted shape, so this
+        # step never parses or writes it itself -- including on an unloaded
+        # entry, where a malformed record would otherwise abort the one
+        # screen that can clear it.
         learned = (
-            coord.learned_snapshot()
-            if coord is not None
-            # Through LearnedModes, not the raw entry value: this step is
-            # the one screen that can clear a malformed persisted record,
-            # so it must not be the one screen that trips over it.
-            else LearnedModes(self.config_entry.data.get(CONF_LEARNED_MODES)).snapshot()
+            coord.learned_snapshot() if coord is not None else learned_stored(self.config_entry)
         )
         codes = sorted({code for codes in learned.values() for code in codes})
 
@@ -893,13 +892,7 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
             if coord is not None:
                 coord.forget_learned_modes()
             else:
-                # Not loaded, so there's no store to clear -- drop the
-                # persisted copy directly, which is all a reload would
-                # restore from anyway.
-                self.hass.config_entries.async_update_entry(
-                    self.config_entry,
-                    data={**self.config_entry.data, CONF_LEARNED_MODES: {}},
-                )
+                learned_persist(self.hass, self.config_entry, {})
             return self.async_create_entry(data=dict(self.config_entry.options))
 
         return self.async_show_form(

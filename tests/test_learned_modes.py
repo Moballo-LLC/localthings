@@ -31,7 +31,7 @@ from custom_components.localthings.learned import (
     LearnedModes,
 )
 from custom_components.localthings.registry.entities import ClimateDesc
-from tests.test_subdevice_discovery import ENTRY_DATA, _discover
+from tests.test_subdevice_discovery import ENTRY_DATA, _climate_bound, _discover
 
 FIXTURE = "airconditioner_tp1x_fac_time_23k"
 CONVENIENT = "/mode/convenient/vs/0"
@@ -50,7 +50,7 @@ QUIET_REP = {MODES_FIELD: "Quiet", SUPPORTED_FIELD: ADVERTISED}
 
 def test_learns_a_current_mode_missing_from_the_supported_list():
     learned = LearnedModes()
-    assert learned.observe(CONVENIENT, CONVENIENT, QUIET_REP) is True
+    assert learned.observe(CONVENIENT, QUIET_REP) == ["Quiet"]
     assert learned.codes(CONVENIENT) == ["Quiet"]
 
 
@@ -58,15 +58,15 @@ def test_relearning_the_same_mode_is_not_a_change():
     """The device reports the same rep on every poll while it sits in the
     mode, so only the first one may report back as something to persist."""
     learned = LearnedModes()
-    assert learned.observe(CONVENIENT, CONVENIENT, QUIET_REP) is True
-    assert learned.observe(CONVENIENT, CONVENIENT, QUIET_REP) is False
+    assert learned.observe(CONVENIENT, QUIET_REP) == ["Quiet"]
+    assert learned.observe(CONVENIENT, QUIET_REP) == []
     assert learned.codes(CONVENIENT) == ["Quiet"]
 
 
 def test_an_advertised_mode_is_never_learned():
     learned = LearnedModes()
     rep = {MODES_FIELD: "Sleep", SUPPORTED_FIELD: ADVERTISED}
-    assert learned.observe(CONVENIENT, CONVENIENT, rep) is False
+    assert learned.observe(CONVENIENT, rep) == []
     assert learned.codes(CONVENIENT) == []
 
 
@@ -75,26 +75,23 @@ def test_a_rep_with_no_supported_list_teaches_nothing():
     exists -- a board publishing none would otherwise get an option list
     invented out of whatever it happened to be doing."""
     learned = LearnedModes()
-    assert learned.observe(CONVENIENT, CONVENIENT, {MODES_FIELD: "Quiet"}) is False
+    assert learned.observe(CONVENIENT, {MODES_FIELD: "Quiet"}) == []
     assert learned.codes(CONVENIENT) == []
 
 
-def test_an_href_outside_the_allowlist_learns_nothing():
+def test_the_allowlist_is_only_the_convenient_href():
     """The guard that keeps this feature off resources whose current value
-    isn't a selectable option: an oven idling in 'NoOperation' reports
-    exactly this shape on /mode/vs/0, and remembering it would put a
-    permanent junk option in that unit's cook-mode select."""
-    learned = LearnedModes()
-    rep = {MODES_FIELD: "NoOperation", SUPPORTED_FIELD: ["Bake", "Broil"]}
-    assert learned.observe("/mode/vs/0", "/mode/vs/0", rep) is False
-    assert learned.snapshot() == {}
+    isn't a selectable option -- an oven idling in 'NoOperation' on
+    /mode/vs/0, whose codes would become permanent junk options in that
+    unit's cook-mode select."""
+    assert set(LEARNABLE) == {CONVENIENT}
 
 
 def test_two_subdevices_learn_separately():
     """Keyed by the actual on-the-wire href (issue #177), so a composite
     appliance's second indoor unit doesn't inherit the first's gap."""
     learned = LearnedModes()
-    learned.observe(CONVENIENT, "/mode/convenient/vs/1", QUIET_REP)
+    learned.observe("/mode/convenient/vs/1", QUIET_REP)
     assert learned.codes("/mode/convenient/vs/1") == ["Quiet"]
     assert learned.codes(CONVENIENT) == []
 
@@ -130,7 +127,9 @@ def test_clear_forgets_everything():
 def test_every_learnable_href_is_one_climate_resolves():
     """climate._supported is the only consumer that unions learned codes
     in today, so an href added to LEARNABLE that climate never reads would
-    be learned, persisted, and never offered anywhere."""
+    be learned, persisted, and never offered anywhere. The coordinator
+    enforces the device half of this (only hrefs a climate entity binds
+    are learnable); this is the static half."""
     from custom_components.localthings.climate import (
         CONVENIENT_HREF,
         MODE_HREF,
@@ -171,8 +170,7 @@ async def _flush(hass: HomeAssistant) -> None:
 async def _climate(hass: HomeAssistant, entry) -> tuple[LocalThingsCoordinator, Any]:
     coordinator = LocalThingsCoordinator(hass, entry)
     await _discover(coordinator, FIXTURE)
-    bound = next(b for b in coordinator.bound if isinstance(b.desc, ClimateDesc))
-    return coordinator, LocalThingsClimate(coordinator, bound)
+    return coordinator, LocalThingsClimate(coordinator, _climate_bound(coordinator, None))
 
 
 async def test_the_fixture_really_does_not_advertise_quiet(hass: HomeAssistant):
@@ -229,6 +227,23 @@ async def test_a_learned_preset_survives_a_restart(hass: HomeAssistant):
     # supportedModes still omits Quiet.
     assert entity.preset_mode == "none"
     assert "quiet" in entity.preset_modes
+
+
+async def test_a_device_with_no_climate_entity_learns_nothing(hass: HomeAssistant):
+    """The href alone isn't a sufficient key: the dehumidifier registry
+    declares this same /mode/convenient/vs/0 explicitly unmodeled (no live
+    current-value field), so a code learned there would be persisted for a
+    resource nothing will ever offer."""
+    entry = _entry(hass)
+    coordinator = LocalThingsCoordinator(hass, entry)
+    await _discover(coordinator, "dehumidifier")
+    assert not any(isinstance(b.desc, ClimateDesc) for b in coordinator.bound)
+
+    coordinator._observe.apply(
+        CONVENIENT, {MODES_FIELD: "Quiet", SUPPORTED_FIELD: ADVERTISED}, source="poll"
+    )
+
+    assert coordinator.learned_snapshot() == {}
 
 
 async def test_an_optimistic_write_teaches_nothing(hass: HomeAssistant):

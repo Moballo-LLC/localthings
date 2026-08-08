@@ -11,47 +11,37 @@ Learning is deliberately not global. A current value that isn't a
 selectable option is common across this corpus -- an oven idling in
 'NoOperation', a fridge's /mode/vs/0 carrying capability tokens like
 'WATERFILTER_DISABLE' -- and remembering one of those permanently would
-put an option in the UI that the device can only reject. LEARNABLE is the
-allowlist of canonical hrefs where a device-reported current mode is known
-to be a genuine selectable option; every consumer of it (climate's
-_supported today) must read its supported list through the coordinator.
+put an option in the UI that the device can only reject. LEARNABLE names
+the canonical hrefs where a reported mode is known to be genuinely
+selectable, and the coordinator narrows it further to the hrefs this
+device actually binds a climate entity to (see _refresh_learnable_hrefs):
+the same href is declared explicitly unmodeled on a dehumidifier and
+empty on an air purifier, and learning for those would persist a code
+nothing ever offers.
+
+This module also owns the entry key the store persists under, so the
+shape lives in exactly one place.
 """
 
 from __future__ import annotations
 
 import threading
-from dataclasses import dataclass
 
+from .const import CONF_LEARNED_MODES
 from .registry.capabilities.airconditioner import HREF_CONVENIENT
 
 MODES_FIELD = "x.com.samsung.da.modes"
 SUPPORTED_FIELD = "x.com.samsung.da.supportedModes"
 
-
-@dataclass(frozen=True)
-class LearnRule:
-    """Which field of a rep names the current mode, and which lists the
-    supported ones. Both are per-href because Samsung spells them
-    differently across resources (`supportedModes` on the vendor `/vs/`
-    ones, bare `modes`/`supportedModes` on a few OCF-shaped ones)."""
-
-    current_field: str
-    supported_field: str
-
-
-LEARNABLE: dict[str, LearnRule] = {
-    # Convenient (preset) mode. Reported by two independent reporters on
-    # ARTIK051_PRAC_20K, one of whom has three identical units where only
-    # the two sharing an outdoor unit hide Quiet -- so this is a firmware
-    # reporting gap, not a real capability difference.
-    HREF_CONVENIENT: LearnRule(MODES_FIELD, SUPPORTED_FIELD),
-}
+# Convenient (preset) mode: firmware omits an active preset (e.g. Quiet)
+# from its own supportedModes -- a reporting gap, not a capability
+# difference (issue #327).
+LEARNABLE: frozenset[str] = frozenset({HREF_CONVENIENT})
 
 
 def _codes(value) -> list[str]:
-    """The mode codes in a `modes`-style field, which is an array on every
-    board seen but a bare string on none -- tolerated anyway, since this
-    runs against whatever the device sends."""
+    """Mode codes from a `modes`-style field, which some firmwares send as
+    a bare string rather than an array."""
     if isinstance(value, str):
         return [value]
     if isinstance(value, (list, tuple)):
@@ -73,11 +63,21 @@ def _coerce(stored) -> dict[str, list[str]]:
     return restored
 
 
+def stored(entry) -> dict[str, list[str]]:
+    """What `entry` has persisted, coerced -- for a reader that can't go
+    through a coordinator (the options flow, on an unloaded entry)."""
+    return _coerce(entry.data.get(CONF_LEARNED_MODES))
+
+
+def persist(hass, entry, codes: dict[str, list[str]]) -> None:
+    """Write `codes` onto the entry. Runs on the event loop, which
+    async_update_entry requires."""
+    hass.config_entries.async_update_entry(entry, data={**entry.data, CONF_LEARNED_MODES: codes})
+
+
 class LearnedModes:
     """Per-device store of learned codes, keyed by actual (on-the-wire)
     href so two subdevices of one composite appliance learn separately.
-    One href carries one LEARNABLE rule, so the rule's fields are how a rep
-    is read, never part of the key.
 
     Mutated from whichever thread applied the update (the DTLS reader for
     an OBSERVE notify, an executor thread for a poll -- see
@@ -89,9 +89,9 @@ class LearnedModes:
         self._lock = threading.Lock()
         self._learned = _coerce(stored)
 
-    def observe(self, canonical_href: str, actual_href: str, rep: dict) -> bool:
-        """Learn from one applied rep; True when something new was learned
-        (i.e. the caller should persist).
+    def observe(self, actual_href: str, rep: dict) -> list[str]:
+        """Learn from one applied rep; returns the codes newly learned, so
+        an empty list means there is nothing to persist.
 
         A rep that carries no supported list teaches nothing: "missing from
         the list" is only meaningful against a list that exists, and
@@ -101,23 +101,19 @@ class LearnedModes:
         alone (issue #27) still sees the supported list from the last full
         poll.
         """
-        rule = LEARNABLE.get(canonical_href)
-        if rule is None:
-            return False
-        supported = _codes(rep.get(rule.supported_field))
+        supported = _codes(rep.get(SUPPORTED_FIELD))
         if not supported:
-            return False
+            return []
         with self._lock:
             known = self._learned.get(actual_href, [])
             new = [
                 code
-                for code in _codes(rep.get(rule.current_field))
+                for code in _codes(rep.get(MODES_FIELD))
                 if code and code not in supported and code not in known
             ]
-            if not new:
-                return False
-            self._learned[actual_href] = [*known, *new]
-        return True
+            if new:
+                self._learned[actual_href] = [*known, *new]
+        return new
 
     def codes(self, actual_href: str) -> list[str]:
         with self._lock:
