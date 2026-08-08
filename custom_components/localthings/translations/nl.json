@@ -1348,16 +1348,22 @@
         "title": "LocalThings-opties",
         "menu_options": {
           "settings": "Apparaatinstellingen",
+          "forget_learned_modes": "Onthouden modi vergeten",
           "debug_write": "Foutopsporing: naar een resource schrijven"
         }
       },
       "settings": {
         "title": "Apparaatinstellingen",
-        "description": "Sommige apparaten accepteren bepaalde schrijfbewerkingen (bijvoorbeeld de standaarddosering van wasmiddel of wasverzachter op een wasmachine), ook als ze melden dat de afstandsbediening is uitgeschakeld. LocalThings blokkeert standaard elke schrijfbewerking met een duidelijke foutmelding wanneer een apparaat meldt dat de afstandsbediening is uitgeschakeld, in plaats van het apparaat de opdracht stilzwijgend te laten weigeren. Schakel deze optie alleen in als je hebt bevestigd dat schrijfbewerkingen op dit apparaat echt werken wanneer de afstandsbediening is uitgeschakeld. Anders verruil je de duidelijke foutmelding voor een stille mislukking.\n\nDe geschatte eindtijd wordt bij elke poll opnieuw berekend op basis van de resterende tijd die het apparaat opgeeft, wat kan afwijken of met een minuut of wat worden bijgesteld tussen updates. Verhoog de minimale wijziging hieronder om de sensor op zijn laatst gerapporteerde waarde te houden totdat de schatting met minstens dat aantal minuten verandert, wat de ruis in geschiedenis/logboek vermindert. Zet op 0 om elke berekende wijziging te rapporteren.",
+        "description": "Sommige apparaten accepteren bepaalde schrijfbewerkingen (bijvoorbeeld de standaarddosering van wasmiddel of wasverzachter op een wasmachine), ook als ze melden dat de afstandsbediening is uitgeschakeld. LocalThings blokkeert standaard elke schrijfbewerking met een duidelijke foutmelding wanneer een apparaat meldt dat de afstandsbediening is uitgeschakeld, in plaats van het apparaat de opdracht stilzwijgend te laten weigeren. Schakel deze optie alleen in als je hebt bevestigd dat schrijfbewerkingen op dit apparaat echt werken wanneer de afstandsbediening is uitgeschakeld. Anders verruil je de duidelijke foutmelding voor een stille mislukking.\n\nDe geschatte eindtijd wordt bij elke poll opnieuw berekend op basis van de resterende tijd die het apparaat opgeeft, wat kan afwijken of met een minuut of wat worden bijgesteld tussen updates. Verhoog de minimale wijziging hieronder om de sensor op zijn laatst gerapporteerde waarde te houden totdat de schatting met minstens dat aantal minuten verandert, wat de ruis in geschiedenis/logboek vermindert. Zet op 0 om elke berekende wijziging te rapporteren.\n\nSommige modellen melden een modus die ze nooit als ondersteund opgeven: bijvoorbeeld een airco die in Quiet staat maar alleen Off/Sleep/Speed aanbiedt. LocalThings onthoudt elke zo waargenomen modus en blijft die aanbieden, zodat hij selecteerbaar blijft zodra het apparaat er minstens één keer in heeft gestaan. Schakel dit uit om alleen aan te bieden wat het apparaat opgeeft; gebruik \"Onthouden modi vergeten\" in het vorige scherm om te wissen wat al is onthouden.",
         "data": {
           "bypass_remote_control_lock": "Schrijfbewerkingen toestaan wanneer afstandsbediening als uitgeschakeld wordt gemeld",
-          "finish_time_hysteresis_minutes": "Geschatte eindtijd -- minimale wijziging (minuten)"
+          "finish_time_hysteresis_minutes": "Geschatte eindtijd -- minimale wijziging (minuten)",
+          "learn_device_modes": "Modi onthouden die het apparaat meldt maar niet als ondersteund opgeeft"
         }
+      },
+      "forget_learned_modes": {
+        "title": "Onthouden modi vergeten",
+        "description": "Nu onthouden: {codes}\n\nDit zijn modi waarin dit apparaat zichzelf meldde zonder ze als ondersteund op te geven; ze worden bewaard zodat ze selecteerbaar blijven. Vergeten is de oplossing als er een onterecht tussen staat: alles wat het apparaat echt opnieuw meldt, wordt gewoon opnieuw onthouden, tenzij je ook \"Modi onthouden die het apparaat meldt maar niet als ondersteund opgeeft\" bij Apparaatinstellingen uitzet."
       },
       "debug_write": {
         "title": "Foutopsporing: naar een resource schrijven",

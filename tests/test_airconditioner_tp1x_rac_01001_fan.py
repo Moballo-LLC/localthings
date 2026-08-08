@@ -48,6 +48,11 @@ class _FakeCoordinator:
     async def async_send_command(self, bound, payload):
         self.commands.append((bound, payload))
 
+    def learned_modes(self, href, field=None):
+        # Nothing learned in this stub -- issue #327's store lives on the
+        # real coordinator; climate._supported unions it in.
+        return []
+
 
 def _climate(resources, coordinator=None):
     info = resources["/information/vs/0"]

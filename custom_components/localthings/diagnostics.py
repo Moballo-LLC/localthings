@@ -128,6 +128,15 @@ async def async_get_config_entry_diagnostics(
         # about the connection rather than one subdevice's state, and
         # nothing polls it after discovery so it would go stale in there.
         "multidevice": redact_resources(coordinator._multidevice),
+        # Modes this unit reported itself in but never advertised (issue
+        # #327). Reported separately from `resources` on purpose: the dump
+        # above stays exactly what the device said, so a triager can still
+        # see the gap these codes were inferred from. Keyed by actual href,
+        # like the store itself.
+        "learned_modes": {
+            "enabled": coordinator.learning_enabled,
+            "codes": coordinator.learned_snapshot(),
+        },
         "integration_version": integration.version,
         "smartthings_local_version": stl_version,
         "observe_mode": coordinator.observe_mode,

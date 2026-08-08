@@ -17,6 +17,8 @@ from custom_components.localthings.const import (
     CONF_CA_KEY_PEM,
     CONF_HOST,
     CONF_LEAF_CERT_PEM,
+    CONF_LEARN_MODES,
+    CONF_LEARNED_MODES,
     CONF_PORT,
     DOMAIN,
 )
@@ -935,7 +937,11 @@ async def test_options_flow_init_shows_menu(hass: HomeAssistant) -> None:
 
     assert result["type"] == FlowResultType.MENU
     assert result["step_id"] == "init"
-    assert set(cast(Iterable[str], result["menu_options"])) == {"settings", "debug_write"}
+    assert set(cast(Iterable[str], result["menu_options"])) == {
+        "settings",
+        "forget_learned_modes",
+        "debug_write",
+    }
 
 
 async def test_options_flow_default_is_off(hass: HomeAssistant) -> None:
@@ -972,6 +978,62 @@ async def test_options_flow_can_enable_bypass(hass: HomeAssistant) -> None:
 
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert entry.options[CONF_BYPASS_REMOTE_CONTROL] is True
+
+
+async def test_learned_modes_option_defaults_to_on(hass: HomeAssistant) -> None:
+    """Issue #327's remembering is on by default -- a device that hides a
+    mode it's in should just work, not need the option found first."""
+    entry = MockConfigEntry(domain=DOMAIN, data=ENTRY_DATA, unique_id=f"localthings_{MOCK_SERIAL}")
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "settings"}
+    )
+
+    data_schema = result["data_schema"]
+    assert data_schema is not None
+    assert data_schema({})[CONF_LEARN_MODES] is True
+
+
+async def test_learned_modes_option_can_be_turned_off(hass: HomeAssistant) -> None:
+    entry = MockConfigEntry(domain=DOMAIN, data=ENTRY_DATA, unique_id=f"localthings_{MOCK_SERIAL}")
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "settings"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={CONF_BYPASS_REMOTE_CONTROL: False, CONF_LEARN_MODES: False},
+    )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert entry.options[CONF_LEARN_MODES] is False
+
+
+async def test_forget_learned_modes_clears_the_entry(hass: HomeAssistant) -> None:
+    """The reset step works on an unloaded entry too, by dropping the
+    persisted copy directly -- that's all a reload would restore from."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={**ENTRY_DATA, CONF_LEARNED_MODES: {"/mode/convenient/vs/0": {"f": ["Quiet"]}}},
+        unique_id=f"localthings_{MOCK_SERIAL}",
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "forget_learned_modes"}
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["description_placeholders"] == {"codes": "Quiet"}
+
+    result = await hass.config_entries.options.async_configure(result["flow_id"], user_input={})
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert entry.data[CONF_LEARNED_MODES] == {}
 
 
 async def test_options_flow_reflects_previously_saved_value(hass: HomeAssistant) -> None:

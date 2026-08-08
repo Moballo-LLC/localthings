@@ -448,7 +448,16 @@ class LocalThingsClimate(LocalThingsEntity, ClimateEntity):
         return bool(self._rep(POWER_HREF).get("value"))
 
     def _supported(self, href: str) -> list[str]:
-        return list(self._rep(href).get(_SUPPORTED_FIELD) or [])
+        """The resource's own supportedModes, plus any code this unit has
+        been seen in but never advertised (issue #327, learned.py).
+
+        Both the option lists (preset_modes, fan_modes, ...) and the write
+        paths resolve codes through here, so a learned code is selectable
+        and writable by virtue of appearing in one list.
+        """
+        supported = list(self._rep(href).get(_SUPPORTED_FIELD) or [])
+        learned = self.coordinator.learned_modes(self._bound.subdevice.to_actual(href))
+        return supported + [code for code in learned if code not in supported]
 
     def _warn_unmapped(self, href: str, code: str) -> None:
         """Log once per (href, code) when a device-reported mode has no
