@@ -38,7 +38,7 @@ CONF_DEVICE_TYPE = "device_type"
 # in the same resource's supportedModes (issue #327). Stored on the entry
 # rather than kept in memory so a mode the device only names while it is
 # active survives a restart -- see learned.py. Shape:
-# {actual_href: {supported_field: [code, ...]}}.
+# {actual_href: [code, ...]}.
 CONF_LEARNED_MODES = "learned_modes"
 
 # Options-flow key: whether learned modes are remembered and offered.

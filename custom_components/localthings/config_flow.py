@@ -61,6 +61,7 @@ from .const import (
     PROBE_PORT_RANGE,
     SERVICE_WRITE_RESOURCE,
 )
+from .learned import LearnedModes
 
 _TEXT = TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT))
 _MULTILINE = TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True))
@@ -881,11 +882,12 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
         learned = (
             coord.learned_snapshot()
             if coord is not None
-            else self.config_entry.data.get(CONF_LEARNED_MODES) or {}
+            # Through LearnedModes, not the raw entry value: this step is
+            # the one screen that can clear a malformed persisted record,
+            # so it must not be the one screen that trips over it.
+            else LearnedModes(self.config_entry.data.get(CONF_LEARNED_MODES)).snapshot()
         )
-        codes = sorted(
-            {code for fields in learned.values() for value in fields.values() for code in value}
-        )
+        codes = sorted({code for codes in learned.values() for code in codes})
 
         if user_input is not None:
             if coord is not None:

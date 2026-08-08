@@ -1013,12 +1013,22 @@ async def test_learned_modes_option_can_be_turned_off(hass: HomeAssistant) -> No
     assert entry.options[CONF_LEARN_MODES] is False
 
 
-async def test_forget_learned_modes_clears_the_entry(hass: HomeAssistant) -> None:
+@pytest.mark.parametrize(
+    ("stored", "listed"),
+    [
+        ({"/mode/convenient/vs/0": ["Quiet"]}, "Quiet"),
+        # Malformed -- nothing writes this shape, but a hand-edited
+        # .storage can hold it, and this step is the one screen that can
+        # clear it, so it must not be the one screen that trips over it.
+        ({"/mode/convenient/vs/0": None}, "(none)"),
+    ],
+)
+async def test_forget_learned_modes_clears_the_entry(hass: HomeAssistant, stored, listed) -> None:
     """The reset step works on an unloaded entry too, by dropping the
     persisted copy directly -- that's all a reload would restore from."""
     entry = MockConfigEntry(
         domain=DOMAIN,
-        data={**ENTRY_DATA, CONF_LEARNED_MODES: {"/mode/convenient/vs/0": {"f": ["Quiet"]}}},
+        data={**ENTRY_DATA, CONF_LEARNED_MODES: stored},
         unique_id=f"localthings_{MOCK_SERIAL}",
     )
     entry.add_to_hass(hass)
@@ -1028,7 +1038,7 @@ async def test_forget_learned_modes_clears_the_entry(hass: HomeAssistant) -> Non
         result["flow_id"], user_input={"next_step_id": "forget_learned_modes"}
     )
     assert result["type"] == FlowResultType.FORM
-    assert result["description_placeholders"] == {"codes": "Quiet"}
+    assert result["description_placeholders"] == {"codes": listed}
 
     result = await hass.config_entries.options.async_configure(result["flow_id"], user_input={})
 

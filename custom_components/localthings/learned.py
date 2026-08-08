@@ -59,28 +59,25 @@ def _codes(value) -> list[str]:
     return []
 
 
-def _coerce(stored) -> dict[str, dict[str, list[str]]]:
+def _coerce(stored) -> dict[str, list[str]]:
     """Restore the persisted map, dropping anything that isn't the shape
     this module writes. It round-trips through the config entry as plain
     JSON, and a hand-edited .storage file shouldn't be able to crash
     setup."""
-    restored: dict[str, dict[str, list[str]]] = {}
     if not isinstance(stored, dict):
-        return restored
-    for href, fields in stored.items():
-        if not isinstance(href, str) or not isinstance(fields, dict):
-            continue
-        for field, codes in fields.items():
-            if not isinstance(field, str):
-                continue
-            if valid := [c for c in _codes(codes) if c]:
-                restored.setdefault(href, {})[field] = valid
+        return {}
+    restored = {}
+    for href, codes in stored.items():
+        if isinstance(href, str) and (valid := [c for c in _codes(codes) if c]):
+            restored[href] = valid
     return restored
 
 
 class LearnedModes:
     """Per-device store of learned codes, keyed by actual (on-the-wire)
     href so two subdevices of one composite appliance learn separately.
+    One href carries one LEARNABLE rule, so the rule's fields are how a rep
+    is read, never part of the key.
 
     Mutated from whichever thread applied the update (the DTLS reader for
     an OBSERVE notify, an executor thread for a poll -- see
@@ -111,7 +108,7 @@ class LearnedModes:
         if not supported:
             return False
         with self._lock:
-            known = self._learned.get(actual_href, {}).get(rule.supported_field, [])
+            known = self._learned.get(actual_href, [])
             new = [
                 code
                 for code in _codes(rep.get(rule.current_field))
@@ -119,24 +116,17 @@ class LearnedModes:
             ]
             if not new:
                 return False
-            self._learned.setdefault(actual_href, {})[rule.supported_field] = [*known, *new]
+            self._learned[actual_href] = [*known, *new]
         return True
 
-    def codes(self, actual_href: str, field: str = SUPPORTED_FIELD) -> list[str]:
+    def codes(self, actual_href: str) -> list[str]:
         with self._lock:
-            return list(self._learned.get(actual_href, {}).get(field, ()))
+            return list(self._learned.get(actual_href, ()))
 
-    def snapshot(self) -> dict[str, dict[str, list[str]]]:
+    def snapshot(self) -> dict[str, list[str]]:
         with self._lock:
-            return {
-                href: {f: list(c) for f, c in fields.items()}
-                for href, fields in self._learned.items()
-            }
+            return {href: list(codes) for href, codes in self._learned.items()}
 
-    def clear(self) -> bool:
-        """Forget everything; True when there was something to forget."""
+    def clear(self) -> None:
         with self._lock:
-            if not self._learned:
-                return False
             self._learned = {}
-        return True

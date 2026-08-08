@@ -40,7 +40,7 @@ from .const import (
     DTLS_LOCAL_PORT_BASE,
     SUMMARY_INTERVAL_S,
 )
-from .learned import SUPPORTED_FIELD, LearnedModes
+from .learned import LearnedModes
 from .observe import GRACE_PERIOD_S, MODE_OBSERVE, MODE_POLL, ObserveManager
 from .registry import CAPABILITIES
 from .registry.adapter import flatten
@@ -322,7 +322,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def learning_enabled(self) -> bool:
         return bool(self._entry.options.get(CONF_LEARN_MODES, DEFAULT_LEARN_MODES))
 
-    def learned_modes(self, actual_href: str, field: str = SUPPORTED_FIELD) -> list[str]:
+    def learned_modes(self, actual_href: str) -> list[str]:
         """Codes learned for `actual_href`, or [] while the option is off.
 
         Gating the read here rather than only the write is what makes the
@@ -331,17 +331,22 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         (the options flow's reset step is for that)."""
         if not self.learning_enabled:
             return []
-        return self._learned.codes(actual_href, field)
+        return self._learned.codes(actual_href)
 
-    def learned_snapshot(self) -> dict[str, dict[str, list[str]]]:
+    def learned_snapshot(self) -> dict[str, list[str]]:
         """Everything learned, option state ignored -- for diagnostics and
         the options flow, both of which need to show what is remembered
         even when it isn't currently being offered."""
         return self._learned.snapshot()
 
     def forget_learned_modes(self) -> None:
-        """Drop every learned mode, here and on the entry."""
-        if self._learned.clear():
+        """Drop every learned mode, here and on the entry.
+
+        Persists even when the in-memory store was already empty: a record
+        _coerce rejected at startup exists only on the entry, and this is
+        the one control that can clear it."""
+        self._learned.clear()
+        if self._entry.data.get(CONF_LEARNED_MODES):
             self._persist_learned()
 
     def _canonical_href(self, actual: str) -> str:

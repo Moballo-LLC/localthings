@@ -104,9 +104,10 @@ def test_two_subdevices_learn_separately():
     [
         None,
         "not-a-dict",
-        {"/mode/convenient/vs/0": "not-a-dict"},
-        {"/mode/convenient/vs/0": {SUPPORTED_FIELD: [""]}},
-        {"/mode/convenient/vs/0": {SUPPORTED_FIELD: [1, 2]}},
+        {"/mode/convenient/vs/0": None},
+        {"/mode/convenient/vs/0": [""]},
+        {"/mode/convenient/vs/0": [1, 2]},
+        {"/mode/convenient/vs/0": {"x.com.samsung.da.supportedModes": ["Quiet"]}},
     ],
 )
 def test_malformed_stored_data_restores_as_empty(stored):
@@ -116,15 +117,14 @@ def test_malformed_stored_data_restores_as_empty(stored):
 
 
 def test_well_formed_stored_data_restores():
-    learned = LearnedModes({CONVENIENT: {SUPPORTED_FIELD: ["Quiet"]}})
+    learned = LearnedModes({CONVENIENT: ["Quiet"]})
     assert learned.codes(CONVENIENT) == ["Quiet"]
 
 
-def test_clear_reports_whether_there_was_anything_to_forget():
-    learned = LearnedModes({CONVENIENT: {SUPPORTED_FIELD: ["Quiet"]}})
-    assert learned.clear() is True
+def test_clear_forgets_everything():
+    learned = LearnedModes({CONVENIENT: ["Quiet"]})
+    learned.clear()
     assert learned.snapshot() == {}
-    assert learned.clear() is False
 
 
 def test_every_learnable_href_is_one_climate_resolves():
@@ -215,14 +215,14 @@ async def test_learning_persists_onto_the_config_entry(hass: HomeAssistant):
     coordinator._observe.apply(CONVENIENT, QUIET_REP, source="poll")
     await _flush(hass)
 
-    assert entry.data[CONF_LEARNED_MODES] == {CONVENIENT: {SUPPORTED_FIELD: ["Quiet"]}}
+    assert entry.data[CONF_LEARNED_MODES] == {CONVENIENT: ["Quiet"]}
 
 
 async def test_a_learned_preset_survives_a_restart(hass: HomeAssistant):
     """The point of persisting: the unit only names Quiet while it is in
     Quiet, so a restart in any other mode would otherwise lose it until
     someone reached for the physical remote again."""
-    entry = _entry(hass, data={CONF_LEARNED_MODES: {CONVENIENT: {SUPPORTED_FIELD: ["Quiet"]}}})
+    entry = _entry(hass, data={CONF_LEARNED_MODES: {CONVENIENT: ["Quiet"]}})
     _, entity = await _climate(hass, entry)
 
     # Nothing applied this run -- the fixture's own rep says Off, and its
@@ -255,7 +255,7 @@ async def test_the_option_turns_off_both_halves(hass: HomeAssistant):
     nothing already learned is offered."""
     entry = _entry(
         hass,
-        data={CONF_LEARNED_MODES: {CONVENIENT: {SUPPORTED_FIELD: ["Smart"]}}},
+        data={CONF_LEARNED_MODES: {CONVENIENT: ["Smart"]}},
         options={CONF_LEARN_MODES: False},
     )
     coordinator, entity = await _climate(hass, entry)
@@ -266,18 +266,32 @@ async def test_the_option_turns_off_both_halves(hass: HomeAssistant):
     assert "quiet" not in entity.preset_modes
     # Kept, not discarded -- turning the option back on restores it, and
     # nothing new was written while it was off.
-    assert coordinator.learned_snapshot() == {CONVENIENT: {SUPPORTED_FIELD: ["Smart"]}}
-    assert entry.data[CONF_LEARNED_MODES] == {CONVENIENT: {SUPPORTED_FIELD: ["Smart"]}}
+    assert coordinator.learned_snapshot() == {CONVENIENT: ["Smart"]}
+    assert entry.data[CONF_LEARNED_MODES] == {CONVENIENT: ["Smart"]}
 
 
 async def test_forgetting_clears_the_store_and_the_entry(hass: HomeAssistant):
-    entry = _entry(hass, data={CONF_LEARNED_MODES: {CONVENIENT: {SUPPORTED_FIELD: ["Quiet"]}}})
+    entry = _entry(hass, data={CONF_LEARNED_MODES: {CONVENIENT: ["Quiet"]}})
     coordinator, entity = await _climate(hass, entry)
 
     coordinator.forget_learned_modes()
     await _flush(hass)
 
     assert "quiet" not in entity.preset_modes
+    assert entry.data[CONF_LEARNED_MODES] == {}
+
+
+async def test_forgetting_clears_a_record_the_store_rejected(hass: HomeAssistant):
+    """A malformed persisted record is dropped on restore, so the store is
+    empty while the entry still holds it. Forget has to reach it anyway --
+    it's the only control that can."""
+    entry = _entry(hass, data={CONF_LEARNED_MODES: {CONVENIENT: None}})
+    coordinator, _ = await _climate(hass, entry)
+    assert coordinator.learned_snapshot() == {}
+
+    coordinator.forget_learned_modes()
+    await _flush(hass)
+
     assert entry.data[CONF_LEARNED_MODES] == {}
 
 
@@ -298,8 +312,5 @@ async def test_diagnostics_report_what_was_learned(
 
     diag = await async_get_config_entry_diagnostics(hass, cast(Any, entry))
 
-    assert diag["learned_modes"] == {
-        "enabled": True,
-        "codes": {CONVENIENT: {SUPPORTED_FIELD: ["Quiet"]}},
-    }
+    assert diag["learned_modes"] == {"enabled": True, "codes": {CONVENIENT: ["Quiet"]}}
     assert diag["resources"][CONVENIENT][SUPPORTED_FIELD] == ADVERTISED
