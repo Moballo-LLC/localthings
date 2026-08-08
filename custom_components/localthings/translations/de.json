@@ -107,7 +107,7 @@
         "name": "Ausgabe läuft"
       },
       "remote_control": {
-        "name": "Smart Control"
+        "name": "Intelligente Steuerung"
       }
     },
     "button": {
@@ -150,7 +150,7 @@
               "motiondirect": "Bewegung direkt",
               "drycomfort": "Trockenkomfort",
               "2step": "2-Stufen",
-              "smart": "Smart",
+              "smart": "Intelligent",
               "nano": "WindFree",
               "sleep": "Schlaf",
               "dlightcool": "d'light Cool"
@@ -172,7 +172,7 @@
             "state": {
               "mid": "Mittel",
               "sleep": "Schlaf",
-              "smart": "Smart",
+              "smart": "Intelligent",
               "max": "Max",
               "windfree": "WindFree"
             }
@@ -702,7 +702,7 @@
       "edge_lighting_mode": {
         "name": "Randbeleuchtungsmodus",
         "state": {
-          "smart": "Smart",
+          "smart": "Intelligent",
           "high": "Hoch",
           "low": "Niedrig"
         }
@@ -718,7 +718,7 @@
       "indicator_light_mode": {
         "name": "Kontrollleuchtenmodus",
         "state": {
-          "smart": "Smart",
+          "smart": "Intelligent",
           "high": "Hoch",
           "low": "Niedrig"
         }

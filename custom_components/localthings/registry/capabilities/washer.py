@@ -54,9 +54,10 @@ from .laundry import (
 #
 # The owner of a Korean Table_02 washer confirmed the names for its newer
 # 69/6A-79/88 course-code family, including Course_69 as AI Wash. Those names
-# live only in the table-scoped translation catalog; codes not confirmed by
-# the owner or device metadata continue to use the safe unknown-code fallback,
-# via washer_cycle_fallback (personal-course names, then 'Unknown (0xNN)').
+# live only in the table-scoped translation catalog; a code not confirmed by
+# the owner or device metadata falls back to washer_cycle_fallback, which
+# surfaces a personal-course name only -- no invented English label for an
+# unrecognized standard code (PR #251 review).
 # ---------------------------------------------------------------------------
 
 # /washer/vs/0 -- wash temperature, spin speed, rinse cycle count.

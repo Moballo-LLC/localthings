@@ -237,7 +237,7 @@ def test_confirmed_course_names_are_localized():
         },
         "nl": {
             "washer": (
-                "AI Wash",
+                "AI wassen",
                 "Wol",
                 "Spijkergoed",
                 "Blouses",
@@ -254,7 +254,7 @@ def test_confirmed_course_names_are_localized():
                 "Katoen",
                 "Spoelen + centrifugeren",
                 "Alleen centrifugeren",
-                "Pet Care",
+                "Huisdierverzorging",
             ),
             "dishwasher": (
                 "Auto",

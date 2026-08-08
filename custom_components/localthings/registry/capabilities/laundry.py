@@ -20,7 +20,6 @@ Door-LED keys use NO `x.com.samsung.da.` prefix -- `setBrightness` /
 `setNightLight` -- preserved exactly as they appear in the OCF resource rep.
 """
 
-import string
 from datetime import UTC, datetime
 from datetime import time as dt_time
 
@@ -358,14 +357,15 @@ def personal_course_labels(resources, href="/wm/personalcourse/vs/0"):
 
 
 def washer_cycle_fallback(value, resources):
-    """Label an untranslated washer course without guessing its meaning."""
+    """Label a personal washer course from its device-provided name.
+
+    No fallback for an unrecognized standard code -- an invented English
+    label would defeat translation (PR #251 review); the raw code displays
+    instead, same as before this function existed.
+    """
     if not isinstance(value, str):
         return None
-    if label := personal_course_labels(resources).get(value.upper()):
-        return label
-    if len(value) == 2 and all(char in string.hexdigits for char in value):
-        return f"Unknown (0x{value.upper()})"
-    return None
+    return personal_course_labels(resources).get(value.upper())
 
 
 def _table_id(resources, table_href):

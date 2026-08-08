@@ -95,7 +95,8 @@ class TestCourseHelpers:
         }
         assert laundry.personal_course_labels(resources) == {}
 
-    def test_washer_cycle_fallback_uses_labels_then_safe_unknown_text(self):
+    def test_washer_cycle_fallback_only_labels_personal_courses(self):
+        """No invented English label for an unrecognized code (PR #251 review)."""
         resources = {
             "/wm/personalcourse/vs/0": {
                 "x.com.samsung.da.courses": ["F1_0106EC868DEC98B7"],
@@ -103,8 +104,8 @@ class TestCourseHelpers:
         }
         expected = bytes.fromhex("EC868DEC98B7").decode("utf-8")
         assert laundry.washer_cycle_fallback("F1", resources) == expected
-        assert laundry.washer_cycle_fallback("69", resources) == "Unknown (0x69)"
-        assert laundry.washer_cycle_fallback("6f", resources) == "Unknown (0x6F)"
+        assert laundry.washer_cycle_fallback("69", resources) is None
+        assert laundry.washer_cycle_fallback("6f", resources) is None
         assert laundry.washer_cycle_fallback("Normal", resources) is None
 
 
