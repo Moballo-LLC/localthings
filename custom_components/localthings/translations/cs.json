@@ -303,7 +303,10 @@
           "a7": "Intenzivní",
           "a8": "Expresní",
           "8c": "Extra tichý",
-          "88": "Samočištění"
+          "88": "Samočištění",
+          "85": "Jemné",
+          "0c": "Express",
+          "0d": "Samočištění"
         }
       },
       "dispense_type": {
@@ -345,7 +348,9 @@
           "4c": "Osvěžení vzduchem",
           "51": "Eko bavlna",
           "53": "AI sušení+",
-          "4e": "Automatické sušení"
+          "4e": "Automatické sušení",
+          "26": "Provětrání",
+          "2a": "Hygienické sušení+"
         }
       },
       "favorite_capacity": {
@@ -652,7 +657,8 @@
           "87": "Stažený program",
           "88": "Péče o domácí mazlíčky",
           "8f": "Intenzivní studená",
-          "96": "Méně mikrovláken"
+          "96": "Méně mikrovláken",
+          "35": "Eko bavlna"
         }
       },
       "washer_dry_level": {

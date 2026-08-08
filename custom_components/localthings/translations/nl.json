@@ -303,7 +303,10 @@
           "a7": "Intensief",
           "a8": "Express",
           "8c": "Extra stil",
-          "88": "Zelfreiniging"
+          "88": "Zelfreiniging",
+          "85": "Delicaat",
+          "0c": "Express",
+          "0d": "Zelfreiniging"
         }
       },
       "dispense_type": {
@@ -345,7 +348,9 @@
           "4c": "Opfrissen",
           "51": "Eco katoen",
           "53": "AI drogen+",
-          "4e": "Zelf drogen"
+          "4e": "Zelf drogen",
+          "26": "Luchtverfrissing",
+          "2a": "Hygiënische verzorging+"
         }
       },
       "favorite_capacity": {
@@ -652,7 +657,8 @@
           "87": "Gedownload",
           "88": "Pet Care",
           "8f": "Intensief koud",
-          "96": "Minder microvezels"
+          "96": "Minder microvezels",
+          "35": "Eco katoen"
         }
       },
       "washer_dry_level": {
