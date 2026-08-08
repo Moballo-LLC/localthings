@@ -28,15 +28,19 @@ from .const import (
     CONF_HOST,
     CONF_LEAF_CERT_PEM,
     CONF_LEAF_KEY_PEM,
+    CONF_LEARN_MODES,
+    CONF_LEARNED_MODES,
     CONF_MANUFACTURER,
     CONF_MODEL,
     CONF_PORT,
     CONF_SERIAL,
+    DEFAULT_LEARN_MODES,
     DEVICE_SUPPORT_ISSUE_URL,
     DOMAIN,
     DTLS_LOCAL_PORT_BASE,
     SUMMARY_INTERVAL_S,
 )
+from .learned import LEARNABLE, LearnedModes, persist
 from .observe import GRACE_PERIOD_S, MODE_OBSERVE, MODE_POLL, ObserveManager
 from .registry import CAPABILITIES
 from .registry.adapter import flatten
@@ -49,6 +53,7 @@ from .registry.capabilities.common import (
     remote_control_required_for_write,
 )
 from .registry.discovery import BoundEntity
+from .registry.entities import ClimateDesc
 from .registry.identity import (
     DeviceIdentity,
     device_display_name,
@@ -239,6 +244,14 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._cache = StateCache(_NoOpDescriptor())
         self._cache.set_on_change(self._on_cache_changed)
         self._observe = ObserveManager(self._cache, logger=self._log)
+        # Modes this device reported itself in but never advertised as
+        # supported (issue #327), restored from the entry so one learned
+        # last week is still offered today. See learned.py.
+        self._learned = LearnedModes(entry.data.get(CONF_LEARNED_MODES))
+        # Narrowed to this device's own climate hrefs once discovery has
+        # run -- see _refresh_learnable_hrefs.
+        self._learnable_hrefs: set[str] = set()
+        self._observe.set_on_applied(self._on_rep_applied)
         self._push_pending = False
         self._push_pending_lock = threading.Lock()
         # Identity is resolved once by the config flow's probe (issue #236).
@@ -304,6 +317,83 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         view = canonical_view(subdevice, self._cache.snapshot(), self.subdevices)
         self._canonical_cache[view_key] = view
         return view
+
+    # ------------------------------------------------------------------
+    # Learned modes (issue #327)
+    # ------------------------------------------------------------------
+
+    @property
+    def learning_enabled(self) -> bool:
+        return bool(self._entry.options.get(CONF_LEARN_MODES, DEFAULT_LEARN_MODES))
+
+    def learned_modes(self, actual_href: str) -> list[str]:
+        """Codes learned for `actual_href`, or [] while the option is off.
+
+        Gating the read here rather than only the write is what makes the
+        option a single switch: turning it off restores stock behavior
+        immediately, without also throwing away what was already learned
+        (the options flow's reset step is for that)."""
+        if not self.learning_enabled:
+            return []
+        return self._learned.codes(actual_href)
+
+    def learned_snapshot(self) -> dict[str, list[str]]:
+        """Everything learned, option state ignored -- for diagnostics and
+        the options flow, both of which need to show what is remembered
+        even when it isn't currently being offered."""
+        return self._learned.snapshot()
+
+    def forget_learned_modes(self) -> None:
+        """Drop every learned mode, here and on the entry.
+
+        Persists even when the in-memory store was already empty: a record
+        _coerce rejected at startup exists only on the entry, and this is
+        the one control that can clear it."""
+        self._learned.clear()
+        if self._entry.data.get(CONF_LEARNED_MODES):
+            self._persist_learned()
+
+    def _refresh_learnable_hrefs(self) -> None:
+        """The actual hrefs learning applies to on this device: LEARNABLE's
+        canonical set, narrowed to the ones a climate entity is bound to
+        read back (climate._supported is the only consumer) and translated
+        through that entity's own subdevice (issue #177).
+
+        The href alone isn't a sufficient key here. `/mode/convenient/vs/0`
+        is also declared by the dehumidifier registry (explicitly
+        unmodeled) and the air purifier's (empty), so a global match would
+        persist a code for a resource that family will never offer.
+        """
+        self._learnable_hrefs = {
+            bound.subdevice.to_actual(href)
+            for bound in self.bound
+            if isinstance(bound.desc, ClimateDesc)
+            for href in LEARNABLE
+        }
+
+    def _on_rep_applied(self, href: str, rep: dict, source: str) -> None:
+        """ObserveManager.set_on_applied hook. Runs on whichever thread
+        applied the update, so the persist goes through hass.add_job the
+        same way _on_cache_changed marshals its state push.
+
+        An 'optimistic' rep is the value this integration just wrote, not
+        one the device reported, so there is nothing to learn from it."""
+        if source == "optimistic" or href not in self._learnable_hrefs:
+            return
+        if not self.learning_enabled:
+            return
+        if new := self._learned.observe(href, rep):
+            self._log.info(
+                "%s reported mode(s) it does not advertise as supported; "
+                "remembering %s so they stay selectable (issue #327)",
+                href,
+                new,
+            )
+            self.hass.add_job(self._persist_learned)
+
+    @callback
+    def _persist_learned(self) -> None:
+        persist(self.hass, self._entry, self._learned.snapshot())
 
     def device_info_for(self, subdevice: Subdevice) -> DeviceInfo:
         """DeviceInfo for one logical subdevice on this connection (issue
@@ -725,6 +815,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.device_type_name = device_type_name
         self.bound = bound
         self._unbound_hrefs = unbound
+        self._refresh_learnable_hrefs()
 
         # The entry's stored identity wins; this poll's answer is only
         # adopted when nothing is stored (a legacy migration couldn't

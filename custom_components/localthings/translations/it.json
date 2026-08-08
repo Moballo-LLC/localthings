@@ -1348,16 +1348,22 @@
         "title": "Opzioni LocalThings",
         "menu_options": {
           "settings": "Impostazioni dispositivo",
+          "forget_learned_modes": "Dimentica le modalità memorizzate",
           "debug_write": "Debug: scrivi su una risorsa"
         }
       },
       "settings": {
         "title": "Impostazioni dispositivo",
-        "description": "Alcuni dispositivi accettano determinate scritture (ad esempio, il dosaggio predefinito di detersivo/ammorbidente su una lavatrice) anche quando segnalano che il controllo remoto è disattivato. Per impostazione predefinita, LocalThings blocca ogni scrittura con un errore chiaro ogni volta che un dispositivo segnala che il controllo remoto è disattivato, invece di consentire al dispositivo di rifiutarla silenziosamente. Abilitare questa opzione solo se si è verificato che le scritture funzionano effettivamente su questo dispositivo con il controllo remoto disattivato; in caso contrario, si sostituirà l'errore chiaro con un errore silenzioso.\n\nIl tempo di fine stimato viene ricalcolato dalla stima del tempo rimanente del dispositivo a ogni interrogazione, che può variare o essere rivista di uno o due minuti tra un aggiornamento e l'altro. Aumentare il valore di variazione minima riportato di seguito per mantenere il sensore al suo ultimo valore segnalato finché la stima non si sposta di almeno quel numero di minuti, riducendo il rumore nella cronologia/registro. Impostarlo su 0 per segnalare ogni variazione calcolata.",
+        "description": "Alcuni dispositivi accettano determinate scritture (ad esempio, il dosaggio predefinito di detersivo/ammorbidente su una lavatrice) anche quando segnalano che il controllo remoto è disattivato. Per impostazione predefinita, LocalThings blocca ogni scrittura con un errore chiaro ogni volta che un dispositivo segnala che il controllo remoto è disattivato, invece di consentire al dispositivo di rifiutarla silenziosamente. Abilitare questa opzione solo se si è verificato che le scritture funzionano effettivamente su questo dispositivo con il controllo remoto disattivato; in caso contrario, si sostituirà l'errore chiaro con un errore silenzioso.\n\nIl tempo di fine stimato viene ricalcolato dalla stima del tempo rimanente del dispositivo a ogni interrogazione, che può variare o essere rivista di uno o due minuti tra un aggiornamento e l'altro. Aumentare il valore di variazione minima riportato di seguito per mantenere il sensore al suo ultimo valore segnalato finché la stima non si sposta di almeno quel numero di minuti, riducendo il rumore nella cronologia/registro. Impostarlo su 0 per segnalare ogni variazione calcolata.\n\nAlcuni modelli segnalano una modalità che non elencano mai tra quelle supportate: ad esempio un condizionatore in modalità Quiet che offre solo Off/Sleep/Speed. LocalThings memorizza ogni modalità di questo tipo che rileva e continua a proporla, così resta selezionabile una volta che il dispositivo vi è stato almeno una volta. Disattivare questa opzione per proporre solo ciò che il dispositivo dichiara; usare «Dimentica le modalità memorizzate» nella schermata precedente per cancellare quanto già memorizzato.",
         "data": {
           "bypass_remote_control_lock": "Consenti la scrittura anche quando il controllo remoto risulta disattivato.",
-          "finish_time_hysteresis_minutes": "Tempo finale stimato - variazione minima (minuti)"
+          "finish_time_hysteresis_minutes": "Tempo finale stimato - variazione minima (minuti)",
+          "learn_device_modes": "Memorizza le modalità che il dispositivo segnala ma non dichiara supportate"
         }
+      },
+      "forget_learned_modes": {
+        "title": "Dimentica le modalità memorizzate",
+        "description": "Attualmente memorizzate: {codes}\n\nSono modalità in cui questo dispositivo si è dichiarato senza elencarle tra quelle supportate; vengono conservate perché restino selezionabili. Dimenticarle è la soluzione se una si è rivelata errata: qualsiasi modalità che il dispositivo segnali davvero di nuovo verrà memorizzata un'altra volta, a meno che non si disattivi anche «Memorizza le modalità che il dispositivo segnala ma non dichiara supportate» nelle impostazioni del dispositivo."
       },
       "debug_write": {
         "title": "Debug: scrivi su una risorsa",

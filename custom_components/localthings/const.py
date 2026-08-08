@@ -34,6 +34,20 @@ CONF_MODEL = "model"
 CONF_MANUFACTURER = "manufacturer"
 CONF_DEVICE_TYPE = "device_type"
 
+# entry.data key: modes this device reported itself in but never advertised
+# in the same resource's supportedModes (issue #327). Stored on the entry
+# rather than kept in memory so a mode the device only names while it is
+# active survives a restart -- see learned.py. Shape:
+# {actual_href: [code, ...]}.
+CONF_LEARNED_MODES = "learned_modes"
+
+# Options-flow key: whether learned modes are remembered and offered.
+# Defaults to on; turning it off stops both halves at once (nothing new is
+# learned, nothing already learned is offered) without discarding what was
+# already remembered -- the options flow's reset step does that.
+CONF_LEARN_MODES = "learn_device_modes"
+DEFAULT_LEARN_MODES = True
+
 # Options-flow key (entry.options, not entry.data): lets a user override
 # the device-wide remote-control-off write block for a specific device
 # (issue #54). Some devices accept certain writes even while reporting

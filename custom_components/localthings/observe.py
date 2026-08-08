@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from collections.abc import Callable
 
 import cbor2
 from smartthings_local.ocf.observe_refresh import ObserveRefreshTask
@@ -77,9 +78,20 @@ class ObserveManager:
         # have notified. Guards only `_notified` mutations + the `wait_for`.
         self._notify_cond = threading.Condition()
         self.fallback_hrefs: set[str] = set()
+        self._on_applied: Callable[[str, dict, str], None] | None = None
         self._refresh_task: ObserveRefreshTask | None = None
         self._refresh_stop: threading.Event | None = None
         self._refresh_thread: threading.Thread | None = None
+
+    def set_on_applied(self, callback: Callable[[str, dict, str], None]) -> None:
+        """Hook run after every accepted rep, on the applying thread.
+
+        Unlike StateCache.set_on_change it carries the href and rep, and
+        fires even when the rep is unchanged -- which learned.py needs, a
+        device sitting in an unadvertised mode re-sending the same rep
+        every poll.
+        """
+        self._on_applied = callback
 
     def mark_write_pending(self, href: str, settle_s: float = DEFAULT_SETTLE_S) -> None:
         with self._settle_lock:
@@ -138,7 +150,14 @@ class ObserveManager:
             return False
         with self._cache_lock:
             merged = {**(self.cache.get(href) or {}), **rep}
-            return self.cache.apply_rep(href, merged, source=source)
+            changed = self.cache.apply_rep(href, merged, source=source)
+        # Outside the cache lock -- the hook takes locks of its own and
+        # never reads the cache back. `source` is passed along rather than
+        # filtered here: which sources are worth acting on is the hook's
+        # policy, not this manager's.
+        if self._on_applied is not None:
+            self._on_applied(href, merged, source)
+        return changed
 
     def on_notification(self, href: str, payload: bytes) -> None:
         """Wired as DtlsCoapSession.on_notification. Runs on the DTLS

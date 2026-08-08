@@ -119,6 +119,9 @@ def test_fac_bora_wind_strength_codes_fit_the_standard_scale():
             # canonical view is just the raw snapshot (issue #177).
             return self.last_resources
 
+        def learned_modes(self, href):
+            return []
+
     resources = _load_device("airconditioner_fac_bora")
     info = resources["/information/vs/0"]
     reg = by_type.for_device_by_model(

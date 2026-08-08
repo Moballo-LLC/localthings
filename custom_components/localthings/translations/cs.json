@@ -1348,16 +1348,22 @@
         "title": "Možnosti LocalThings",
         "menu_options": {
           "settings": "Nastavení zápisu pro dálkové ovládání",
+          "forget_learned_modes": "Zapomenout zapamatované režimy",
           "debug_write": "Ladění: zápis do prostředku"
         }
       },
       "settings": {
         "title": "Nastavení zápisu pro dálkové ovládání",
-        "description": "Některá zařízení přijímají určité zápisy (např. výchozí dávkování pracího prostředku/aviváže v pračce) i když hlásí vypnuté dálkové ovládání. LocalThings ve výchozím nastavení blokuje každý zápis srozumitelnou chybou, kdykoli zařízení hlásí vypnuté dálkové ovládání, místo aby jej zařízení tiše odmítlo. Povolte toto pouze tehdy, pokud jste ověřili, že zápisy na tomto zařízení skutečně fungují i s vypnutým dálkovým ovládáním – jinak tuto srozumitelnou chybu vyměníte za tiché selhání.",
+        "description": "Některá zařízení přijímají určité zápisy (např. výchozí dávkování pracího prostředku/aviváže v pračce) i když hlásí vypnuté dálkové ovládání. LocalThings ve výchozím nastavení blokuje každý zápis srozumitelnou chybou, kdykoli zařízení hlásí vypnuté dálkové ovládání, místo aby jej zařízení tiše odmítlo. Povolte toto pouze tehdy, pokud jste ověřili, že zápisy na tomto zařízení skutečně fungují i s vypnutým dálkovým ovládáním – jinak tuto srozumitelnou chybu vyměníte za tiché selhání.\n\nNěkterá zařízení hlásí režim, který nikdy neuvedou mezi podporovanými – například klimatizace běžící v režimu Quiet, která nabízí pouze Off/Sleep/Speed. LocalThings si každý takový režim zapamatuje a dál jej nabízí, takže zůstane volitelný, jakmile v něm zařízení alespoň jednou bylo. Vypnutím této volby se budou nabízet pouze režimy, které zařízení samo uvádí; k vymazání již zapamatovaných použijte „Zapomenout zapamatované režimy“ v předchozí nabídce.",
         "data": {
           "bypass_remote_control_lock": "Povolit zápis i když je dálkové ovládání hlášeno jako vypnuté",
-          "finish_time_hysteresis_minutes": "Odhadovaný konec -- minimální změna (minuty)"
+          "finish_time_hysteresis_minutes": "Odhadovaný konec -- minimální změna (minuty)",
+          "learn_device_modes": "Pamatovat si režimy, které zařízení hlásí, ale neuvádí jako podporované"
         }
+      },
+      "forget_learned_modes": {
+        "title": "Zapomenout zapamatované režimy",
+        "description": "Aktuálně zapamatováno: {codes}\n\nJde o režimy, ve kterých se toto zařízení samo hlásilo, aniž by je uvádělo mezi podporovanými; jsou uchovány, aby zůstaly volitelné. Zapomenutí je řešením, pokud se některý ukázal jako chybný – cokoli, co zařízení skutečně znovu nahlásí, si systém opět zapamatuje, pokud zároveň nevypnete volbu „Pamatovat si režimy, které zařízení hlásí, ale neuvádí jako podporované“ v nastavení."
       },
       "debug_write": {
         "title": "Ladění: zápis do prostředku",

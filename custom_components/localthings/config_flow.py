@@ -45,11 +45,13 @@ from .const import (
     CONF_HOST,
     CONF_LEAF_CERT_PEM,
     CONF_LEAF_KEY_PEM,
+    CONF_LEARN_MODES,
     CONF_MANUFACTURER,
     CONF_MODEL,
     CONF_PORT,
     CONF_SERIAL,
     DEFAULT_FINISH_TIME_HYSTERESIS_MINUTES,
+    DEFAULT_LEARN_MODES,
     DOMAIN,
     LIVENESS_PROBE_TIMEOUT_S,
     PREFERRED_PROBE_PORTS,
@@ -58,6 +60,8 @@ from .const import (
     PROBE_PORT_RANGE,
     SERVICE_WRITE_RESOURCE,
 )
+from .learned import persist as learned_persist
+from .learned import stored as learned_stored
 
 _TEXT = TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT))
 _MULTILINE = TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True))
@@ -830,7 +834,7 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         return self.async_show_menu(
             step_id="init",
-            menu_options=["settings", "debug_write"],
+            menu_options=["settings", "forget_learned_modes", "debug_write"],
         )
 
     async def async_step_settings(
@@ -854,8 +858,47 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
                             DEFAULT_FINISH_TIME_HYSTERESIS_MINUTES,
                         ),
                     ): _HYSTERESIS_MINUTES,
+                    vol.Required(
+                        CONF_LEARN_MODES,
+                        default=self.config_entry.options.get(
+                            CONF_LEARN_MODES, DEFAULT_LEARN_MODES
+                        ),
+                    ): bool,
                 }
             ),
+        )
+
+    async def async_step_forget_learned_modes(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Confirm-and-clear for the learned-mode store (issue #327).
+
+        The point of learning is that it's permanent, so a code learned
+        from a one-off firmware hiccup would otherwise sit in an option
+        list forever. An empty schema renders as a plain confirmation
+        form; the description lists what's about to be forgotten.
+        """
+        coord = self._coordinator()
+        # learned.py owns the entry key and the persisted shape, so this
+        # step never parses or writes it itself -- including on an unloaded
+        # entry, where a malformed record would otherwise abort the one
+        # screen that can clear it.
+        learned = (
+            coord.learned_snapshot() if coord is not None else learned_stored(self.config_entry)
+        )
+        codes = sorted({code for codes in learned.values() for code in codes})
+
+        if user_input is not None:
+            if coord is not None:
+                coord.forget_learned_modes()
+            else:
+                learned_persist(self.hass, self.config_entry, {})
+            return self.async_create_entry(data=dict(self.config_entry.options))
+
+        return self.async_show_form(
+            step_id="forget_learned_modes",
+            data_schema=vol.Schema({}),
+            description_placeholders={"codes": ", ".join(codes) if codes else "(none)"},
         )
 
     async def async_step_debug_write(

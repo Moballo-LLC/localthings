@@ -1348,16 +1348,22 @@
         "title": "LocalThings options",
         "menu_options": {
           "settings": "Device settings",
+          "forget_learned_modes": "Forget remembered modes",
           "debug_write": "Debug: write to a resource"
         }
       },
       "settings": {
         "title": "Device settings",
-        "description": "Some devices accept certain writes (e.g. default detergent/softener dosing on a washer) even while reporting remote control off. By default, LocalThings blocks every write with a clear error whenever a device reports remote control off, rather than letting the device silently reject it. Only enable this if you've confirmed writes actually work on this device with remote control off -- otherwise you'll trade that clear error for a silent failure.\n\nEstimated finish time is recomputed from the device's remaining-time estimate on every poll, which can drift or get revised by a minute or two between updates. Raise the minimum-change value below to hold the sensor at its last reported value until the estimate moves by at least that many minutes, cutting down on history/logbook noise. Set it to 0 to report every computed change.",
+        "description": "Some devices accept certain writes (e.g. default detergent/softener dosing on a washer) even while reporting remote control off. By default, LocalThings blocks every write with a clear error whenever a device reports remote control off, rather than letting the device silently reject it. Only enable this if you've confirmed writes actually work on this device with remote control off -- otherwise you'll trade that clear error for a silent failure.\n\nEstimated finish time is recomputed from the device's remaining-time estimate on every poll, which can drift or get revised by a minute or two between updates. Raise the minimum-change value below to hold the sensor at its last reported value until the estimate moves by at least that many minutes, cutting down on history/logbook noise. Set it to 0 to report every computed change.\n\nSome models report a mode they never list as supported -- an air conditioner sitting in Quiet that only offers Off/Sleep/Speed, for instance. LocalThings remembers any such mode it sees and keeps offering it, so it stays selectable once the device has been in it at least once. Turn this off to offer only what the device advertises; use \"Forget remembered modes\" on the previous screen to clear what has already been remembered.",
         "data": {
           "bypass_remote_control_lock": "Allow writes even when remote control is reported off",
-          "finish_time_hysteresis_minutes": "Estimated finish -- minimum change (minutes)"
+          "finish_time_hysteresis_minutes": "Estimated finish -- minimum change (minutes)",
+          "learn_device_modes": "Remember modes the device reports but doesn't advertise"
         }
+      },
+      "forget_learned_modes": {
+        "title": "Forget remembered modes",
+        "description": "Currently remembered: {codes}\n\nThese are modes this device reported itself in without listing them as supported, kept so they stay selectable. Forgetting them is the fix if one turned out to be bogus -- anything the device genuinely reports again will simply be remembered again, unless you also turn off \"Remember modes the device reports but doesn't advertise\" in Device settings."
       },
       "debug_write": {
         "title": "Debug: write to a resource",

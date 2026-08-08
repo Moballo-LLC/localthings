@@ -64,6 +64,9 @@ class _FakeCoordinator:
     async def async_send_command(self, bound, payload):
         self.commands.append((bound, payload))
 
+    def learned_modes(self, href):
+        return []
+
 
 def _discover(resources, registry=airconditioner.REGISTRY):
     unbound = []
