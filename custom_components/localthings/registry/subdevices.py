@@ -37,6 +37,7 @@ appliance's own bookkeeping, not evidence of a second indoor unit -- see
 from __future__ import annotations
 
 import re
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
@@ -221,12 +222,12 @@ def _seed_href(path_segs: tuple[str, ...]) -> str:
     return "/" + "/".join(path_segs)
 
 
-def _get_raw(sess, path_segs: tuple[str, ...]):
+def _get_raw(sess, path_segs: tuple[str, ...], timeout: float = 10.0):
     """GET `path_segs` and CBOR-decode the payload, or None on any
     missing/malformed response (a 4.04, a timeout, an empty payload) --
     shared tolerated-absence posture for both callers below."""
     try:
-        code, pl = sess.get(list(path_segs), timeout=10.0)
+        code, pl = sess.get(list(path_segs), timeout=timeout)
         if code == 0x45 and pl:
             return cbor2.loads(pl)
     except Exception:
@@ -234,19 +235,25 @@ def _get_raw(sess, path_segs: tuple[str, ...]):
     return None
 
 
-def _get_batch(sess, path_segs: tuple[str, ...]) -> dict[str, dict]:
+def _get_batch(
+    sess, path_segs: tuple[str, ...], timeout: float = 10.0,
+) -> dict[str, dict]:
     """GET a Samsung Collection resource and parse it the same way
     /device/0 itself is parsed (parse_device0_batch): a [devcol-rep,
     {href, rep}, ...] CBOR list, not a bare Property map."""
-    body = _get_raw(sess, path_segs)
+    body = _get_raw(sess, path_segs, timeout)
     return parse_device0_batch(body) if isinstance(body, list) else {}
 
 
-def _get_property(sess, path_segs: tuple[str, ...]) -> dict:
+def _get_property(
+    sess, path_segs: tuple[str, ...], timeout: float = 10.0,
+) -> dict:
     """GET a plain OCF Property-map resource (a bare dict, not a Collection
-    batch). Used for `/multidevice/vs/0`: listed in `/oic/res` but absent
-    from `/device/0`'s batch, so it needs its own RETRIEVE."""
-    body = _get_raw(sess, path_segs)
+    batch). Used for `/multidevice/vs/0` (issue #177 follow-up): listed in
+    `/oic/res` on the Pattern A reporter's board but absent from
+    `/device/0`'s batch, so it needs its own RETRIEVE, and it answers a
+    single Property map, not a [devcol-rep, ...] list."""
+    body = _get_raw(sess, path_segs, timeout)
     return body if isinstance(body, dict) else {}
 
 
@@ -255,6 +262,11 @@ def enumerate_subdevices(
     resources: dict[str, dict],
     oic_res_links,
     probe_log: Callable[[str, bool], None] | None = None,
+    *,
+    preferred_hrefs: Sequence[str] = (),
+    time_budget: float | None = None,
+    collection_timeout: float = 10.0,
+    property_timeout: float = 10.0,
 ) -> tuple[list[Subdevice], dict[str, dict]]:
     """Discover every sibling indoor subdevice reachable over `sess`'s
     connection.
@@ -269,6 +281,13 @@ def enumerate_subdevices(
     or not it answered, so diagnostics can tell "checked, nothing there"
     apart from "never checked".
 
+    `preferred_hrefs` only changes the order of the flat Property fallback;
+    it never filters the device's resource surface. When `time_budget` is
+    supplied, probes are bounded by one shared monotonic deadline and this
+    returns every candidate/resource confirmed before it. This makes first
+    setup finite even when firmware silently drops unknown paths instead of
+    returning 4.04.
+
     Every candidate whose seed answers with a non-empty batch is returned
     here -- this function can't tell a real sibling from an unused
     SmartThings slot that answers the same shape; that requires
@@ -282,6 +301,33 @@ def enumerate_subdevices(
     # casing, and probing it twice would materialize the same physical
     # subdevice as two Subdevice candidates.
     probed_ids: set[str] = set()
+    deadline = (
+        time.monotonic() + max(0.0, time_budget)
+        if time_budget is not None else None
+    )
+    budget_exhausted = False
+
+    def _next_timeout(maximum: float) -> float | None:
+        """Clamp one probe to the remaining enumeration wall-clock budget."""
+        nonlocal budget_exhausted
+        if deadline is None:
+            return maximum
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            budget_exhausted = True
+            return None
+        return min(maximum, remaining)
+
+    def _flat_probe_hrefs():
+        """Preferred live-state hrefs first, then every remaining master href."""
+        seen = set()
+        for href in preferred_hrefs:
+            if href in resources and href not in seen:
+                seen.add(href)
+                yield href
+        for href in sorted(resources):
+            if href not in seen:
+                yield href
 
     def _probed(seed_href: str, batch: dict) -> None:
         if probe_log is not None:
@@ -296,7 +342,10 @@ def enumerate_subdevices(
             return
         probed_ids.add(sub_id.lower())
         seed = (sub_id, "device", "0")
-        batch = _get_batch(sess, seed)
+        timeout = _next_timeout(collection_timeout)
+        if timeout is None:
+            return
+        batch = _get_batch(sess, seed, timeout)
         _probed(_seed_href(seed), batch)
         if batch:
             subdevice = Subdevice(kind="prefixed", key=sub_id, seed_path=seed)
@@ -307,10 +356,12 @@ def enumerate_subdevices(
         # doesn't always expose its own `/<uuid>/device/0` Collection. With
         # no Collection to seed from and no per-UUID entry in /oic/res to
         # enumerate hrefs from, the only signal left is that a composite
-        # device's siblings share the master's own resource surface -- so
-        # probe every href the master answered this cycle, individually,
-        # under this UUID's prefix, and keep whichever answer. Each is a
-        # plain tolerated-404 RETRIEVE.
+        # device's siblings are the same physical board family as the
+        # subdevice this config entry already talks to -- so probe every
+        # href the master itself answered this cycle, individually, under
+        # this UUID's prefix, and keep whichever ones answer before the
+        # optional enumeration deadline. Each is a plain tolerated-404
+        # RETRIEVE, same posture as every other probe in this function.
         #
         # Known gap: a firmware that echoes the master's own state back
         # under an unrecognized prefix, rather than 4.04ing, would pass
@@ -321,12 +372,15 @@ def enumerate_subdevices(
         # reps against the master's own values for the same hrefs.
         flat_hrefs = []
         first = True
-        for href in sorted(resources):
+        for href in _flat_probe_hrefs():
             if not first:
                 sess.pace()
             first = False
+            timeout = _next_timeout(property_timeout)
+            if timeout is None:
+                break
             actual = f"/{sub_id}{href}"
-            rep = _get_property(sess, tuple(actual.strip("/").split("/")))
+            rep = _get_property(sess, tuple(actual.strip("/").split("/")), timeout)
             _probed(actual, rep)
             if rep:
                 flat_hrefs.append(href)
@@ -353,6 +407,8 @@ def enumerate_subdevices(
     listed = sorted(i for i in ids if isinstance(i, str) and i)
     for sub_id in listed:
         _probe_prefixed(sub_id)
+        if budget_exhausted:
+            break
 
     # --- Pattern C: UUID prefix advertised only via /oic/res ----------------
     # (AWM-WW-AID-26-ONEBODY washer+dryer combo, issue #241.) No
@@ -374,6 +430,8 @@ def enumerate_subdevices(
     )
     for sub_id in linked:
         _probe_prefixed(sub_id)
+        if budget_exhausted:
+            break
 
     # --- Pattern A: indexed siblings (ARTIK051_DONGLE_FAC_18K) --------------
     indices = sorted(
@@ -390,8 +448,11 @@ def enumerate_subdevices(
         # this replaces from identity.py.
         indices = list(_SPECULATIVE_DEVICE_INDICES)
     for n in indices:
+        timeout = _next_timeout(collection_timeout)
+        if timeout is None:
+            break
         seed = ("device", str(n))
-        batch = _get_batch(sess, seed)
+        batch = _get_batch(sess, seed, timeout)
         _probed(_seed_href(seed), batch)
         if not batch:
             continue
@@ -399,18 +460,26 @@ def enumerate_subdevices(
         fetched.update(batch)  # already real /x/<n> hrefs, no normalization needed
         subdevices.append(subdevice)
 
-    # /multidevice/vs/0: listed in /oic/res on some boards but never in
-    # /device/0's batch, so it needs its own RETRIEVE. A plain corroborating
-    # count (numofsubdevice), confirmed read-only -- captured for
-    # diagnostics only, folded into the merged resources dict like any
-    # other href (see airconditioner._AC_IGNORED). Not a gate:
-    # discover_partitioned's entity-level liveness check decides
-    # materialization without it.
+    # /multidevice/vs/0 (issue #177 follow-up): the Pattern A reporter's
+    # board lists it in /oic/res but it never appears in /device/0's batch,
+    # so it needs its own RETRIEVE. It's a plain corroborating count
+    # (x.com.samsung.da.numofsubdevice), confirmed read-only (a write
+    # attempt returned CoAP 4.00) -- captured for diagnostics only, folded
+    # into the merged resources dict like any other href (see
+    # airconditioner._AC_IGNORED, which is what keeps it from surfacing as
+    # an unbound-href gap). NOT a gate: discover_partitioned's entity-level
+    # liveness check decides materialization correctly without it, and only
+    # this one board family is known to expose it at all. Whether it agrees
+    # with the number of subdevices actually materialized is the
+    # coordinator's call to log (it owns the logger; this module doesn't),
+    # not this function's.
     multidevice_seed = ("multidevice", "vs", "0")
-    multidevice = _get_property(sess, multidevice_seed)
-    _probed(_seed_href(multidevice_seed), multidevice)
-    if multidevice:
-        fetched["/multidevice/vs/0"] = multidevice
+    timeout = _next_timeout(property_timeout)
+    if timeout is not None:
+        multidevice = _get_property(sess, multidevice_seed, timeout)
+        _probed(_seed_href(multidevice_seed), multidevice)
+        if multidevice:
+            fetched["/multidevice/vs/0"] = multidevice
 
     return subdevices, fetched
 

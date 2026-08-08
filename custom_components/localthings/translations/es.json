@@ -446,7 +446,16 @@
           "07": "Prelavado intenso",
           "8d": "Ollas y sartenes",
           "8e": "Plástico",
-          "8f": "Cuidado del bebé"
+          "8f": "Cuidado del bebé",
+          "82": "Automático",
+          "8a": "Normal",
+          "a7": "Intenso",
+          "a8": "Express",
+          "8c": "Extra silencioso",
+          "88": "Autolimpieza",
+          "85": "Delicado",
+          "0c": "Express",
+          "0d": "Autolimpieza"
         }
       },
       "dispense_type": {
@@ -488,7 +497,9 @@
           "4c": "Renovación de aire",
           "51": "Eco algodón",
           "53": "Secado IA+",
-          "4e": "Autosecado"
+          "4e": "Autosecado",
+          "26": "Aireación",
+          "2a": "Cuidado higiénico+"
         }
       },
       "favorite_capacity": {
@@ -777,7 +788,26 @@
           "86": "Lavado profundo",
           "87": "Descarga de Programas",
           "8f": "Lavado en frío",
-          "96": "Menos microfibras"
+          "96": "Menos microfibras",
+          "69": "Lavado IA",
+          "6a": "Lana",
+          "6b": "Denim",
+          "6c": "Blusas",
+          "6d": "Delicados",
+          "6e": "Ropa deportiva",
+          "6f": "Ropa de cama",
+          "70": "Toallas",
+          "71": "Lavado rápido",
+          "72": "Camisas",
+          "73": "Desinfección",
+          "74": "Limpieza de Tambor",
+          "75": "Exterior",
+          "76": "Cuidado del bebé",
+          "77": "Algodón",
+          "78": "Aclarar + Centrifugar",
+          "79": "Solo centrifugar",
+          "88": "Cuidado de mascotas",
+          "35": "Algodón E"
         }
       },
       "washer_dry_level": {
