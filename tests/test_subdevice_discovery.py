@@ -277,6 +277,7 @@ async def test_fac_bora_2in1_unique_ids_include_subdevice_prefix(hass: HomeAssis
 # capture instead of the synthetic sessions test_subdevices.py uses.
 # ---------------------------------------------------------------------------
 
+
 async def test_flat_probe_priority_puts_live_climate_state_before_cold_metrics(
     hass: HomeAssistant,
 ):

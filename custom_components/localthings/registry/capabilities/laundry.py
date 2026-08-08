@@ -20,9 +20,9 @@ Door-LED keys use NO `x.com.samsung.da.` prefix -- `setBrightness` /
 `setNightLight` -- preserved exactly as they appear in the OCF resource rep.
 """
 
+import string
 from datetime import UTC, datetime
 from datetime import time as dt_time
-import string
 
 from ...catalog import has_entity_translation
 from ..capability import Capability
@@ -324,7 +324,7 @@ def cycle_write(p, rep, href=None):
     }
 
 
-def personal_course_labels(resources, href='/wm/personalcourse/vs/0'):
+def personal_course_labels(resources, href="/wm/personalcourse/vs/0"):
     """Return device-provided personal course names keyed by course code.
 
     Populated entries use a small TLV payload. The leading field is
@@ -335,10 +335,10 @@ def personal_course_labels(resources, href='/wm/personalcourse/vs/0'):
     """
     rep = resources.get(href) or {}
     labels = {}
-    for entry in rep.get('x.com.samsung.da.courses') or []:
-        if not isinstance(entry, str) or '_' not in entry:
+    for entry in rep.get("x.com.samsung.da.courses") or []:
+        if not isinstance(entry, str) or "_" not in entry:
             continue
-        code, encoded = entry.split('_', 1)
+        code, encoded = entry.split("_", 1)
         try:
             payload = bytes.fromhex(encoded)
         except ValueError:
@@ -349,7 +349,7 @@ def personal_course_labels(resources, href='/wm/personalcourse/vs/0'):
         if name_length == 0 or len(payload) < 2 + name_length:
             continue
         try:
-            name = payload[2:2 + name_length].decode('utf-8')
+            name = payload[2 : 2 + name_length].decode("utf-8")
         except UnicodeDecodeError:
             continue
         if name.strip() and name.isprintable():
@@ -364,7 +364,7 @@ def washer_cycle_fallback(value, resources):
     if label := personal_course_labels(resources).get(value.upper()):
         return label
     if len(value) == 2 and all(char in string.hexdigits for char in value):
-        return f'Unknown (0x{value.upper()})'
+        return f"Unknown (0x{value.upper()})"
     return None
 
 

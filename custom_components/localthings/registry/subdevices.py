@@ -236,7 +236,9 @@ def _get_raw(sess, path_segs: tuple[str, ...], timeout: float = 10.0):
 
 
 def _get_batch(
-    sess, path_segs: tuple[str, ...], timeout: float = 10.0,
+    sess,
+    path_segs: tuple[str, ...],
+    timeout: float = 10.0,
 ) -> dict[str, dict]:
     """GET a Samsung Collection resource and parse it the same way
     /device/0 itself is parsed (parse_device0_batch): a [devcol-rep,
@@ -246,7 +248,9 @@ def _get_batch(
 
 
 def _get_property(
-    sess, path_segs: tuple[str, ...], timeout: float = 10.0,
+    sess,
+    path_segs: tuple[str, ...],
+    timeout: float = 10.0,
 ) -> dict:
     """GET a plain OCF Property-map resource (a bare dict, not a Collection
     batch). Used for `/multidevice/vs/0` (issue #177 follow-up): listed in
@@ -301,10 +305,7 @@ def enumerate_subdevices(
     # casing, and probing it twice would materialize the same physical
     # subdevice as two Subdevice candidates.
     probed_ids: set[str] = set()
-    deadline = (
-        time.monotonic() + max(0.0, time_budget)
-        if time_budget is not None else None
-    )
+    deadline = time.monotonic() + max(0.0, time_budget) if time_budget is not None else None
     budget_exhausted = False
 
     def _next_timeout(maximum: float) -> float | None:

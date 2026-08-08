@@ -360,6 +360,7 @@ def test_enumeration_budget_bounds_silent_prefixed_fallback_and_uses_priority(
     live-state href is then attempted first, and the last Property probe is
     clamped to exactly the time left in the shared enumeration budget.
     """
+
     class Clock:
         now = 0.0
 
@@ -381,20 +382,20 @@ def test_enumeration_budget_bounds_silent_prefixed_fallback_and_uses_priority(
 
     clock = Clock()
     session = SilentSession(clock)
-    monkeypatch.setattr(subdevices_module.time, 'monotonic', clock.monotonic)
+    monkeypatch.setattr(subdevices_module.time, "monotonic", clock.monotonic)
     resources = {
-        '/subdevices/vs/0': {
-            'x.com.samsung.da.subdeviceIdList': [_UUID],
+        "/subdevices/vs/0": {
+            "x.com.samsung.da.subdeviceIdList": [_UUID],
         },
-        '/power/vs/0': {'power': 'On'},
-        '/mode/vs/0': {'mode': 'Cool'},
+        "/power/vs/0": {"power": "On"},
+        "/mode/vs/0": {"mode": "Cool"},
     }
 
     found, extra = enumerate_subdevices(
         session,
         resources,
         oic_res_links=[],
-        preferred_hrefs=('/mode/vs/0',),
+        preferred_hrefs=("/mode/vs/0",),
         time_budget=7.0,
         collection_timeout=4.0,
         property_timeout=2.0,
@@ -404,9 +405,9 @@ def test_enumeration_budget_bounds_silent_prefixed_fallback_and_uses_priority(
     assert extra == {}
     assert clock.now == 7.0
     assert session.calls == [
-        ((_UUID, 'device', '0'), 4.0),
-        ((_UUID, 'mode', 'vs', '0'), 2.0),
-        ((_UUID, 'power', 'vs', '0'), 1.0),
+        ((_UUID, "device", "0"), 4.0),
+        ((_UUID, "mode", "vs", "0"), 2.0),
+        ((_UUID, "power", "vs", "0"), 1.0),
     ]
 
 
@@ -414,6 +415,7 @@ def test_enumeration_keeps_preferred_response_found_before_budget_expires(
     monkeypatch,
 ):
     """A useful early response survives later silent probes hitting the cap."""
+
     class Clock:
         now = 0.0
 
@@ -425,8 +427,8 @@ def test_enumeration_keeps_preferred_response_found_before_budget_expires(
             self.clock = clock
 
         def get(self, path, timeout=10.0):
-            if tuple(path) == (_UUID, 'mode', 'vs', '0'):
-                return 0x45, cbor2.dumps({'mode': 'Cool'})
+            if tuple(path) == (_UUID, "mode", "vs", "0"):
+                return 0x45, cbor2.dumps({"mode": "Cool"})
             self.clock.now += timeout
             raise TimeoutError
 
@@ -434,30 +436,30 @@ def test_enumeration_keeps_preferred_response_found_before_budget_expires(
             pass
 
     clock = Clock()
-    monkeypatch.setattr(subdevices_module.time, 'monotonic', clock.monotonic)
+    monkeypatch.setattr(subdevices_module.time, "monotonic", clock.monotonic)
     resources = {
-        '/subdevices/vs/0': {
-            'x.com.samsung.da.subdeviceIdList': [_UUID],
+        "/subdevices/vs/0": {
+            "x.com.samsung.da.subdeviceIdList": [_UUID],
         },
-        '/power/vs/0': {'power': 'On'},
-        '/mode/vs/0': {'mode': 'Cool'},
+        "/power/vs/0": {"power": "On"},
+        "/mode/vs/0": {"mode": "Cool"},
     }
 
     found, extra = enumerate_subdevices(
         PartlyResponsiveSession(clock),
         resources,
         oic_res_links=[],
-        preferred_hrefs=('/mode/vs/0',),
+        preferred_hrefs=("/mode/vs/0",),
         time_budget=7.0,
         collection_timeout=4.0,
         property_timeout=2.0,
     )
 
     assert [(subdevice.kind, subdevice.key) for subdevice in found] == [
-        ('prefixed', _UUID),
+        ("prefixed", _UUID),
     ]
-    assert found[0].flat_hrefs == ('/mode/vs/0',)
-    assert extra == {f'/{_UUID}/mode/vs/0': {'mode': 'Cool'}}
+    assert found[0].flat_hrefs == ("/mode/vs/0",)
+    assert extra == {f"/{_UUID}/mode/vs/0": {"mode": "Cool"}}
     assert clock.now == 7.0
 
 

@@ -125,10 +125,26 @@ class TestWasherCourse:
         from custom_components.localthings.catalog import translated_states
 
         confirmed = {
-            '69', '6a', '6b', '6c', '6d', '6e', '6f', '70', '71',
-            '72', '73', '74', '75', '76', '77', '78', '79', '88',
+            "69",
+            "6a",
+            "6b",
+            "6c",
+            "6d",
+            "6e",
+            "6f",
+            "70",
+            "71",
+            "72",
+            "73",
+            "74",
+            "75",
+            "76",
+            "77",
+            "78",
+            "79",
+            "88",
         }
-        assert confirmed <= translated_states('select', 'washer_cycle_table_02')
+        assert confirmed <= translated_states("select", "washer_cycle_table_02")
 
     def test_missing_course_option_returns_none(self):
         desc = next(e for e in washer.WASHER_COURSE.entities if e.key == "cycle")

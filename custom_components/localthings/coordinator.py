@@ -658,7 +658,8 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     # ------------------------------------------------------------------
 
     def _subdevice_probe_priority(
-        self, resources: dict[str, dict],
+        self,
+        resources: dict[str, dict],
     ) -> tuple[str, ...]:
         """Return live primary-entity hrefs in hot/warm-first order.
 
@@ -676,23 +677,17 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if registry is None:
             return ()
 
-        tier_rank = {'hot': 0, 'warm': 1, 'cold': 2}
+        tier_rank = {"hot": 0, "warm": 1, "cold": 2}
         ranked = []
         for order, href in enumerate(resources):
             primary_caps = [
                 capability
                 for capability in registry.capabilities.get(href, ())
-                if any(
-                    desc.entity_category is None
-                    for desc in capability.entities
-                )
+                if any(desc.entity_category is None for desc in capability.entities)
             ]
             if not primary_caps:
                 continue
-            rank = min(
-                tier_rank.get(capability.poll_tier, 2)
-                for capability in primary_caps
-            )
+            rank = min(tier_rank.get(capability.poll_tier, 2) for capability in primary_caps)
             ranked.append((rank, order, href))
         return tuple(href for _, _, href in sorted(ranked))
 
