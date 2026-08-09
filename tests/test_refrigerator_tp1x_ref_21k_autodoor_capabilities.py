@@ -10,6 +10,7 @@ from custom_components.localthings.registry.adapter import flatten
 from custom_components.localthings.registry.by_type import for_device_by_model
 from custom_components.localthings.registry.capabilities import fridge
 from custom_components.localthings.registry.discovery import discover
+from custom_components.localthings.registry.entities import SelectDesc
 from tests.conftest import _load_device
 
 FIXTURE = "refrigerator_tp1x_ref_21k_autodoor"
@@ -51,7 +52,11 @@ def test_auto_door_voice_control_reads_status_lock():
 
 
 def test_auto_door_timer_reads_its_own_options():
-    desc = next(e for e in fridge.AUTO_DOOR_TIMER.entities if e.key == "auto_door_timer")
+    desc = next(
+        e
+        for e in fridge.AUTO_DOOR_TIMER.entities
+        if e.key == "auto_door_timer" and isinstance(e, SelectDesc)
+    )
     rep = {
         "x.com.samsung.da.time.desired": "1",
         "x.com.samsung.da.time.supportedOptions": ["1", "2", "3", "4", "5", "6"],
@@ -70,5 +75,6 @@ def test_auto_door_single_variant_href_bound_with_no_entities():
     no paired current/desired field to expose, so it's coverage-only via
     the shared AUTO_DOOR_VARIANT pattern cap, not an entry of its own."""
     assert fridge.AUTO_DOOR_VARIANT.entities == ()
+    assert fridge.AUTO_DOOR_VARIANT.match_fn is not None
     _reg, resources = _fridge()
     assert fridge.AUTO_DOOR_VARIANT.match_fn(resources["/autodoor/single/vs/0"], resources)

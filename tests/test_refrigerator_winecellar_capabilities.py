@@ -10,6 +10,7 @@ from custom_components.localthings.registry.adapter import flatten
 from custom_components.localthings.registry.by_type import for_device_by_oic_type, resolve
 from custom_components.localthings.registry.capabilities import fridge
 from custom_components.localthings.registry.discovery import discover
+from custom_components.localthings.registry.entities import SelectDesc
 from tests.conftest import _load_device
 
 FIXTURE = "refrigerator_winecellar"
@@ -67,7 +68,9 @@ def test_deodor_filter_has_its_own_keys_not_air_filters():
 
 def test_winecellar_pantry_zone_mode_options_and_write():
     desc = next(
-        e for e in fridge.WINECELLAR_PANTRY_ZONE.entities if e.key == "winecellar_pantry_zone_mode"
+        e
+        for e in fridge.WINECELLAR_PANTRY_ZONE.entities
+        if e.key == "winecellar_pantry_zone_mode" and isinstance(e, SelectDesc)
     )
     assert desc.options_field == "x.com.samsung.da.supportedOptions"
     assert desc.write_fn is not None
@@ -82,5 +85,6 @@ def test_winecellar_pantry_zone_mode_options_and_write():
 def test_winecellar_variant_and_info_hrefs_bound_with_no_entities():
     assert fridge.AUTO_DOOR_VARIANT.entities == ()
     assert fridge.WINECELLAR_INFO.entities == ()
+    assert fridge.AUTO_DOOR_VARIANT.match_fn is not None
     _reg, resources = _fridge()
     assert fridge.AUTO_DOOR_VARIANT.match_fn(resources["/autodoor/winecellar/vs/0"], resources)

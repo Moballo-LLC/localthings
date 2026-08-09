@@ -784,6 +784,7 @@ def test_air_filter_usage_hours_derived_from_percent_and_capacity():
         for e in airconditioner.AIR_FILTER.entities
         if e.key == "air_filter_usage_hours" and isinstance(e, SensorDesc)
     )
+    assert desc.rep_fn is not None
     assert (
         desc.rep_fn(
             {"x.com.samsung.da.filterUsage": "91", "x.com.samsung.da.filterCapacity": "500"}

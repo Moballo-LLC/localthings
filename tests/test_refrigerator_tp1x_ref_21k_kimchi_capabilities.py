@@ -52,5 +52,6 @@ def test_auto_door_opener_present():
 
 def test_auto_door_kimchi_variant_href_bound_with_no_entities():
     assert fridge.AUTO_DOOR_VARIANT.entities == ()
+    assert fridge.AUTO_DOOR_VARIANT.match_fn is not None
     _reg, resources = _fridge()
     assert fridge.AUTO_DOOR_VARIANT.match_fn(resources["/autodoor/kimchi/vs/0"], resources)
