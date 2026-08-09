@@ -160,6 +160,28 @@ def test_confirmed_korean_table_02_washer_course_names():
     }
 
 
+def test_confirmed_washer_table_02_towels_bedding_are_not_swapped():
+    """Issue #343: DA_WM_TP1_21_COMMON's Table_02 had 24/33 transposed --
+    selecting 'Towels' in HA ran the washer's Bedding cycle and vice versa.
+    24 must agree with the 69/6A-79/88 family's own Bedding/Towels pair
+    (6f/70), not with each other."""
+    states = _load("en")["entity"]["select"]["washer_cycle_table_02"]["state"]
+    assert states["24"] == states["6f"] == "Bedding"
+    assert states["33"] == states["70"] == "Towels"
+
+
+def test_confirmed_washer_table_02_missing_course_names():
+    """Issue #342: 06/08/a0 had no translation and fell back to the raw
+    device code in the UI."""
+    states = _load("en")["entity"]["select"]["washer_cycle_table_02"]["state"]
+    assert {code: states[code] for code in ("06", "08", "74", "a0")} == {
+        "06": "XXL Laundry",
+        "08": "Rinse+Spin",
+        "74": "Drum Clean",
+        "a0": "15' Quick Wash",
+    }
+
+
 def test_confirmed_dishwasher_course_names():
     states = _load("en")["entity"]["select"]["dishwasher_cycle"]["state"]
     assert {

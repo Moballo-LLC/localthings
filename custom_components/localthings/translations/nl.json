@@ -609,6 +609,8 @@
         "state": {
           "01": "Normaal",
           "04": "Snelle was",
+          "06": "XXL was",
+          "08": "Spoelen+centrifugeren",
           "17": "Gedownload",
           "1b": "Katoen",
           "1c": "Eco 40-60",
@@ -619,7 +621,7 @@
           "21": "Bonte was",
           "22": "Wol",
           "23": "Outdoor",
-          "24": "Handdoeken",
+          "24": "Beddengoed",
           "25": "Synthetisch",
           "26": "Fijne was",
           "27": "Spoelen+centrifugeren",
@@ -632,7 +634,7 @@
           "2f": "Sportkleding",
           "30": "Bewolkte dag",
           "32": "Overhemden",
-          "33": "Beddengoed",
+          "33": "Handdoeken",
           "34": "Gemengd",
           "36": "Wassen+drogen",
           "37": "Air Wash",
@@ -674,6 +676,7 @@
           "88": "Huisdierverzorging",
           "8f": "Intensief koud",
           "96": "Minder microvezels",
+          "a0": "15' Snelle was",
           "35": "Eco katoen"
         }
       },
