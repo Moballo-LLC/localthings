@@ -72,15 +72,25 @@ def epoch_to_utc(value):
 
 
 def filter_usage_percent(rep):
-    """Filter usage as a percentage of rated capacity. Several families
-    report `filterUsage` as a raw count in `filterCapacityUnit` (e.g. 100 of
-    a 500-hour capacity), so a plain value with a '%' unit would be wrong.
-    Returns None when capacity is missing/zero."""
-    used = _num(rep.get("x.com.samsung.da.filterUsage"))
+    """Filter usage as a percentage. `filterUsage` is already 0-100 on every
+    family confirmed so far, including ARTIK051_PRAC (issue #330): its own
+    fixture and three live heads all show `filterStatus == 'wash'` at
+    `filterUsage == '100'` regardless of `filterCapacity` (60/224/500 across
+    other families' fixtures), which only holds if `filterUsage` is already
+    a percent -- dividing by capacity again would read that filter as fresh
+    at 20%."""
+    return int_or_none(rep.get("x.com.samsung.da.filterUsage"))
+
+
+def filter_usage_hours(rep):
+    """Elapsed filter hours, derived from the percentage and capacity rather
+    than read off `filterUsage` directly -- `filterUsage` is a percent, not
+    an hour count (issue #330). Returns None when capacity is missing/zero."""
+    pct = filter_usage_percent(rep)
     cap = _num(rep.get("x.com.samsung.da.filterCapacity"))
-    if used is None or not cap:
+    if pct is None or not cap:
         return None
-    return round(used / cap * 100)
+    return round(pct / 100 * cap, 1)
 
 
 def normalize_temp_unit(raw, default="°F"):

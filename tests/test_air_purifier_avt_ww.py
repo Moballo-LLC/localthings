@@ -59,5 +59,5 @@ def test_air_quality_and_filter_sensors_present():
     assert state["dust"] == 10
     assert state["fine_dust"] == 9
     assert state["odor"] == 1
-    assert state["hepa_filter_usage"] == 0
+    assert state["hepa_filter_usage"] == 30
     assert state["hepa_filter_status"] == "normal"
