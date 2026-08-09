@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from datetime import timedelta
 from typing import cast
 
@@ -51,6 +52,9 @@ class LocalThingsSensor(LocalThingsEntity, SensorEntity):
         if desc.options:
             self._attr_options = list(desc.options)
         self._hysteresis_value = None
+        self._sticky_value = None
+        self._sticky_until: float | None = None
+        self._sticky_armed = False
 
     @property
     def native_unit_of_measurement(self):
@@ -63,9 +67,67 @@ class LocalThingsSensor(LocalThingsEntity, SensorEntity):
     def native_value(self):
         raw = (self.coordinator.data or {}).get(self._state_key)
         desc = cast(SensorDesc, self._bound.desc)
+        if desc.sticky_fn is not None:
+            raw = self._apply_sticky(raw, desc)
         if not desc.hysteresis:
             return raw
         return self._apply_hysteresis(raw)
+
+    def _apply_sticky(self, raw, desc: SensorDesc):
+        """Freeze this entity at a value for up to `desc.sticky_seconds`
+        after `desc.sticky_fn` next stops matching this href's live rep
+        (issue #345 -- see operational.py's `_just_finished` for the
+        motivating case). Entity-instance state only, exactly like
+        `_hysteresis_value` above -- never written back to the coordinator
+        cache, so write_fn, diagnostics, and the observe-mode sweep
+        comparison keep seeing real device data throughout.
+
+        Reads `sticky_fn` and friends against this href's own live rep,
+        not the already-computed `raw`, so they can be independent of
+        whatever rep_fn itself gates on -- notably `sticky_live_fn`, which
+        is *not* `raw`: `raw` is rep_fn's own (possibly differently gated)
+        result, e.g. progress's rep_fn shows "Idle" while paused, but a
+        real progress value reported while paused (adding a sock mid-
+        cycle) must still win over a stale hold, which means reading it
+        ungated here rather than through that gate.
+
+        Edge-triggered, not level-triggered: the window only (re)starts on
+        a fresh False->True transition of `sticky_fn`, and -- this is the
+        part level-triggering alone misses -- expiry is still checked on
+        every call even while `sticky_fn` keeps matching. Without the
+        latter, a firmware that leaves the underlying field stuck matching
+        forever (the same class of quirk `_completion_minutes` already
+        works around) would show the frozen value forever too, defeating
+        "bounded, not indefinite".
+
+        `sticky_bypass_fn`, when it matches, always passes
+        `sticky_live_fn`'s result through and drops any hold -- for a
+        condition where "not sticky right now" is ambiguous between "went
+        idle, honor the hold" and "genuinely live, different data" (e.g. a
+        new cycle's own real progress), which "consult the hold whenever
+        sticky_fn is False" alone can't tell apart.
+        """
+        assert desc.sticky_fn is not None  # native_value only calls this when set
+        rep = self.coordinator.resource(self._bound.href)
+        now = time.monotonic()
+        matches = desc.sticky_fn(rep)
+
+        if matches:
+            if not self._sticky_armed:
+                self._sticky_value = (
+                    desc.sticky_value_fn(rep) if desc.sticky_value_fn is not None else raw
+                )
+                self._sticky_until = now + desc.sticky_seconds
+            self._sticky_armed = True
+        else:
+            self._sticky_armed = False
+            if desc.sticky_bypass_fn is not None and desc.sticky_bypass_fn(rep):
+                self._sticky_until = None
+                return desc.sticky_live_fn(rep) if desc.sticky_live_fn is not None else raw
+
+        if self._sticky_until is not None and now < self._sticky_until:
+            return self._sticky_value
+        return raw
 
     def _apply_hysteresis(self, raw):
         """Hold the last value this entity actually reported until a new one

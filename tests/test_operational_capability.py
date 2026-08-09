@@ -1,6 +1,10 @@
 """Unit tests for operational state capabilities."""
 
-from custom_components.localthings.registry.capabilities.operational import OPERATIONAL_STATE
+from custom_components.localthings.registry.capabilities.operational import (
+    OPERATIONAL_STATE,
+    _just_finished,
+    _live_progress_code,
+)
 from custom_components.localthings.registry.entities import NumberDesc
 
 
@@ -9,6 +13,55 @@ def test_machine_state_maps_samsung_to_ocf():
     assert ms.value_fn("Run") == "active"
     assert ms.value_fn("Pause") == "pause"
     assert ms.value_fn("Ready") == "idle"
+
+
+class TestJustFinished:
+    """`_just_finished` is progress/progress_percentage's sticky_fn arm
+    condition (issue #345) -- see sensor.py's _apply_sticky."""
+
+    def test_true_when_progress_is_finish_while_active(self):
+        assert _just_finished(
+            {"x.com.samsung.da.state": "Run", "x.com.samsung.da.progress": "Finish"}
+        )
+
+    def test_true_even_once_state_has_already_left_active(self):
+        """The exact issue #345 scenario this exists for: a washer's
+        `state` can already read idle by the time `progress` is observed
+        at 'Finish' -- unlike _is_active, this must still arm."""
+        assert _just_finished(
+            {"x.com.samsung.da.state": "Ready", "x.com.samsung.da.progress": "Finish"}
+        )
+
+    def test_false_while_active_but_not_yet_finished(self):
+        assert not _just_finished(
+            {"x.com.samsung.da.state": "Run", "x.com.samsung.da.progress": "Spin"}
+        )
+
+    def test_false_when_progress_absent(self):
+        assert not _just_finished({"x.com.samsung.da.state": "Run"})
+
+
+class TestLiveProgressCode:
+    """`_live_progress_code` is progress/progress_percentage's
+    sticky_bypass_fn (issue #345) -- see sensor.py's _apply_sticky."""
+
+    def test_true_for_a_concrete_non_finish_code(self):
+        assert _live_progress_code({"x.com.samsung.da.progress": "Wash"})
+
+    def test_true_regardless_of_state(self):
+        """Not gated on machine_state -- a new cycle's own real progress
+        must win over a held hold even while paused (e.g. adding a sock
+        mid-hold), not just while actively running."""
+        assert _live_progress_code(
+            {"x.com.samsung.da.state": "Pause", "x.com.samsung.da.progress": "Wash"}
+        )
+
+    def test_false_for_finish(self):
+        assert not _live_progress_code({"x.com.samsung.da.progress": "Finish"})
+
+    def test_false_when_absent_or_none(self):
+        assert not _live_progress_code({})
+        assert not _live_progress_code({"x.com.samsung.da.progress": "None"})
 
 
 class TestProgressPercentage:

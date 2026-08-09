@@ -64,6 +64,18 @@ class SensorDesc(SamsungEntityDescription):
     # (see sensor.py). Only for values expected to jitter between
     # device-side revisions -- not a general-purpose flag.
     hysteresis: bool = False
+    # Opt-in, entity-instance-only hold -- see sensor.py's _apply_sticky
+    # for the full contract (arm/value/live/bypass semantics,
+    # edge-triggering, why this never touches the coordinator cache).
+    # sticky_fn arms it; sticky_value_fn picks what to freeze at that
+    # moment (defaults to rep_fn's own result); sticky_bypass_fn forces
+    # sticky_live_fn's result through and drops the hold; sticky_seconds
+    # bounds how long it can hold.
+    sticky_fn: Callable[[dict], bool] | None = None
+    sticky_value_fn: Callable[[dict], Any] | None = None
+    sticky_live_fn: Callable[[dict], Any] | None = None
+    sticky_bypass_fn: Callable[[dict], bool] | None = None
+    sticky_seconds: float = 300.0
 
 
 @dataclass(frozen=True, kw_only=True)

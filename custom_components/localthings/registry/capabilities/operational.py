@@ -35,12 +35,44 @@ def _int(v):
         return None
 
 
+def _state_is_active(rep):
+    return _SAMSUNG_STATE_TO_OCF.get(rep.get("x.com.samsung.da.state")) == "active"
+
+
 def _is_active(rep):
     """Check if appliance is actively running and cycle is not finished."""
-    return (
-        _SAMSUNG_STATE_TO_OCF.get(rep.get("x.com.samsung.da.state")) == "active"
-        and rep.get("x.com.samsung.da.progress") != "Finish"
-    )
+    return _state_is_active(rep) and rep.get("x.com.samsung.da.progress") != "Finish"
+
+
+def _just_finished(rep):
+    """progress/progress_percentage's sticky_fn (issue #345, see sensor.py's
+    _apply_sticky): arms their grace window the moment `progress` reads
+    'Finish'.
+
+    Deliberately not also requiring `state == 'active'` in the same rep,
+    unlike _is_active above: #345 reports a washer whose `state` can
+    already read idle by the time `progress` is observed at 'Finish' --
+    the same-family dryer's firmware apparently keeps `state` at 'active'
+    longer, per the report -- so requiring both together risked the arm
+    condition never actually firing on the one device this fixes.
+    _apply_sticky's edge-triggering (only a fresh False->True transition
+    (re)arms) is what keeps a `progress` stuck at 'Finish' indefinitely
+    (the same class of quirk `_completion_minutes` below already works
+    around) from holding this open forever instead."""
+    return rep.get("x.com.samsung.da.progress") == "Finish"
+
+
+def _live_progress_code(rep):
+    """progress/progress_percentage's sticky_bypass_fn: a concrete,
+    non-Finish progress code being reported right now -- e.g. a new
+    cycle's own real 'Wash'/'Spin' -- must win over a still-open hold from
+    the previous cycle immediately. Not keyed on `state` (unlike
+    _is_active): _just_finished's whole premise is that `state` can't be
+    trusted to still say 'active' while a fresh, real progress value is
+    already there, and the same applies to recognizing when it's moved on
+    to a new one -- including while paused, e.g. adding a sock mid-hold."""
+    v = rep.get("x.com.samsung.da.progress")
+    return v is not None and v not in ("None", "Finish")
 
 
 def _remaining_seconds(raw):
@@ -153,19 +185,31 @@ OPERATIONAL_STATE = Capability(
         BinarySensorDesc(
             key="cycle_active",
             device_class="running",
-            rep_fn=lambda rep: (
-                _SAMSUNG_STATE_TO_OCF.get(rep.get("x.com.samsung.da.state")) == "active"
-                and rep.get("x.com.samsung.da.progress") != "Finish"
-            ),
+            rep_fn=_is_active,
         ),
+        # sticky_* (issue #345): once progress reads 'Finish', keep
+        # showing Finish/100 for a grace window even after machine_state
+        # reverts, rather than falling to Idle/0 the instant it does --
+        # see sensor.py's _apply_sticky. rep_fn below is otherwise
+        # unchanged; the hold is entirely a read-side, per-entity concern,
+        # deliberately not gated on machine_state (_just_finished's
+        # docstring explains why). sticky_live_fn reads the raw field the
+        # same ungated way, for sticky_bypass_fn's benefit: a real
+        # progress value reported while paused (e.g. adding a sock
+        # mid-cycle) must win over a stale hold even though rep_fn itself
+        # would show "Idle"/0 there.
         SensorDesc(
             key="progress",
             icon="mdi:progress-wrench",
             rep_fn=lambda rep: (
                 "Idle"
-                if _SAMSUNG_STATE_TO_OCF.get(rep.get("x.com.samsung.da.state")) != "active"
+                if not _state_is_active(rep)
                 else _progress(rep.get("x.com.samsung.da.progress"))
             ),
+            sticky_fn=_just_finished,
+            sticky_value_fn=lambda rep: "Finish",
+            sticky_live_fn=lambda rep: _progress(rep.get("x.com.samsung.da.progress")),
+            sticky_bypass_fn=_live_progress_code,
         ),
         SensorDesc(
             key="progress_percentage",
@@ -173,9 +217,13 @@ OPERATIONAL_STATE = Capability(
             state_class="measurement",
             rep_fn=lambda rep: (
                 0
-                if _SAMSUNG_STATE_TO_OCF.get(rep.get("x.com.samsung.da.state")) != "active"
+                if not _state_is_active(rep)
                 else _int(rep.get("x.com.samsung.da.progressPercentage"))
             ),
+            sticky_fn=_just_finished,
+            sticky_value_fn=lambda rep: 100,
+            sticky_live_fn=lambda rep: _int(rep.get("x.com.samsung.da.progressPercentage")) or 0,
+            sticky_bypass_fn=_live_progress_code,
         ),
         # Only show finish time while actively running -- firmware leaves a
         # stale remainingTime after a cycle ends, frozen at '00:01:00'.
