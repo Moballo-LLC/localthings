@@ -761,6 +761,9 @@
       "air_filter_usage_hours": {
         "name": "필터 사용 시간"
       },
+      "deodor_filter_usage": {
+        "name": "필터 사용량"
+      },
       "air_quality_standard": {
         "name": "공기질 기준"
       },

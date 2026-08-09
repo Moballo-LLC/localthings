@@ -411,10 +411,35 @@ AUTO_DOOR_VARIANT = Capability(
 # comment). filterUsage reads '-1' on the only dump seen (filterStatus
 # 'normal'), relayed as-is rather than special-cased -- no second dump to
 # confirm whether that's a real sentinel or this unit just not tracking it.
+# Own 'deodor_'-prefixed keys rather than reusing AIR_FILTER.entities
+# verbatim -- same collision AIR_FILTER's own 'air_' prefix was chosen to
+# avoid against WATER_FILTER, and both filters are plausible on one unit
+# (this device's own board reports an internal air filter on other
+# TP1X_REF_21K variants).
 DEODOR_FILTER = Capability(
     href="/filter/deodorfilter/vs/0",
     poll_tier="cold",
-    entities=AIR_FILTER.entities,
+    entities=(
+        SensorDesc(
+            key="deodor_filter_usage",
+            field="x.com.samsung.da.filterUsage",
+            unit="%",
+            state_class="measurement",
+            icon="mdi:air-filter",
+            entity_category="diagnostic",
+            value_fn=int_or_none,
+        ),
+        SensorDesc(
+            key="deodor_filter_status",
+            field="x.com.samsung.da.filterStatus",
+            device_class="enum",
+            options=("normal", "wash", "replace"),
+            translation_key="filter_status",
+            icon="mdi:air-filter",
+            entity_category="diagnostic",
+            value_fn=lambda v: v.lower() if isinstance(v, str) else v,
+        ),
+    ),
 )
 
 # Wine-cellar multi-compartment pantry select (issue #328): same

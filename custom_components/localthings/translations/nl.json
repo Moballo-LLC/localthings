@@ -761,6 +761,9 @@
       "air_filter_usage_hours": {
         "name": "Filterverbruik (uren)"
       },
+      "deodor_filter_usage": {
+        "name": "Filterverbruik"
+      },
       "air_quality_standard": {
         "name": "Luchtkwaliteitsnorm"
       },

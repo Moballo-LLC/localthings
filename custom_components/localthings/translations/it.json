@@ -761,6 +761,9 @@
       "air_filter_usage_hours": {
         "name": "Ore di utilizzo filtro"
       },
+      "deodor_filter_usage": {
+        "name": "Utilizzo filtro"
+      },
       "air_quality_standard": {
         "name": "Standard qualità aria"
       },

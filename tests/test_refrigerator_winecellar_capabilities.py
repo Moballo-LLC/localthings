@@ -48,15 +48,21 @@ def test_auto_door_sound_control_present_here_only():
     assert state["auto_door_voice_control"] is False
 
 
-def test_deodor_filter_reuses_air_filter_shape():
-    """Same entities as fridge.AIR_FILTER (see its own already-confirmed
-    percentage-not-raw-count reasoning), bound at this variant's own href."""
-    assert fridge.DEODOR_FILTER.entities is fridge.AIR_FILTER.entities
+def test_deodor_filter_has_its_own_keys_not_air_filters():
+    """Same shape/reasoning as fridge.AIR_FILTER (percentage-not-raw-count,
+    see its own comment) but its own 'deodor_'-prefixed keys, not a shared
+    tuple -- AIR_FILTER's own docstring picked 'air_' specifically to avoid
+    colliding with WATER_FILTER's filter_usage/filter_status, and reusing
+    AIR_FILTER.entities verbatim here would silently recreate that same
+    collision if a unit ever reports both hrefs."""
+    assert fridge.DEODOR_FILTER.entities != fridge.AIR_FILTER.entities
     state = _state()
-    assert state["air_filter_status"] == "normal"
+    assert state["deodor_filter_status"] == "normal"
     # The device's own sentinel, relayed as-is -- not a real 0-100 reading
     # on this unit, and no second dump to say what else -1 could mean.
-    assert state["air_filter_usage"] == -1
+    assert state["deodor_filter_usage"] == -1
+    assert "air_filter_usage" not in state
+    assert "air_filter_status" not in state
 
 
 def test_winecellar_pantry_zone_mode_options_and_write():

@@ -1,7 +1,5 @@
 {
   "state_keys": [
-    "air_filter_status",
-    "air_filter_usage",
     "alarm_code",
     "auto_door_opener",
     "auto_door_sound_control",
@@ -9,6 +7,8 @@
     "auto_door_voice_control",
     "cabinet_light_dim",
     "cabinet_light_switch",
+    "deodor_filter_status",
+    "deodor_filter_usage",
     "door_winecellar_open",
     "energy_kwh",
     "energy_saved_kwh",
