@@ -152,6 +152,59 @@ def test_climate_write_targets():
     assert write(("bogus", 1), {}) is None
 
 
+def test_climate_write_preserves_half_degree_temperature_steps():
+    """CAC/TP1X FAC boards advertise `0.5` on both temperature resources.
+    The increment on /temperatures/vs/0 lives inside its items[] entry (the
+    same shape every fixture in the corpus uses), not at the resource's top
+    level -- a fabricated flat `{"/temperatures/vs/0": {"increment": ...}}`
+    resource would pass a step-reading bug like that silently."""
+    climate_desc = next(e for e in airconditioner.CLIMATE.entities if isinstance(e, ClimateDesc))
+    write = climate_desc.write_fn
+    resources = _load_device("airconditioner_cac")
+    assert write(("temperature_ocf", 24.5), {}, None, resources) == (
+        ["temperature", "desired", "0"],
+        {"temperature": 24.5},
+    )
+    assert write(("temperature", 24.5), {}, None, resources) == (
+        ["temperatures", "vs", "0"],
+        {
+            "x.com.samsung.da.items": [
+                {"x.com.samsung.da.id": "0", "x.com.samsung.da.desired": "24.5"}
+            ]
+        },
+    )
+
+
+def test_climate_write_rounds_to_whole_degree_with_no_advertised_increment():
+    """ARTIK051 boards have neither /temperature/control/vs/0 nor an
+    increment field on /temperatures/vs/0's item -- target_temperature_step
+    (climate.py) defaults to 1.0 there, so the write path must match rather
+    than pass the raw value through unrounded."""
+    climate_desc = next(e for e in airconditioner.CLIMATE.entities if isinstance(e, ClimateDesc))
+    write = climate_desc.write_fn
+    resources = _load_device("airconditioner_artik051_krac_18k")
+    assert airconditioner._temperature_step(resources) is None
+    assert write(("temperature", 23.6), {}, None, resources) == (
+        ["temperatures", "vs", "0"],
+        {
+            "x.com.samsung.da.items": [
+                {"x.com.samsung.da.id": "0", "x.com.samsung.da.desired": "24"}
+            ]
+        },
+    )
+
+
+def test_climate_write_rejects_non_numeric_temperature():
+    """A non-numeric payload must reject the write (return None) rather than
+    build a body with `{"temperature": None}` -- coordinator.py's
+    async_send_command logs and drops a write_fn result of None instead of
+    POSTing it."""
+    climate_desc = next(e for e in airconditioner.CLIMATE.entities if isinstance(e, ClimateDesc))
+    write = climate_desc.write_fn
+    assert write(("temperature_ocf", "not-a-number"), {}) is None
+    assert write(("temperature", None), {}) is None
+
+
 def test_climate_consumed_hrefs_declared_as_coverage():
     """The climate-consumed and ambiguous hrefs are declared in the AC registry
     (as no-entity coverage caps) so they don't leak as gaps -- but produce no

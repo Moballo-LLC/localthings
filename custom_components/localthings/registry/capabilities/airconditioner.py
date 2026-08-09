@@ -491,7 +491,61 @@ def _humidity(rep):
     return None
 
 
-def _climate_write(payload, rep, href=None):
+def _quantize_temperature(value, step):
+    """Quantize a temperature to the device's advertised step size.
+
+    Mirrors climate.py's `target_temperature_step`, which defaults to `1.0`
+    when no increment is advertised anywhere (`step=None` or `<=0` here) --
+    so a board with no increment still gets whole-degree writes instead of
+    the raw value passed through unrounded. Returns `None` for a payload
+    that isn't numeric, so the caller can reject the write instead of
+    building a body around a null (coordinator.py's async_send_command
+    already logs and drops a write_fn result of None).
+
+    Normalizes an integral result to `int` here, once, so both write
+    branches serialize `24` rather than `24.0` -- `round(..., 2)` guards
+    against float noise in the division (e.g. `21.7 / 0.1`).
+    """
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    step_value = _num(step) or 1.0
+    if step_value <= 0:
+        step_value = 1.0
+    quantized = round(round(numeric / step_value) * step_value, 2)
+    return int(quantized) if quantized.is_integer() else quantized
+
+
+def _temperature_step(resources):
+    """Device-reported temperature increment, read the same way and in the
+    same order as climate.py's `target_temperature_step`: OCF
+    `/temperature/control/vs/0`'s `increment` (or its vendor-prefixed
+    twin), falling back to vendor `/temperatures/vs/0`. The increment on
+    that second resource lives inside its `items[]` array like every other
+    per-item field, not at the resource's top level -- unwrapped via
+    `_temps_vs_item()`, the same helper `_temps_vs_current`/`_temps_vs_unit`
+    use above, rather than read off `resource` directly.
+
+    `rep` (the bound entity's own resource, `/mode/vs/0` for ClimateDesc --
+    see rep_fn=_first_mode below) never carries an increment, so it isn't a
+    candidate here; only the coordinator's `resources` snapshot is."""
+    if not isinstance(resources, dict):
+        return None
+    control = resources.get(HREF_TEMP_CONTROL)
+    if isinstance(control, dict):
+        step = _num(control.get("increment")) or _num(control.get("x.com.samsung.da.increment"))
+        if step is not None:
+            return step
+    temps_vs = resources.get(HREF_TEMPS_VS)
+    if isinstance(temps_vs, dict):
+        step = _num(_temps_vs_item(temps_vs).get("x.com.samsung.da.increment"))
+        if step is not None:
+            return step
+    return None
+
+
+def _climate_write(payload, rep, href=None, resources=None):
     """Maps a (kind, value) command from the climate platform to the
     (path_segs, body) for that one sub-write; `value` is already the raw
     device code. Power always goes to vendor `/power/vs/0` (OCF `/power/0`
@@ -505,16 +559,22 @@ def _climate_write(payload, rep, href=None):
     if kind == "mode":
         return (["mode", "vs", "0"], {"x.com.samsung.da.modes": [value]})
     if kind == "temperature_ocf":
-        return (["temperature", "desired", "0"], {"temperature": round(float(value))})
+        quantized = _quantize_temperature(value, _temperature_step(resources))
+        if quantized is None:
+            return None
+        return (["temperature", "desired", "0"], {"temperature": quantized})
     if kind == "temperature":
         # Vendor items[] array; only one item observed on every AC dump, id '0'.
+        quantized = _quantize_temperature(value, _temperature_step(resources))
+        if quantized is None:
+            return None
         return (
             ["temperatures", "vs", "0"],
             {
                 "x.com.samsung.da.items": [
                     {
                         "x.com.samsung.da.id": "0",
-                        "x.com.samsung.da.desired": str(round(float(value))),
+                        "x.com.samsung.da.desired": str(quantized),
                     }
                 ]
             },
