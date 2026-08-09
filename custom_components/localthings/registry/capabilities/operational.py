@@ -75,7 +75,7 @@ def _delay_hours(v):
 def _format_delay(hours):
     total_minutes = round(max(float(hours), 0) * 60)
     h, m = divmod(total_minutes, 60)
-    return f"{h}:{m:02d}:00"
+    return f"{h:02d}:{m:02d}:00"
 
 
 def _delay_field(rep):
