@@ -225,6 +225,7 @@ _OIC_TYPE_TO_KEY: dict[str, str] = {
     "oic.d.dishwasher": "dishwasher",
     "oic.d.dryer": "dryer",
     "oic.d.oven": "oven",
+    "oic.d.range": "range",  # issue #324 -- oven+cooktop combo, no /information/vs/0
     "oic.d.refrigerator": "refrigerator",
     "oic.d.krefrigerator": "refrigerator",  # issue #328 -- kimchi refrigerator
     "oic.d.washer": "washer",
