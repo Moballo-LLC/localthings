@@ -139,7 +139,7 @@ class TestDelayFieldFallback:
         assert result is not None
         path, body = result
         assert path == ["operational", "state", "vs", "0"]
-        assert body == {"x.com.samsung.da.delayEndTime": "1:30:00"}
+        assert body == {"x.com.samsung.da.delayEndTime": "01:30:00"}
 
     def test_write_targets_delay_start_time_by_default(self):
         from custom_components.localthings.registry.capabilities.operational import (
@@ -156,4 +156,4 @@ class TestDelayFieldFallback:
         result = desc.write_fn(1.5, rep)
         assert result is not None
         _path, body = result
-        assert body == {"x.com.samsung.da.delayStartTime": "1:30:00"}
+        assert body == {"x.com.samsung.da.delayStartTime": "01:30:00"}
