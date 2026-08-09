@@ -97,7 +97,7 @@ class LocalThingsSelect(LocalThingsEntity, SelectEntity):
 
     def _display_option(self, value):
         """Normalize both current state and options through one path."""
-        display_fn = self._bound.desc.display_fn
+        display_fn = cast(SelectDesc, self._bound.desc).display_fn
         fallback_fn = (
             (lambda raw: display_fn(raw, self._resources)) if display_fn is not None else None
         )
