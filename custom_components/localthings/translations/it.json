@@ -297,7 +297,16 @@
           "07": "Prelavaggio intenso",
           "8d": "Pentole e padelle",
           "8e": "Plastica",
-          "8f": "Bambini"
+          "8f": "Bambini",
+          "82": "Automatico",
+          "8a": "Normale",
+          "a7": "Intenso",
+          "a8": "Express",
+          "8c": "Extra silenzioso",
+          "88": "Autopulizia",
+          "85": "Delicato",
+          "0c": "Express",
+          "0d": "Autopulizia"
         }
       },
       "dispense_type": {
@@ -339,7 +348,9 @@
           "4c": "Rinfresca",
           "51": "Eco cotone",
           "53": "Asciugatura AI+",
-          "4e": "Autoasciugatura"
+          "4e": "Autoasciugatura",
+          "26": "Arieggiatura",
+          "2a": "Cura igienica+"
         }
       },
       "favorite_capacity": {
@@ -628,7 +639,26 @@
           "86": "Lavaggio profondo",
           "87": "Scaricato",
           "8f": "Intenso a freddo",
-          "96": "Riduci microfibre"
+          "96": "Riduci microfibre",
+          "69": "Lavaggio AI",
+          "6a": "Lana",
+          "6b": "Jeans",
+          "6c": "Camicette",
+          "6d": "Delicati",
+          "6e": "Abbigliamento sportivo",
+          "6f": "Biancheria da letto",
+          "70": "Asciugamani",
+          "71": "Lavaggio rapido",
+          "72": "Camicie",
+          "73": "Igienizzante",
+          "74": "Pulizia cestello",
+          "75": "Capi outdoor",
+          "76": "Bambini",
+          "77": "Cotone",
+          "78": "Risciacquo+Centrifuga",
+          "79": "Solo centrifuga",
+          "88": "Cura animali",
+          "35": "Cotone E"
         }
       },
       "washer_dry_level": {

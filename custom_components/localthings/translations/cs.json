@@ -297,7 +297,16 @@
           "07": "Předoplach",
           "8d": "Hrnce a pánve",
           "8e": "Plast",
-          "8f": "Dětské potřeby"
+          "8f": "Dětské potřeby",
+          "82": "Automatický",
+          "8a": "Normální",
+          "a7": "Intenzivní",
+          "a8": "Expresní",
+          "8c": "Extra tichý",
+          "88": "Samočištění",
+          "85": "Jemné",
+          "0c": "Express",
+          "0d": "Samočištění"
         }
       },
       "dispense_type": {
@@ -339,7 +348,9 @@
           "4c": "Osvěžení vzduchem",
           "51": "Eko bavlna",
           "53": "AI sušení+",
-          "4e": "Automatické sušení"
+          "4e": "Automatické sušení",
+          "26": "Provětrání",
+          "2a": "Hygienické sušení+"
         }
       },
       "favorite_capacity": {
@@ -621,14 +632,33 @@
           "60": "Samočištění+",
           "65": "Barevné prádlo",
           "66": "Džíny",
+          "69": "AI praní",
+          "6a": "Vlna",
+          "6b": "Džíny",
+          "6c": "Halenky",
+          "6d": "Jemné prádlo",
+          "6e": "Sportovní oblečení",
+          "6f": "Ložní prádlo",
+          "70": "Ručníky",
+          "71": "Rychlé praní",
+          "72": "Košile",
+          "73": "Dezinfekce",
+          "74": "Čištění bubnu",
+          "75": "Outdoor",
+          "76": "Dětské potřeby",
+          "77": "Bavlna",
+          "78": "Máchání + odstřeďování",
+          "79": "Pouze odstřeďování",
           "7c": "Bílé prádlo",
           "7d": "Ložní prádlo/nepromokavé",
           "7e": "Samočištění",
           "7f": "Vlna/jemné",
           "86": "Hloubkové praní",
           "87": "Stažený program",
+          "88": "Péče o domácí mazlíčky",
           "8f": "Intenzivní studená",
-          "96": "Méně mikrovláken"
+          "96": "Méně mikrovláken",
+          "35": "Eko bavlna"
         }
       },
       "washer_dry_level": {

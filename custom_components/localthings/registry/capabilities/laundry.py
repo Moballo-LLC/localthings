@@ -323,12 +323,57 @@ def cycle_write(p, rep, href=None):
     }
 
 
+def personal_course_labels(resources, href="/wm/personalcourse/vs/0"):
+    """Return device-provided personal course names keyed by course code.
+
+    Populated entries use a small TLV payload. The leading field is
+    ``01 <UTF-8-byte-length> <name>``; later fields contain a description and
+    settings and are intentionally left uninterpreted. Empty slots are
+    encoded as ``<code>_00``. Malformed or undecodable entries are ignored so
+    opaque device data can never become a misleading label.
+    """
+    rep = resources.get(href) or {}
+    labels = {}
+    for entry in rep.get("x.com.samsung.da.courses") or []:
+        if not isinstance(entry, str) or "_" not in entry:
+            continue
+        code, encoded = entry.split("_", 1)
+        try:
+            payload = bytes.fromhex(encoded)
+        except ValueError:
+            continue
+        if len(payload) < 3 or payload[0] != 0x01:
+            continue
+        name_length = payload[1]
+        if name_length == 0 or len(payload) < 2 + name_length:
+            continue
+        try:
+            name = payload[2 : 2 + name_length].decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        if name.strip() and name.isprintable():
+            labels[code.upper()] = name
+    return labels
+
+
+def washer_cycle_fallback(value, resources):
+    """Label a personal washer course from its device-provided name.
+
+    No fallback for an unrecognized standard code -- an invented English
+    label would defeat translation (PR #251 review); the raw code displays
+    instead, same as before this function existed.
+    """
+    if not isinstance(value, str):
+        return None
+    return personal_course_labels(resources).get(value.upper())
+
+
 def _table_id(resources, table_href):
     rep = resources.get(table_href) or {}
     return rep.get("x.com.samsung.da.st.courseTable")
 
 
-def cycle_select(*, translation_key, icon, table_href=None):
+def cycle_select(*, translation_key, icon, table_href=None, display_fn=None):
     """A 'Cycle' select over /course/vs/0, labelled from `translation_key`.
 
     The option list, current value, and write path are shared across
@@ -345,6 +390,11 @@ def cycle_select(*, translation_key, icon, table_href=None):
     unrecognized table id falls back to the name-only ``cycle`` key
     instead of borrowing a label from another board generation --
     translating a new table is a translations-only change.
+
+    The raw course code remains writable regardless; its display uses
+    display_fn when supplied, otherwise it remains raw. display_fn is an
+    optional family-specific fallback for untranslated raw values --
+    select.py applies it after catalog lookup to both state and options.
 
     Left at its default for dishwasher, which has no equivalent table-id
     resource and no evidence its codes vary by table the way washer/
@@ -367,6 +417,7 @@ def cycle_select(*, translation_key, icon, table_href=None):
         options=cycle_options,
         exists_fn=lambda rep, resources: bool(cycle_options(resources)),
         rep_fn=lambda rep: option_value(rep.get("x.com.samsung.da.options"), "Course"),
+        display_fn=display_fn,
         write_fn=cycle_write,
     )
 

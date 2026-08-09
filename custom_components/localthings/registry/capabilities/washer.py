@@ -27,6 +27,7 @@ from .laundry import (
     hex_pairs,
     option_value,
     option_write,
+    washer_cycle_fallback,
 )
 
 # Course_XX hex code labels (translations/en.json,
@@ -50,6 +51,14 @@ from .laundry import (
 # options' MostUsed_* entry was considered as a fallback source (its first
 # byte matches the selected Course_XX on both dumps), but the remaining
 # bytes don't decode to any confirmed course code, so it isn't used.
+#
+# The owner of a Korean Table_02 washer confirmed the names for its newer
+# 69/6A-79/88 course-code family, including Course_69 as AI Wash. Those names
+# live only in the table-scoped translation catalog; a code not confirmed by
+# the owner or device metadata falls back to washer_cycle_fallback, which
+# surfaces a personal-course name only -- no invented English label for an
+# unrecognized standard code (PR #251 review).
+# ---------------------------------------------------------------------------
 
 # /washer/vs/0 -- wash temperature, spin speed, rinse cycle count.
 # Despite the shared href, this is unrelated to dryer.DRYER_SETTINGS (also
@@ -250,6 +259,7 @@ WASHER_COURSE = Capability(
             translation_key="washer_cycle",
             icon="mdi:washing-machine",
             table_href="/st/washercourse/vs/0",
+            display_fn=washer_cycle_fallback,
         ),
         SensorDesc(
             key="drum_clean_cycles_remaining",
