@@ -22,7 +22,7 @@ from ..entities import (
     SwitchDesc,
 )
 from . import common
-from .common import filter_usage_percent, normalize_temp_unit
+from .common import filter_usage_hours, filter_usage_percent, normalize_temp_unit
 from .laundry import option_write
 
 
@@ -854,16 +854,17 @@ AIR_FILTER = Capability(
             icon="mdi:air-filter",
             entity_category="diagnostic",
         ),
-        # Lifetime hour counter, resets only on filter replacement.
+        # Lifetime hour counter, resets only on filter replacement. Derived
+        # from the percentage and filterCapacity (issue #330) -- filterUsage
+        # itself is not an hour count.
         SensorDesc(
             key="air_filter_usage_hours",
-            field="x.com.samsung.da.filterUsage",
+            rep_fn=filter_usage_hours,
             device_class="duration",
             state_class="total_increasing",
             unit_fn=_filter_unit,
             icon="mdi:air-filter",
             entity_category="diagnostic",
-            value_fn=_int,
         ),
         # Locally writable alarm threshold (see _threshold_write); only
         # surfaces where supportedFilterDesiredUsage is advertised.
@@ -925,13 +926,12 @@ AIR_FILTER_PM1 = Capability(
         ),
         SensorDesc(
             key="air_filter_pm1_usage_hours",
-            field="x.com.samsung.da.filterUsage",
+            rep_fn=filter_usage_hours,
             device_class="duration",
             state_class="total_increasing",
             unit_fn=_filter_unit,
             icon="mdi:air-filter",
             entity_category="diagnostic",
-            value_fn=_int,
             exists_fn=_has_filter_field("x.com.samsung.da.filterUsage"),
         ),
         SelectDesc(

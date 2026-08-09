@@ -225,6 +225,9 @@
       "air_filter_threshold": {
         "name": "Filteralarmdrempel"
       },
+      "auto_door_timer": {
+        "name": "Timer automatische deuropener"
+      },
       "beverage_zone_mode": {
         "name": "Modus drankenzone",
         "state": {
@@ -472,9 +475,11 @@
           "kimchi_storage_crunfch": "Knapperige kimchi",
           "kimchi_storage_buy": "Gekochte kimchi",
           "storage_fridge_normal": "Koelkast",
+          "storage_fridge": "Koelkast",
           "storage_fridge_cold": "Koelkast, sterk",
           "storage_fridge_warm": "Koelkast, zwak",
           "storage_freezer_normal": "Vriezer",
+          "storage_freezer": "Vriezer",
           "storage_freezer_cold": "Vriezer, sterk",
           "storage_freezer_warm": "Vriezer, zwak",
           "kimchi_ripe_low_temp": "Kimchi rijpen, lage temperatuur",
@@ -487,7 +492,8 @@
           "storage_fresh_cereal": "Granen",
           "storage_fridge_drink": "Dranken",
           "storage_fresh_wine": "Wijn",
-          "storage_fresh_potato_banana": "Aardappelen en bananen"
+          "storage_fresh_potato_banana": "Aardappelen en bananen",
+          "newmode_kimchi_0000": "Nieuwe modus"
         }
       },
       "pantry_zone_mode": {
@@ -496,6 +502,16 @@
           "fdr_wine": "Wijn",
           "fdr_deli": "Delicatessen",
           "fdr_drinks": "Dranken"
+        }
+      },
+      "winecellar_pantry_zone_mode": {
+        "name": "Modus voorraadzone",
+        "state": {
+          "processed_meat": "Vleeswaren",
+          "cheese": "Kaas",
+          "nuts": "Noten",
+          "fruit": "Fruit",
+          "wine": "Wijn"
         }
       },
       "range_burner_power_level": {
@@ -744,6 +760,9 @@
       },
       "air_filter_usage_hours": {
         "name": "Filterverbruik (uren)"
+      },
+      "deodor_filter_usage": {
+        "name": "Filterverbruik"
       },
       "air_quality_standard": {
         "name": "Luchtkwaliteitsnorm"
@@ -1146,6 +1165,12 @@
       },
       "auto_door_opener": {
         "name": "Automatische deuropener"
+      },
+      "auto_door_sound_control": {
+        "name": "Geluid automatische deuropener"
+      },
+      "auto_door_voice_control": {
+        "name": "Spraakbediening automatische deuropener"
       },
       "auto_release_dry": {
         "name": "Auto Release Dry"

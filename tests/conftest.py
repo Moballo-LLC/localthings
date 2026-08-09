@@ -70,13 +70,19 @@ class FakeCoapSession:
         pass
 
 
-def _discover_full(resources: dict[str, dict], oic_res, seeds: dict[str, list]):
+def _discover_full(resources: dict[str, dict], oic_res, seeds: dict[str, list], device_types=()):
     """Run the *whole* subdevice-aware discovery pipeline against fixture
     data, HA-free -- mirrors exactly what LocalThingsCoordinator does across
     _enumerate_subdevices_blocking + _run_discovery (issue #177), so a test
     exercising this exercises the real code path, not a re-implementation of
     it. See the adding-device-support skill's section 2 for the plain
     (non-subdevice) equivalent this extends.
+
+    `device_types` is the master's own /oic/d `rt` (see
+    discover_partitioned's `oic_device_types` param) -- only needed for a
+    board with no /information/vs/0 at all to route from (issue #324's
+    range, whose modelNum-based fallback has nothing to read), so it
+    defaults to () for every fixture that resolves by board token instead.
 
     Returns `(bound, materialized, skipped, full_resources, device_type_name)`:
     - `bound`: every BoundEntity, main + every materialized subdevice.
@@ -101,6 +107,7 @@ def _discover_full(resources: dict[str, dict], oic_res, seeds: dict[str, list]):
         candidates,
         resolve,
         CAPABILITIES,
+        oic_device_types=device_types,
     )
     return bound, materialized, skipped, full_resources, device_type_name
 

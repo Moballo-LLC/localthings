@@ -1,0 +1,22 @@
+{
+  "state_keys": [
+    "alarm_code",
+    "auto_door_opener",
+    "auto_door_timer",
+    "auto_door_voice_control",
+    "door_onedoorkimchi_open",
+    "energy_kwh",
+    "energy_saved_kwh",
+    "firmware_update",
+    "fridge_sound",
+    "onedoor_mode",
+    "onedoor_rack_count",
+    "onedoor_ripening_remaining",
+    "onedoor_ripening_status",
+    "power_energy_kwh",
+    "power_watts",
+    "selfcheck_error",
+    "selfcheck_result",
+    "selfcheck_status"
+  ]
+}

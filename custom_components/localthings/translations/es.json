@@ -374,6 +374,9 @@
       "air_filter_threshold": {
         "name": "Umbral de alarma del filtro"
       },
+      "auto_door_timer": {
+        "name": "Temporizador de apertura automática de puerta"
+      },
       "beverage_zone_mode": {
         "name": "Modo de zona de bebidas",
         "state": {
@@ -621,9 +624,11 @@
           "kimchi_storage_crunfch": "Kimchi crujiente",
           "kimchi_storage_buy": "Kimchi comprado",
           "storage_fridge_normal": "Frigorífico",
+          "storage_fridge": "Frigorífico",
           "storage_fridge_cold": "Frigorífico, fuerte",
           "storage_fridge_warm": "Frigorífico, suave",
           "storage_freezer_normal": "Congelador",
+          "storage_freezer": "Congelador",
           "storage_freezer_cold": "Congelador, fuerte",
           "storage_freezer_warm": "Congelador, suave",
           "kimchi_ripe_low_temp": "Maduración kimchi, baja temperatura",
@@ -636,7 +641,8 @@
           "storage_fresh_cereal": "Cereales",
           "storage_fridge_drink": "Bebidas",
           "storage_fresh_wine": "Vino",
-          "storage_fresh_potato_banana": "Patata y plátano"
+          "storage_fresh_potato_banana": "Patata y plátano",
+          "newmode_kimchi_0000": "Modo nuevo"
         }
       },
       "pantry_zone_mode": {
@@ -645,6 +651,16 @@
           "fdr_wine": "Vino",
           "fdr_deli": "Charcutería",
           "fdr_drinks": "Bebidas"
+        }
+      },
+      "winecellar_pantry_zone_mode": {
+        "name": "Modo de zona de despensa",
+        "state": {
+          "processed_meat": "Embutidos",
+          "cheese": "Queso",
+          "nuts": "Frutos secos",
+          "fruit": "Fruta",
+          "wine": "Vino"
         }
       },
       "range_burner_power_level": {
@@ -890,6 +906,9 @@
       },
       "air_filter_usage_hours": {
         "name": "Horas de uso del filtro"
+      },
+      "deodor_filter_usage": {
+        "name": "Uso del filtro"
       },
       "air_quality_standard": {
         "name": "Estándar de calidad del aire"
@@ -1295,6 +1314,12 @@
       },
       "auto_door_opener": {
         "name": "Apertura automática de puerta"
+      },
+      "auto_door_sound_control": {
+        "name": "Sonido de apertura automática de puerta"
+      },
+      "auto_door_voice_control": {
+        "name": "Control por voz de apertura automática de puerta"
       },
       "auto_release_dry": {
         "name": "Liberación automática de secado"

@@ -14,6 +14,10 @@ REGISTRY = DeviceRegistry(
             fridge.DOOR_ALERT,
             common.WATER_FILTER,
             fridge.AIR_FILTER,
+            fridge.DEODOR_FILTER,
+            fridge.AUTO_DOOR_TIMER,
+            fridge.WINECELLAR_PANTRY_ZONE,
+            fridge.WINECELLAR_INFO,
             dishwasher.DIAGNOSIS,
             fridge.ICEMAKER_NIGHTTIME,
             fridge.FLEX_ZONE,
@@ -44,5 +48,6 @@ REGISTRY = DeviceRegistry(
         fridge.DOOR_GENERIC,
         fridge.KIMCHI_ZONE,
         fridge.KIMCHI_DOOR_GENERIC,
+        fridge.AUTO_DOOR_VARIANT,
     ],
 )

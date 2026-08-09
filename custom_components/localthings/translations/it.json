@@ -225,6 +225,9 @@
       "air_filter_threshold": {
         "name": "Soglia allarme filtro"
       },
+      "auto_door_timer": {
+        "name": "Timer apertura automatica sportello"
+      },
       "beverage_zone_mode": {
         "name": "Modalità zona bevande",
         "state": {
@@ -472,9 +475,11 @@
           "kimchi_storage_crunfch": "Kimchi croccante",
           "kimchi_storage_buy": "Kimchi acquistato",
           "storage_fridge_normal": "Frigorifero",
+          "storage_fridge": "Frigorifero",
           "storage_fridge_cold": "Frigorifero, forte",
           "storage_fridge_warm": "Frigorifero, debole",
           "storage_freezer_normal": "Congelatore",
+          "storage_freezer": "Congelatore",
           "storage_freezer_cold": "Congelatore, forte",
           "storage_freezer_warm": "Congelatore, debole",
           "kimchi_ripe_low_temp": "Maturazione kimchi, bassa temperatura",
@@ -487,7 +492,8 @@
           "storage_fresh_cereal": "Cereali",
           "storage_fridge_drink": "Bevande",
           "storage_fresh_wine": "Vino",
-          "storage_fresh_potato_banana": "Patate e banane"
+          "storage_fresh_potato_banana": "Patate e banane",
+          "newmode_kimchi_0000": "Nuova modalità"
         }
       },
       "pantry_zone_mode": {
@@ -496,6 +502,16 @@
           "fdr_wine": "Vino",
           "fdr_deli": "Salumeria",
           "fdr_drinks": "Bevande"
+        }
+      },
+      "winecellar_pantry_zone_mode": {
+        "name": "Modalità zona dispensa",
+        "state": {
+          "processed_meat": "Salumi",
+          "cheese": "Formaggio",
+          "nuts": "Frutta secca",
+          "fruit": "Frutta",
+          "wine": "Vino"
         }
       },
       "range_burner_power_level": {
@@ -744,6 +760,9 @@
       },
       "air_filter_usage_hours": {
         "name": "Ore di utilizzo filtro"
+      },
+      "deodor_filter_usage": {
+        "name": "Utilizzo filtro"
       },
       "air_quality_standard": {
         "name": "Standard qualità aria"
@@ -1146,6 +1165,12 @@
       },
       "auto_door_opener": {
         "name": "Apertura automatica sportello"
+      },
+      "auto_door_sound_control": {
+        "name": "Suono apertura automatica sportello"
+      },
+      "auto_door_voice_control": {
+        "name": "Controllo vocale apertura automatica sportello"
       },
       "auto_release_dry": {
         "name": "Apertura automatica per asciugatura"

@@ -1132,12 +1132,16 @@ def test_registry_reproduces_golden_state_keys_for_airconditioner_fac_bora():
     )
 
 
-def _new_subdevice_aware_state_keys(name):
+def _new_subdevice_aware_state_keys(name, device_types=()):
     """Like _new_state_keys, but runs the full subdevice-aware pipeline
     (enumerate_subdevices + discover_partitioned, issue #177) instead of a
     single discover() call, so the golden for a composite-device fixture
     captures every materialized subdevice's keys
-    (subdevice1_-/subdevice_<uuid>_-prefixed), not just the master's."""
+    (subdevice1_-/subdevice_<uuid>_-prefixed), not just the master's.
+
+    `device_types` threads through to discover_partitioned's own
+    `oic_device_types` -- needed for a board with no /information/vs/0 at
+    all to route from (issue #324's range)."""
     from custom_components.localthings.registry.adapter import flatten
     from tests.conftest import _discover_full, _load_device_full
 
@@ -1146,6 +1150,7 @@ def _new_subdevice_aware_state_keys(name):
         resources,
         oic_res,
         seeds,
+        device_types,
     )
     state = flatten(bound, full_resources)
     return sorted(state.keys())
@@ -1400,6 +1405,78 @@ def test_registry_reproduces_golden_state_keys_for_refrigerator_tp1x_ref_21k_def
     resources = _load_device("refrigerator_tp1x_ref_21k_definite")
     golden = json.loads((GOLDEN / "refrigerator_tp1x_ref_21k_definite.json").read_text())
     state_keys = _new_state_keys("refrigerator_tp1x_ref_21k_definite", resources)
+    assert set(state_keys) == set(golden["state_keys"]), (
+        f"state_keys mismatch:\n"
+        f"  extra:   {sorted(set(state_keys) - set(golden['state_keys']))}\n"
+        f"  missing: {sorted(set(golden['state_keys']) - set(state_keys))}"
+    )
+
+
+def test_registry_reproduces_golden_state_keys_for_refrigerator_tp1x_ref_21k_autodoor():
+    """TP1X_REF_21K, single-freezer-door Auto Door Open variant (issue
+    #328): /autodoor/single/vs/0 + /autodoor/timer/vs/0, plus
+    STATUS_LOCK's ado.voicecontrol sibling toggle."""
+    from tests.conftest import _load_device
+
+    resources = _load_device("refrigerator_tp1x_ref_21k_autodoor")
+    golden = json.loads((GOLDEN / "refrigerator_tp1x_ref_21k_autodoor.json").read_text())
+    state_keys = _new_state_keys("refrigerator_tp1x_ref_21k_autodoor", resources)
+    assert set(state_keys) == set(golden["state_keys"]), (
+        f"state_keys mismatch:\n"
+        f"  extra:   {sorted(set(state_keys) - set(golden['state_keys']))}\n"
+        f"  missing: {sorted(set(golden['state_keys']) - set(state_keys))}"
+    )
+
+
+def test_registry_reproduces_golden_state_keys_for_refrigerator_tp1x_ref_21k_kimchi():
+    """Kimchi-refrigerator Auto Door Open variant (issue #328) -- resolves
+    via /oic/d's oic.d.krefrigerator, not modelNum (the board is the same
+    TP1X_REF_21K as the regular fridge, so only the OCF type tells them
+    apart before checking hrefs)."""
+    from tests.conftest import _load_device
+
+    resources = _load_device("refrigerator_tp1x_ref_21k_kimchi")
+    golden = json.loads((GOLDEN / "refrigerator_tp1x_ref_21k_kimchi.json").read_text())
+    state_keys = _new_state_keys(
+        "refrigerator_tp1x_ref_21k_kimchi",
+        resources,
+        device_types=("oic.wk.d", "oic.d.krefrigerator"),
+    )
+    assert set(state_keys) == set(golden["state_keys"]), (
+        f"state_keys mismatch:\n"
+        f"  extra:   {sorted(set(state_keys) - set(golden['state_keys']))}\n"
+        f"  missing: {sorted(set(golden['state_keys']) - set(state_keys))}"
+    )
+
+
+def test_registry_reproduces_golden_state_keys_for_refrigerator_winecellar():
+    """Wine-cellar refrigerator variant (issue #328) -- resolves via /oic/d's
+    x.com.st.d.winecellar, same TP1X_REF_21K board as the other two. Adds
+    the deodorizing filter at its own href, the multi-compartment pantry
+    select, and the table-revision info resource."""
+    from tests.conftest import _load_device
+
+    resources = _load_device("refrigerator_winecellar")
+    golden = json.loads((GOLDEN / "refrigerator_winecellar.json").read_text())
+    state_keys = _new_state_keys(
+        "refrigerator_winecellar",
+        resources,
+        device_types=("oic.wk.d", "x.com.st.d.winecellar"),
+    )
+    assert set(state_keys) == set(golden["state_keys"]), (
+        f"state_keys mismatch:\n"
+        f"  extra:   {sorted(set(state_keys) - set(golden['state_keys']))}\n"
+        f"  missing: {sorted(set(golden['state_keys']) - set(state_keys))}"
+    )
+
+
+def test_registry_reproduces_golden_state_keys_for_range_tp1x_da_ks_range_0101x():
+    """Dual-cavity range (issue #324): no /information/vs/0 at all, so
+    routing depends entirely on /oic/d's oic.d.range -- and the second
+    cavity is a genuine Pattern A indexed subdevice at /device/1."""
+    name = "range_tp1x_da_ks_range_0101x"
+    golden = json.loads((GOLDEN / f"{name}.json").read_text())
+    state_keys = _new_subdevice_aware_state_keys(name, device_types=("oic.wk.d", "oic.d.range"))
     assert set(state_keys) == set(golden["state_keys"]), (
         f"state_keys mismatch:\n"
         f"  extra:   {sorted(set(state_keys) - set(golden['state_keys']))}\n"

@@ -1,0 +1,24 @@
+{
+  "state_keys": [
+    "ai_energy_level",
+    "alarm_code",
+    "auto_door_opener",
+    "auto_door_timer",
+    "auto_door_voice_control",
+    "defrost_active",
+    "door_onedoorfreezer_open",
+    "energy_kwh",
+    "energy_saved_kwh",
+    "firmware_update",
+    "freezer_setpoint",
+    "freezer_temperature",
+    "fridge_sound",
+    "power_energy_kwh",
+    "power_watts",
+    "rapid_freezing",
+    "rapid_fridge",
+    "selfcheck_error",
+    "selfcheck_result",
+    "selfcheck_status"
+  ]
+}

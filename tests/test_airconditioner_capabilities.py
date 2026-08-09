@@ -95,10 +95,13 @@ def test_power_and_convenient_folded_into_climate():
     assert "convenient_mode" not in state
 
 
-def test_air_filter_usage_is_percentage_of_capacity():
-    """filterUsage is a raw count in the capacity unit (100 of 500), surfaced as
-    a percentage rather than the misleading raw value."""
-    assert _state()["air_filter_usage"] == 20
+def test_air_filter_usage_is_already_a_percentage():
+    """filterUsage is already 0-100, not a raw count to divide by
+    filterCapacity (issue #330): this fixture (ARTIK051_PRAC_20K) reports
+    filterStatus == 'wash' at filterUsage == '100', which only holds if
+    filterUsage is already a percent -- dividing by the 500 capacity again
+    would read a filter due for washing as 20% fresh."""
+    assert _state()["air_filter_usage"] == 100
 
 
 def test_climate_write_targets():
@@ -771,19 +774,34 @@ def test_tropical_night_state_levels_across_fixtures():
     assert level("airconditioner_tp2x_rac_20k") == 16
 
 
-def test_air_filter_usage_hours_reads_raw_count():
-    """filterUsage is a lifetime hour counter (41 of 500) that resets on
-    filter replacement -- total_increasing, not measurement. Unit comes from
+def test_air_filter_usage_hours_derived_from_percent_and_capacity():
+    """filterUsage is a percent, not an hour count (issue #330): the lifetime
+    hour reading is derived from percent * capacity rather than read off
+    filterUsage directly. total_increasing, not measurement; unit comes from
     filterCapacityUnit via unit_fn, not a hardcoded 'h'."""
     desc = next(
         e
         for e in airconditioner.AIR_FILTER.entities
         if e.key == "air_filter_usage_hours" and isinstance(e, SensorDesc)
     )
-    assert desc.value_fn("41") == 41
-    assert desc.value_fn(41) == 41
-    assert desc.value_fn(None) is None
-    assert desc.value_fn("not-a-number") is None
+    assert desc.rep_fn is not None
+    assert (
+        desc.rep_fn(
+            {"x.com.samsung.da.filterUsage": "91", "x.com.samsung.da.filterCapacity": "500"}
+        )
+        == 455.0
+    )
+    assert (
+        desc.rep_fn(
+            {
+                "x.com.samsung.da.filterUsage": "not-a-number",
+                "x.com.samsung.da.filterCapacity": "500",
+            }
+        )
+        is None
+    )
+    assert desc.rep_fn({"x.com.samsung.da.filterCapacity": "500"}) is None
+    assert desc.rep_fn({"x.com.samsung.da.filterUsage": "91"}) is None
     assert desc.device_class == "duration"
     assert desc.state_class == "total_increasing"
     assert desc.unit_fn is not None
@@ -830,8 +848,8 @@ def test_air_filter_threshold_absent_without_supported_enum():
     reg, resources = _ac_windfree()
     state = flatten(discover(resources, reg.capabilities, reg.pattern_capabilities), resources)
     assert "air_filter_threshold" not in state
-    assert state["air_filter_usage_hours"] == 41
-    assert state["air_filter_usage"] == 8  # 41/500 -> 8%
+    assert state["air_filter_usage"] == 41
+    assert state["air_filter_usage_hours"] == 205.0  # 41% of 500
 
 
 def test_air_filter_threshold_binds_on_enum_board():

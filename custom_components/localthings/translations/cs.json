@@ -225,6 +225,9 @@
       "air_filter_threshold": {
         "name": "Práh upozornění na filtr"
       },
+      "auto_door_timer": {
+        "name": "Časovač automatického otevírání dvířek"
+      },
       "beverage_zone_mode": {
         "name": "Režim zóny nápojů",
         "state": {
@@ -472,9 +475,11 @@
           "kimchi_storage_crunfch": "Křupavé kimči",
           "kimchi_storage_buy": "Kupované kimči",
           "storage_fridge_normal": "Chlazení",
+          "storage_fridge": "Chlazení",
           "storage_fridge_cold": "Chlazení, silné",
           "storage_fridge_warm": "Chlazení, slabé",
           "storage_freezer_normal": "Mražení",
+          "storage_freezer": "Mražení",
           "storage_freezer_cold": "Mražení, silné",
           "storage_freezer_warm": "Mražení, slabé",
           "kimchi_ripe_low_temp": "Zrání kimči, nízká teplota",
@@ -487,7 +492,8 @@
           "storage_fresh_cereal": "Obiloviny",
           "storage_fridge_drink": "Nápoje",
           "storage_fresh_wine": "Víno",
-          "storage_fresh_potato_banana": "Brambory a banány"
+          "storage_fresh_potato_banana": "Brambory a banány",
+          "newmode_kimchi_0000": "Nový režim"
         }
       },
       "pantry_zone_mode": {
@@ -496,6 +502,16 @@
           "fdr_wine": "Víno",
           "fdr_deli": "Lahůdky",
           "fdr_drinks": "Nápoje"
+        }
+      },
+      "winecellar_pantry_zone_mode": {
+        "name": "Režim spíže",
+        "state": {
+          "processed_meat": "Zpracované maso",
+          "cheese": "Sýr",
+          "nuts": "Ořechy",
+          "fruit": "Ovoce",
+          "wine": "Víno"
         }
       },
       "range_burner_power_level": {
@@ -744,6 +760,9 @@
       },
       "air_filter_usage_hours": {
         "name": "Hodiny využití filtru"
+      },
+      "deodor_filter_usage": {
+        "name": "Využití filtru"
       },
       "air_quality_standard": {
         "name": "Norma kvality vzduchu"
@@ -1146,6 +1165,12 @@
       },
       "auto_door_opener": {
         "name": "Automatické otevírání dvířek"
+      },
+      "auto_door_sound_control": {
+        "name": "Zvuk automatického otevírání dvířek"
+      },
+      "auto_door_voice_control": {
+        "name": "Hlasové ovládání automatického otevírání dvířek"
       },
       "auto_release_dry": {
         "name": "Automatické uvolnění při sušení"

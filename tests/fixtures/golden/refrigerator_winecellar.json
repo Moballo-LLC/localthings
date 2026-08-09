@@ -1,0 +1,26 @@
+{
+  "state_keys": [
+    "alarm_code",
+    "auto_door_opener",
+    "auto_door_sound_control",
+    "auto_door_timer",
+    "auto_door_voice_control",
+    "cabinet_light_dim",
+    "cabinet_light_switch",
+    "deodor_filter_status",
+    "deodor_filter_usage",
+    "door_winecellar_open",
+    "energy_kwh",
+    "energy_saved_kwh",
+    "firmware_update",
+    "fridge_sound",
+    "power_energy_kwh",
+    "power_watts",
+    "selfcheck_error",
+    "selfcheck_result",
+    "selfcheck_status",
+    "winecellar_bottom_setpoint",
+    "winecellar_pantry_zone_mode",
+    "winecellar_top_setpoint"
+  ]
+}
