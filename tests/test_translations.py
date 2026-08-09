@@ -160,6 +160,36 @@ def test_confirmed_korean_table_02_washer_course_names():
     }
 
 
+def test_confirmed_washer_table_02_towels_bedding_are_not_swapped():
+    """Issue #343: DA_WM_TP1_21_COMMON's Table_02 had 24/33 transposed --
+    selecting 'Towels' in HA ran the washer's Bedding cycle and vice versa.
+    24 must agree with the 69/6A-79/88 family's own Bedding/Towels pair
+    (6f/70), not with each other.
+
+    Checked in every locale catalog, not just English: the underlying bug
+    is a device-code mapping error, not a wording issue, and
+    test_every_language_mirrors_the_english_catalog only checks key
+    topology -- a locale-specific 24/33 swap (the exact shape of #343)
+    would still pass that test."""
+    for language in _languages():
+        states = _load(language)["entity"]["select"]["washer_cycle_table_02"]["state"]
+        assert states["24"] == states["6f"], language
+        assert states["33"] == states["70"], language
+
+
+def test_confirmed_washer_table_02_missing_course_names():
+    """Issue #342: 06/08/a0 had no translation and fell back to the raw
+    device code in the UI; 74 was already translated by the time this
+    landed and is pinned here only as a "didn't regress" anchor."""
+    states = _load("en")["entity"]["select"]["washer_cycle_table_02"]["state"]
+    assert {code: states[code] for code in ("06", "08", "74", "a0")} == {
+        "06": "XXL Laundry",
+        "08": "Rinse+Spin",
+        "74": "Drum Clean",
+        "a0": "15' Quick Wash",
+    }
+
+
 def test_confirmed_dishwasher_course_names():
     states = _load("en")["entity"]["select"]["dishwasher_cycle"]["state"]
     assert {

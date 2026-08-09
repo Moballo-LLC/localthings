@@ -59,9 +59,6 @@ from .registry.capabilities.airconditioner import (
     HREF_POWER_VS as POWER_VS_HREF,
 )
 from .registry.capabilities.airconditioner import (
-    HREF_TEMP_CONTROL as TEMP_CONTROL_HREF,
-)
-from .registry.capabilities.airconditioner import (
     HREF_TEMP_CURRENT as TEMP_CURRENT_HREF,
 )
 from .registry.capabilities.airconditioner import (
@@ -80,6 +77,7 @@ from .registry.capabilities.airconditioner import (
     HREF_WIND_STRENGTH as WIND_STRENGTH_HREF,
 )
 from .registry.capabilities.airconditioner import (
+    _temperature_step,
     extend_option_code_bit,
     has_extend_option_code,
     has_option_code,
@@ -558,12 +556,11 @@ class LocalThingsClimate(LocalThingsEntity, ClimateEntity):
 
     @property
     def target_temperature_step(self) -> float:
-        return (
-            _num(self._rep(TEMP_CONTROL_HREF).get("increment"))
-            or _num(self._rep(TEMP_CONTROL_HREF).get("x.com.samsung.da.increment"))
-            or _num(self._temps_vs().get("x.com.samsung.da.increment"))
-            or 1.0
-        )
+        # Shared with the write path (airconditioner._climate_write) so a
+        # step read here always matches the step a write is quantized to --
+        # self._resources is this entity's own subdevice's canonical view
+        # (issue #177), the same shape _temperature_step expects.
+        return _temperature_step(self._resources) or 1.0
 
     # -- hvac mode ----------------------------------------------------------
 

@@ -152,6 +152,81 @@ def test_climate_write_targets():
     assert write(("bogus", 1), {}) is None
 
 
+def test_climate_write_preserves_half_degree_temperature_steps():
+    """CAC/TP1X FAC boards advertise `0.5` on both temperature resources.
+    The increment on /temperatures/vs/0 lives inside its items[] entry (the
+    same shape every fixture in the corpus uses), not at the resource's top
+    level -- a fabricated flat `{"/temperatures/vs/0": {"increment": ...}}`
+    resource would pass a step-reading bug like that silently.
+
+    Calls _climate_write directly rather than through ClimateDesc.write_fn
+    (as test_climate_write_targets above does): WriteFn only declares the
+    (payload, rep) shape every other write_fn honors, so the type checker
+    rejects a call carrying the climate-only href/resources params through
+    that narrower alias -- same reason test_coordinator_send_command.py and
+    test_airconditioner_artik051_krac.py import the function directly too.
+    """
+    resources = _load_device("airconditioner_cac")
+    assert airconditioner._climate_write(("temperature_ocf", 24.5), {}, None, resources) == (
+        ["temperature", "desired", "0"],
+        {"temperature": 24.5},
+    )
+    assert airconditioner._climate_write(("temperature", 24.5), {}, None, resources) == (
+        ["temperatures", "vs", "0"],
+        {
+            "x.com.samsung.da.items": [
+                {"x.com.samsung.da.id": "0", "x.com.samsung.da.desired": "24.5"}
+            ]
+        },
+    )
+
+
+def test_temperature_step_falls_back_to_temps_vs_items_when_no_control_resource():
+    """Isolates the /temperatures/vs/0 fallback: every fixture that carries
+    an increment there also carries /temperature/control/vs/0, which
+    _temperature_step checks first -- so without dropping that resource,
+    this fallback branch is never actually exercised, and reinstating the
+    original bug (reading the increment off /temperatures/vs/0's top level
+    instead of unwrapping its items[0]) would still pass every other test."""
+    resources = dict(_load_device("airconditioner_cac"))
+    del resources[airconditioner.HREF_TEMP_CONTROL]
+    assert airconditioner._temperature_step(resources) == 0.5
+    assert airconditioner._climate_write(("temperature", 24.5), {}, None, resources) == (
+        ["temperatures", "vs", "0"],
+        {
+            "x.com.samsung.da.items": [
+                {"x.com.samsung.da.id": "0", "x.com.samsung.da.desired": "24.5"}
+            ]
+        },
+    )
+
+
+def test_climate_write_rounds_to_whole_degree_with_no_advertised_increment():
+    """ARTIK051 boards have neither /temperature/control/vs/0 nor an
+    increment field on /temperatures/vs/0's item -- target_temperature_step
+    (climate.py) defaults to 1.0 there, so the write path must match rather
+    than pass the raw value through unrounded."""
+    resources = _load_device("airconditioner_artik051_krac_18k")
+    assert airconditioner._temperature_step(resources) is None
+    assert airconditioner._climate_write(("temperature", 23.6), {}, None, resources) == (
+        ["temperatures", "vs", "0"],
+        {
+            "x.com.samsung.da.items": [
+                {"x.com.samsung.da.id": "0", "x.com.samsung.da.desired": "24"}
+            ]
+        },
+    )
+
+
+def test_climate_write_rejects_non_numeric_temperature():
+    """A non-numeric payload must reject the write (return None) rather than
+    build a body with `{"temperature": None}` -- coordinator.py's
+    async_send_command logs and drops a write_fn result of None instead of
+    POSTing it."""
+    assert airconditioner._climate_write(("temperature_ocf", "not-a-number"), {}) is None
+    assert airconditioner._climate_write(("temperature", None), {}) is None
+
+
 def test_climate_consumed_hrefs_declared_as_coverage():
     """The climate-consumed and ambiguous hrefs are declared in the AC registry
     (as no-entity coverage caps) so they don't leak as gaps -- but produce no

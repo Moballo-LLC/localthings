@@ -609,6 +609,8 @@
         "state": {
           "01": "Normal",
           "04": "Quick Wash",
+          "06": "XXL Laundry",
+          "08": "Rinse+Spin",
           "17": "Downloaded",
           "1b": "Cotton",
           "1c": "Eco 40-60",
@@ -619,7 +621,7 @@
           "21": "Colors",
           "22": "Wool",
           "23": "Outdoor",
-          "24": "Towels",
+          "24": "Bedding",
           "25": "Synthetics",
           "26": "Delicates",
           "27": "Rinse+Spin",
@@ -632,7 +634,7 @@
           "2f": "Activewear",
           "30": "Cloudy Day",
           "32": "Shirts",
-          "33": "Bedding",
+          "33": "Towels",
           "34": "Mixed",
           "35": "E Cotton",
           "36": "Wash+Dry",
@@ -674,7 +676,8 @@
           "87": "Download",
           "88": "Pet Care",
           "8f": "Intense Cold",
-          "96": "Less Microfiber"
+          "96": "Less Microfiber",
+          "a0": "15' Quick Wash"
         }
       },
       "washer_dry_level": {

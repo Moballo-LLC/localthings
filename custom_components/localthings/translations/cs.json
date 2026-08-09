@@ -609,6 +609,8 @@
         "state": {
           "01": "Normální",
           "04": "Rychlé praní",
+          "06": "XXL prádlo",
+          "08": "Máchání+odstřeďování",
           "17": "Stažený program",
           "1b": "Bavlna",
           "1c": "Eco 40-60",
@@ -619,7 +621,7 @@
           "21": "Barevné prádlo",
           "22": "Vlna",
           "23": "Outdoor",
-          "24": "Ručníky",
+          "24": "Ložní prádlo",
           "25": "Syntetika",
           "26": "Jemné prádlo",
           "27": "Máchání+odstřeďování",
@@ -632,7 +634,7 @@
           "2f": "Sportovní oblečení",
           "30": "Zataženo",
           "32": "Košile",
-          "33": "Ložní prádlo",
+          "33": "Ručníky",
           "34": "Smíšené",
           "36": "Praní+sušení",
           "37": "Sušení vzduchem",
@@ -674,6 +676,7 @@
           "88": "Péče o domácí mazlíčky",
           "8f": "Intenzivní studená",
           "96": "Méně mikrovláken",
+          "a0": "15min rychlé praní",
           "35": "Eko bavlna"
         }
       },
