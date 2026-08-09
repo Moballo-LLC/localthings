@@ -122,6 +122,59 @@ class TestRealDumps:
         store.observe(rep)
         assert store.download_candidates() == []
 
+    def test_a_dishwasher_advertises_programs_it_has_never_loaded(self):
+        """DW5000C (issues #113/#123): CloudExtraCourse_ names four slots
+        with no CloudCourse_/OneTimeCloudCourse_ token anywhere in the array.
+
+        Two things at once -- the feature is not washer-only (DA_DW, not
+        DA_WM), and a device can advertise programs whose payloads have never
+        been observed. Nothing is learnable here, so nothing is offerable,
+        but the gap is still countable and still worth telling the user
+        about."""
+        rep = _load_device("dishwasher_dw5000c_cloud")["/course/vs/0"]
+        assert cloudcourse.advertised_slots(rep) == ["8E", "8D", "8F", "02"]
+        assert cloudcourse.supports_cloud_courses(rep) is True
+
+        store = cloudcourse.CloudCourses()
+        assert store.observe(rep) is False
+        assert store.view() == {}
+        assert cloudcourse.undiscovered(rep, store.snapshot()) == ["8E", "8D", "8F", "02"]
+
+    def test_byte_three_is_not_part_of_a_programs_identity(self):
+        """Two WW5000C units on different firmware (issue #342's _B06C and
+        issues #259/#343's _B048) report the same program -- same id, same
+        slot, same field values, same tail -- differing only at byte 3.
+
+        This is the evidence against a shipped catalog of payloads: keyed on
+        program id, one unit's capture would have carried the other unit's
+        byte 3. Both are recorded and replayed per device instead, so
+        whatever byte 3 tracks never has to be understood."""
+        b06c = "00040A0449404D134AB84C0035F004F005F0AC00"
+        b048 = "00040A0649404D134AB84C0035F004F005F0AC00"
+        assert b06c != b048
+        # Same program by every identifier the device gives us.
+        assert cloudcourse.slot_of(b06c) == cloudcourse.slot_of(b048) == "0A"
+        assert b06c[:6] == b048[:6]
+        assert b06c[8:] == b048[8:]
+        # Learned separately per device, and each replays what it saw.
+        for blob in (b06c, b048):
+            store = cloudcourse.CloudCourses()
+            store.observe(_rep(["CloudExtraCourse_0A", f"CloudCourse_{blob}"]))
+            assert store.blob("0A") == blob
+
+    def test_a_sentinel_slot_byte_is_not_the_current_course(self):
+        """The two sentinels in the corpus disagree about this -- WA55's byte
+        2 happens to equal its selected course, the WW5000C _B048's does not
+        (1B against Course_1C). Nothing keys off it: a sentinel is rejected
+        on its FFFF prefix, and its byte 2 is not an advertised slot either
+        way."""
+        wa55 = "FFFF010049004D004A804C0037F0AC00"
+        b048 = "FFFF1B0049004D004A804C0035F004F005F0AC00"
+        assert cloudcourse.slot_of(wa55) is None
+        assert cloudcourse.slot_of(b048) is None
+        # Different board widths, same sentinel rule.
+        assert len(wa55) != len(b048)
+
     def test_undiscovered_counts_against_what_the_device_advertises(self):
         rep = _load_device("washer_ww5000c_cloud")["/course/vs/0"]
         store = cloudcourse.CloudCourses()

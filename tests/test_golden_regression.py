@@ -1519,3 +1519,23 @@ def test_registry_reproduces_golden_state_keys_for_washer_ww5000c_cloud():
         f"  extra:   {sorted(set(state_keys) - set(golden['state_keys']))}\n"
         f"  missing: {sorted(set(golden['state_keys']) - set(state_keys))}"
     )
+
+
+def test_registry_reproduces_golden_state_keys_for_dishwasher_dw5000c_cloud():
+    """A DW5000C dishwasher (issues #113/#123) that advertises four
+    downloaded programs it has never loaded -- CloudExtraCourse_ with no
+    CloudCourse_/OneTimeCloudCourse_ payload alongside it (issue #342).
+
+    Proves the cloud-cycle machinery is not washer-only and, more usefully,
+    that a device can advertise programs whose payloads have never been
+    seen. It adds no entity of its own either way."""
+    from tests.conftest import _load_device
+
+    resources = _load_device("dishwasher_dw5000c_cloud")
+    golden = json.loads((GOLDEN / "dishwasher_dw5000c_cloud.json").read_text())
+    state_keys = _new_state_keys("dishwasher_dw5000c_cloud", resources)
+    assert set(state_keys) == set(golden["state_keys"]), (
+        f"state_keys mismatch:\n"
+        f"  extra:   {sorted(set(state_keys) - set(golden['state_keys']))}\n"
+        f"  missing: {sorted(set(golden['state_keys']) - set(state_keys))}"
+    )

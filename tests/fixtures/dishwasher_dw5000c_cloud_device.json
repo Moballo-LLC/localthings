@@ -1,0 +1,297 @@
+{
+  "device0": [
+    {
+      "rt": [
+        "x.com.samsung.devcol",
+        "oic.wk.col"
+      ],
+      "if": [
+        "oic.if.baseline",
+        "oic.if.ll",
+        "oic.if.b"
+      ]
+    },
+    {
+      "href": "/realtimenotiforclient/vs/0",
+      "rep": {
+        "x.com.samsung.da.timeforshortnoti": "0",
+        "x.com.samsung.da.periodicnotisubscription": "true"
+      }
+    },
+    {
+      "href": "/alarms/vs/0",
+      "rep": {
+        "x.com.samsung.da.items": [
+          {
+            "x.com.samsung.da.id": "0",
+            "x.com.samsung.da.description": "Alarm",
+            "x.com.samsung.da.alarmType": "Device",
+            "x.com.samsung.da.code": "DishA_Disable",
+            "x.com.samsung.da.triggeredTime": "2022-07-28T13:45:57",
+            "x.com.samsung.da.state": "Deleted"
+          }
+        ]
+      }
+    },
+    {
+      "href": "/diagnosis/vs/0",
+      "rep": {
+        "x.com.samsung.da.diagnosisStart": "Ready"
+      }
+    },
+    {
+      "href": "/energy/consumption/vs/0",
+      "rep": {
+        "x.com.samsung.da.cumulativeSavedPower": "0"
+      }
+    },
+    {
+      "href": "/energy/consumption/0",
+      "rep": {}
+    },
+    {
+      "href": "/course/vs/0",
+      "rep": {
+        "x.com.samsung.da.supportedModes": [
+          "HOMECARE_WIZARD_V2"
+        ],
+        "x.com.samsung.da.options": [
+          "DeviceType_0812",
+          "UpdateAllow_NotAllowed",
+          "CourseDefaultTimeSet_008B008E009A006D003C000A006600A50059009D",
+          "CourseDefaultTempSet_3C41363F41413737373700003C3C464649493C3C",
+          "CourseDefaultFahrenheitSet_8C95819195958383838300008C8C9E9EA3A38C8C",
+          "Course_86",
+          "DetergentOnce_0",
+          "DetergentLeft_0",
+          "DetergentBase_0",
+          "DetergentAlarm_Off",
+          "DetergentType_0",
+          "DetergentTotal_0",
+          "ProgressTimeSet_420622820456B20384",
+          "SendToDevice_Off",
+          "GMT_F2",
+          "SavingModeCondition_01010207828485868E8D020300",
+          "SavingMode_Off",
+          "DownloadCourseList_8F",
+          "StormWashZone_Off",
+          "AutoDoorRelease_On",
+          "Sound_On",
+          "WaterLevelSet_050404050302010205010400",
+          "CloudExtraCourse_8E8D8F02",
+          "EnergyLevelSet_050403050202010305040300",
+          "UsagesDB_ok",
+          "EnergyKW_396",
+          "DrumCleanLog_Empty",
+          "TimeSync_NotSupported"
+        ],
+        "x.com.samsung.da.supportedOptions": [
+          "482830CB002C002D00283830CB002C002D00284830CB002C002D00285830CB000C000D00086830CB002C002D002908308B000C000D0008E830CB000C000D0008D830CB002C002D0028F8308B000C000D00002830CB002C002D002"
+        ]
+      }
+    },
+    {
+      "href": "/power/vs/0",
+      "rep": {
+        "x.com.samsung.da.power": "On"
+      }
+    },
+    {
+      "href": "/power/0",
+      "rep": {
+        "value": true
+      }
+    },
+    {
+      "href": "/kidslock/vs/0",
+      "rep": {
+        "x.com.samsung.da.kidsLock": "Ready"
+      }
+    },
+    {
+      "href": "/kidslock/0",
+      "rep": {
+        "value": false
+      }
+    },
+    {
+      "href": "/operational/state/vs/0",
+      "rep": {
+        "x.com.samsung.da.state": "Run",
+        "x.com.samsung.da.remainingTime": "00:44:00",
+        "x.com.samsung.da.progressPercentage": "28",
+        "x.com.samsung.da.delayStartTime": "00:00:00",
+        "x.com.samsung.da.progress": "Wash",
+        "x.com.samsung.da.supportedProgress": [
+          "None",
+          "Predrain",
+          "Wash",
+          "Rinse",
+          "Drying",
+          "Finish"
+        ]
+      }
+    },
+    {
+      "href": "/operational/state/0",
+      "rep": {
+        "currentMachineState": "**REDACTED**",
+        "machineStates": "**REDACTED**",
+        "jobStates": [
+          "None",
+          "Predrain",
+          "Wash",
+          "Rinse",
+          "Drying",
+          "Finish"
+        ],
+        "currentJobState": "Wash",
+        "remainingTime": "00:44:00",
+        "progressPercentage": "28"
+      }
+    },
+    {
+      "href": "/information/vs/0",
+      "rep": {
+        "x.com.samsung.da.modelNum": "DA_DW_TP1_21_COMMON|30010741|40000200001711004981000000200000",
+        "x.com.samsung.da.description": "DA_DW_TP1_21_COMMON_DW5000C/DD92-0010741_0001",
+        "x.com.samsung.da.serialNum": "**REDACTED**",
+        "x.com.samsung.da.otnDUID": "**REDACTED**",
+        "x.com.samsung.da.diagProtocolType": "WIFI_HTTPS",
+        "x.com.samsung.da.diagLogType": [
+          "errCode",
+          "dump"
+        ],
+        "x.com.samsung.da.diagDumpType": "file",
+        "x.com.samsung.da.diagEndPoint": "SSM",
+        "x.com.samsung.da.diagMnid": "0AJT",
+        "x.com.samsung.da.diagSetupid": "WD0",
+        "x.com.samsung.da.diagMinVersion": "1.0",
+        "x.com.samsung.da.items": [
+          {
+            "x.com.samsung.da.id": "0",
+            "x.com.samsung.da.description": "DA_DW_TP1_21_COMMON|30010741|40000200001711004981000000200000",
+            "x.com.samsung.da.type": "Software",
+            "x.com.samsung.da.number": "00081A230213(A214)",
+            "x.com.samsung.da.newVersionAvailable": "0"
+          },
+          {
+            "x.com.samsung.da.id": "1",
+            "x.com.samsung.da.description": "Firmware_1_DB_30010741230602142FFFFFFFFFFFFFFFFFFFFFFFFFFE(081230010741FFFFFFFF_30000000)(FileDown:0)(Type:0)",
+            "x.com.samsung.da.type": "Firmware",
+            "x.com.samsung.da.number": "23060214,FFFFFFFF",
+            "x.com.samsung.da.newVersionAvailable": "0"
+          }
+        ]
+      }
+    },
+    {
+      "href": "/file/information/vs/0",
+      "rep": {
+        "x.com.samsung.timeoffset": "+00:00"
+      }
+    },
+    {
+      "href": "/wm/editcourse/vs/0",
+      "rep": {}
+    },
+    {
+      "href": "/wm/setinfo/vs/0",
+      "rep": {
+        "x.com.samsung.da.isModelSettingWithoutSC": "false",
+        "x.com.samsung.da.isModelSettingPowerOnOff": "false"
+      }
+    },
+    {
+      "href": "/dishwasher/vs/0",
+      "rep": {
+        "x.com.samsung.da.highTemperatureDry": "Off",
+        "x.com.samsung.da.sanitize": "Off",
+        "x.com.samsung.da.selectedZone": "ON_ON",
+        "x.com.samsung.da.rinseLevel": "0",
+        "x.com.samsung.da.supportedSelectedZone": [
+          "OFF_ON",
+          "ON_ON"
+        ],
+        "x.com.samsung.da.supportedSanitize": [
+          "Off",
+          "On"
+        ],
+        "x.com.samsung.da.supportedHighTemperatureDry": [
+          "Off",
+          "On"
+        ],
+        "x.com.samsung.da.supportedRinseLevel": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6"
+        ]
+      }
+    },
+    {
+      "href": "/otninformation/vs/0",
+      "rep": {
+        "x.com.samsung.da.target": "Micom",
+        "x.com.samsung.da.newVersionAvailable": "false"
+      }
+    },
+    {
+      "href": "/remotectrl/vs/0",
+      "rep": {
+        "x.com.samsung.da.remoteControlEnabled": "true"
+      }
+    },
+    {
+      "href": "/remotectrl/0",
+      "rep": {
+        "value": true
+      }
+    },
+    {
+      "href": "/configuration/vs/0",
+      "rep": {
+        "x.com.samsung.da.region": "0000000000",
+        "x.com.samsung.da.countryCode": "CA"
+      }
+    },
+    {
+      "href": "/filter/waterfilter/vs/0",
+      "rep": {}
+    },
+    {
+      "href": "/drlc/0",
+      "rep": {
+        "DRLevel": 0,
+        "start": "0000-00-00T00:00:00Z",
+        "duration": 0,
+        "override": false
+      }
+    },
+    {
+      "href": "/drlc/vs/0",
+      "rep": {
+        "x.com.samsung.da.drlcLevel": "0",
+        "x.com.samsung.da.durationminutes": "0",
+        "x.com.samsung.da.start": "0000-00-00T00:00:00Z",
+        "x.com.samsung.da.override": "Off",
+        "x.com.samsung.da.realSaving": "Off"
+      }
+    },
+    {
+      "href": "/water/consumption/vs/0",
+      "rep": {
+        "x.com.samsung.da.cumulativeWater": "2662000"
+      }
+    },
+    {
+      "href": "/wm/submode/vs/0",
+      "rep": {
+        "setTemperatureUnit": "F"
+      }
+    }
+  ]
+}

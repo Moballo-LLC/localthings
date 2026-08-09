@@ -7,15 +7,29 @@ records the byte-level work behind it, including a decode that fit one
 device perfectly and collapsed on the second — the reason nothing in the
 shipped code interprets a program payload at all.
 
-Two real devices carry these tokens:
+Four devices in the corpus carry these tokens (a survey of every laundry
+diagnostics dump attached to an issue turned up 14 devices; the other 10 have
+no cloud tokens at all, so this is a minority feature):
 
-| dump | model | slots advertised | blob width |
-| --- | --- | --- | --- |
-| `washer_ww5000c_cloud` | WW5000C, `DA_WM_TP1_21_COMMON`, Table_02 | 9 | 20 bytes |
-| `washer_wa55a7700av` | WA55A7700AV, `DA_WM_TP1_21_COMMON`, Table_02 | 2 | 16 bytes |
+| dump | model | slots advertised | payloads seen | blob width |
+| --- | --- | --- | --- | --- |
+| `washer_ww5000c_cloud` | WW5000C `_B06C`, `DA_WM_TP1_21_COMMON`, Table_02 | 9 | 2 | 20 bytes |
+| `washer_wa55a7700av` | WA55A7700AV, `DA_WM_TP1_21_COMMON`, Table_02 | 2 | 1 | 16 bytes |
+| `dishwasher_dw5000c_cloud` | DW5000C, `DA_DW_TP1_21_COMMON` | 4 | **0** | — |
+| (not fixtured) | WW5000C `_B048`, issues #259/#343, Table_02 | 9 | 1 | 20 bytes |
 
-Both are Table_02. Note that already: same course table, different
-everything else.
+Three things follow immediately from that table:
+
+- **It isn't washer-only.** The DW5000C is a `DA_DW_` dishwasher.
+- **A device can advertise programs it has never loaded.** The DW5000C names
+  four slots and carries no `CloudCourse_`/`OneTimeCloudCourse_` token at
+  all. Nothing about it is learnable until its owner runs one, which is
+  exactly the situation the Repairs issue exists to explain.
+- **Both WW5000C units advertise the byte-identical slot list**
+  (`0A5C286B2D0C55301A`, same nine slots in the same order) despite different
+  firmware builds. Either the set is a factory/regional default rather than
+  something each owner curates, or the two dumps share an owner — unresolved,
+  but worth knowing before assuming a user picked their own programs.
 
 ## The three tokens
 
@@ -136,11 +150,44 @@ WA55     00 | 1C59 | 05 | 49:16  4D:11  4A:22  4C:20 | 37:F0               | AC:
 - Then a fixed tail, terminated on both by an `AC:<value>` pair. The entire
   width difference is two trailing pairs the WA55 doesn't carry.
 
-The tail is not program data. Across all nine WW5000C programs, byte 3 is
-always `04` and bytes 12–19 are byte-identical — every trailing pair carries
-value `F0` except the `AC` terminator, and `35` vs `37` looks like a board or
-profile marker rather than a field. (Byte 3 is not a field count: the board
-with the *higher* value has *fewer* pairs.)
+The tail is not program data. Across all nine WW5000C programs bytes 12–19
+are byte-identical — every trailing pair carries value `F0` except the `AC`
+terminator, and `35` vs `37` looks like a board or profile marker rather than
+a field. (It is not a field count either: the board with the *higher* leading
+byte has *fewer* pairs.)
+
+### Byte 3 is not part of a program's identity
+
+Worth its own heading, because it is the single strongest argument against
+ever shipping a table of payloads. The second WW5000C (issues #259/#343,
+firmware `_B048`) has its saved `CloudCourse` set to the same program as the
+first one's "Towels" capture — and the two payloads differ at exactly one
+byte:
+
+```
+_B06C  "Towels"      00 04 0A 04 49 40 4D 13 4A B8 4C 00 35 F0 04 F0 05 F0 AC 00
+_B048  CloudCourse   00 04 0A 06 49 40 4D 13 4A B8 4C 00 35 F0 04 F0 05 F0 AC 00
+                              ^^
+```
+
+Same program id, same slot, same values on all four varying tags, same tail.
+Only byte 3 moves, `04` → `06`. So it is neither a per-board constant (both
+are WW5000C) nor a property of the program (identical in every other
+respect) — most likely a download revision or sequence counter.
+
+A hardcoded catalog keyed on program id would therefore have shipped one
+unit's byte 3 to the other unit. Whether the appliance would reject that, or
+accept it and do something unintended, is untested and does not need to be:
+every payload is learned from the device it will be replayed to.
+
+### Sentinels
+
+The `FFFF` "nothing loaded" payload takes its board's own width (16 bytes on
+the WA55, 20 on the WW5000C `_B048`) and always carries byte 3 = `00`. Its
+byte 2 is *not* reliably meaningful: it equals the currently selected course
+on the WA55 (`01`, on `Course_01`) and does not on the `_B048` (`1B`, on
+`Course_1C`). Nothing keys off it — a sentinel is rejected on its `FFFF`
+prefix, and its byte 2 is not an advertised slot in either dump anyway.
 
 So the payload is tag/value, not fixed offsets — but knowing the grammar
 doesn't recover the values. The same four tags carry non-overlapping ranges
@@ -194,5 +241,20 @@ sensors this decode would have enabled were dropped for the same reason.
    Care for "Baby care intensive", `30` Cloudy Day for "Cloudy heaven") and
    sometimes doesn't (`21` Colors for "Sports"). Probably a base-course
    reference; not reliable enough to use.
-3. A third device with downloaded programs would settle the tag/value
-   reading of the payload.
+3. What does byte 3 count? It moves between two units holding the identical
+   program (`04` vs `06`) and is `00` on every sentinel. A revision or
+   download counter is the obvious guess; a dump taken before and after
+   re-downloading the same program would confirm it.
+4. **The value encoding is still open, and a third *washer* won't
+   necessarily settle it.** The survey found one, but its saved program is a
+   duplicate of one already captured, so it adds no new tag values. What is
+   actually needed is a dump from a board whose `/washer/vs/0` speaks in
+   named levels (Cold/Warm/Hot, Low/High) *while that unit is sitting on a
+   downloaded program* — then the payload's `49`/`4A` values can be read
+   against settings that describe the same program. The WA55 is such a
+   board but was captured on a local course, which is why it can't be used
+   (see the trap above).
+5. The DW5000C's four slots (`8E 8D 8F 02`) are in the same numeric range as
+   dishwasher course codes (its selected course is `86`), unlike the
+   washers' slots. One payload from that machine would show whether slot ids
+   are drawn from the course-code space on some boards.
