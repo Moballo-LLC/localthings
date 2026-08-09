@@ -1186,17 +1186,28 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return
         href = bound_entity.href
         rep = self._cache.get(href or "") or {}
-        resources = self._cache.snapshot()
+        # The remote-control gate below keys off the raw on-the-wire href
+        # and a raw snapshot -- /remotectrl/* is a shared, MAIN-only
+        # resource that a subdevice's canonical_resources() view (owned
+        # hrefs only) would drop entirely. write_fn/validate_fn, by
+        # contrast, are written against canonical hrefs (same convention as
+        # exists_fn/rep_fn -- see entity.py's _resources), so they get this
+        # entity's own subdevice view instead of the raw snapshot: without
+        # it, a composite device's write_fn reading resources.get(some
+        # canonical href) (e.g. airconditioner._temperature_step) would
+        # silently see the master's resource instead of its own subdevice's.
+        raw_resources = self._cache.snapshot()
         bypass_remote_control = self._entry.options.get(CONF_BYPASS_REMOTE_CONTROL, False)
         if (
             not bypass_remote_control
-            and remote_control_required_for_write(resources, href or "")
-            and not remote_control_enabled(resources)
+            and remote_control_required_for_write(raw_resources, href or "")
+            and not remote_control_enabled(raw_resources)
         ):
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
                 translation_key="remote_control_disabled",
             )
+        resources = self.canonical_resources(bound_entity.subdevice)
         validate_fn = getattr(desc, "validate_fn", None)
         if validate_fn is not None:
             error = validate_fn(payload, rep, resources)

@@ -181,6 +181,26 @@ def test_climate_write_preserves_half_degree_temperature_steps():
     )
 
 
+def test_temperature_step_falls_back_to_temps_vs_items_when_no_control_resource():
+    """Isolates the /temperatures/vs/0 fallback: every fixture that carries
+    an increment there also carries /temperature/control/vs/0, which
+    _temperature_step checks first -- so without dropping that resource,
+    this fallback branch is never actually exercised, and reinstating the
+    original bug (reading the increment off /temperatures/vs/0's top level
+    instead of unwrapping its items[0]) would still pass every other test."""
+    resources = dict(_load_device("airconditioner_cac"))
+    del resources[airconditioner.HREF_TEMP_CONTROL]
+    assert airconditioner._temperature_step(resources) == 0.5
+    assert airconditioner._climate_write(("temperature", 24.5), {}, None, resources) == (
+        ["temperatures", "vs", "0"],
+        {
+            "x.com.samsung.da.items": [
+                {"x.com.samsung.da.id": "0", "x.com.samsung.da.desired": "24.5"}
+            ]
+        },
+    )
+
+
 def test_climate_write_rounds_to_whole_degree_with_no_advertised_increment():
     """ARTIK051 boards have neither /temperature/control/vs/0 nor an
     increment field on /temperatures/vs/0's item -- target_temperature_step

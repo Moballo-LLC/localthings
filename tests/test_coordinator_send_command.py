@@ -201,3 +201,33 @@ async def test_main_climate_write_unaffected_by_subdevice_translation(coordinato
 
     posted_path, _ = coordinator._session.post_calls[0]
     assert posted_path == ["power", "vs", "0"]
+
+
+async def test_indexed_subdevice_climate_write_quantizes_with_its_own_temperature_step(
+    coordinator,
+) -> None:
+    """A composite AC's write_fn (airconditioner._climate_write) reads the
+    temperature step off write_fn's own `resources` argument -- if
+    async_send_command handed it the raw cache snapshot (real, on-the-wire
+    hrefs) instead of this subdevice's canonical_resources() view, the
+    subdevice's own /temperature/control/vs/1 would be invisible under the
+    canonical HREF_TEMP_CONTROL key, and the write would quantize against
+    the master's step (or none at all) instead of its own."""
+    sub1 = Subdevice(kind="indexed", key="1", seed_path=("device", "1"))
+    coordinator._observe.apply(
+        "/temperature/control/vs/0",
+        {"x.com.samsung.da.increment": "1"},
+        source="poll",
+    )
+    coordinator._observe.apply(
+        "/temperature/control/vs/1",
+        {"x.com.samsung.da.increment": "0.5"},
+        source="poll",
+    )
+    bound = _climate_bound("/mode/vs/1", sub1)
+
+    await coordinator.async_send_command(bound, ("temperature_ocf", 24.5))
+
+    posted_path, posted_bytes = coordinator._session.post_calls[0]
+    assert posted_path == ["temperature", "desired", "1"]
+    assert cbor2.loads(posted_bytes) == {"temperature": 24.5}

@@ -9,6 +9,7 @@ here off the coordinator snapshot. These caps stay out of the global
 capabilities/__init__.py) -- AC-only, by_type registry only.
 """
 
+import math
 from dataclasses import replace
 
 from ..capability import Capability
@@ -510,6 +511,13 @@ def _quantize_temperature(value, step):
         numeric = float(value)
     except (TypeError, ValueError):
         return None
+    if not math.isfinite(numeric):
+        # float('nan')/float('inf') pass the try/except above (they're
+        # valid floats) but round()/division on them raises ValueError/
+        # OverflowError instead of returning -- reject here so a bad
+        # payload always comes back as a clean None, not an exception
+        # out of write_fn.
+        return None
     step_value = _num(step) or 1.0
     if step_value <= 0:
         step_value = 1.0
@@ -558,16 +566,13 @@ def _climate_write(payload, rep, href=None, resources=None):
         return (["power", "vs", "0"], {"x.com.samsung.da.power": "On" if value else "Off"})
     if kind == "mode":
         return (["mode", "vs", "0"], {"x.com.samsung.da.modes": [value]})
-    if kind == "temperature_ocf":
+    if kind in ("temperature_ocf", "temperature"):
         quantized = _quantize_temperature(value, _temperature_step(resources))
         if quantized is None:
             return None
-        return (["temperature", "desired", "0"], {"temperature": quantized})
-    if kind == "temperature":
+        if kind == "temperature_ocf":
+            return (["temperature", "desired", "0"], {"temperature": quantized})
         # Vendor items[] array; only one item observed on every AC dump, id '0'.
-        quantized = _quantize_temperature(value, _temperature_step(resources))
-        if quantized is None:
-            return None
         return (
             ["temperatures", "vs", "0"],
             {
