@@ -225,6 +225,9 @@
       "air_filter_threshold": {
         "name": "Filter alarm threshold"
       },
+      "auto_door_timer": {
+        "name": "Auto door open timer"
+      },
       "beverage_zone_mode": {
         "name": "Beverage zone mode",
         "state": {
@@ -474,9 +477,11 @@
           "storage_fridge_normal": "Fridge",
           "storage_fridge_cold": "Fridge, strong",
           "storage_fridge_warm": "Fridge, weak",
+          "storage_fridge": "Fridge",
           "storage_freezer_normal": "Freezer",
           "storage_freezer_cold": "Freezer, strong",
           "storage_freezer_warm": "Freezer, weak",
+          "storage_freezer": "Freezer",
           "kimchi_ripe_low_temp": "Kimchi ripening, low temperature",
           "kimchi_ripe_normal_temp": "Kimchi ripening, room temperature",
           "kimchi_ripe_kkakdugi": "Kkakdugi ripening",
@@ -487,7 +492,8 @@
           "storage_fresh_cereal": "Grains",
           "storage_fridge_drink": "Beverages",
           "storage_fresh_wine": "Wine",
-          "storage_fresh_potato_banana": "Potato & banana"
+          "storage_fresh_potato_banana": "Potato & banana",
+          "newmode_kimchi_0000": "New mode"
         }
       },
       "pantry_zone_mode": {
@@ -496,6 +502,16 @@
           "fdr_wine": "Wine",
           "fdr_deli": "Deli",
           "fdr_drinks": "Drinks"
+        }
+      },
+      "winecellar_pantry_zone_mode": {
+        "name": "Pantry zone mode",
+        "state": {
+          "processed_meat": "Processed meat",
+          "cheese": "Cheese",
+          "nuts": "Nuts",
+          "fruit": "Fruit",
+          "wine": "Wine"
         }
       },
       "range_burner_power_level": {
@@ -1146,6 +1162,12 @@
       },
       "auto_door_opener": {
         "name": "Auto door opener"
+      },
+      "auto_door_sound_control": {
+        "name": "Auto door sound"
+      },
+      "auto_door_voice_control": {
+        "name": "Auto door voice control"
       },
       "auto_release_dry": {
         "name": "Auto release dry"

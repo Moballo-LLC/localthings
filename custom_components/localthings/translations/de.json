@@ -225,6 +225,9 @@
       "air_filter_threshold": {
         "name": "Filteralarm-Schwellenwert"
       },
+      "auto_door_timer": {
+        "name": "Timer für automatischen Türöffner"
+      },
       "beverage_zone_mode": {
         "name": "Getränkezonen-Modus",
         "state": {
@@ -467,6 +470,16 @@
           "fdr_drinks": "Getränke"
         }
       },
+      "winecellar_pantry_zone_mode": {
+        "name": "Vorratszonen-Modus",
+        "state": {
+          "processed_meat": "Wurst/Aufschnitt",
+          "cheese": "Käse",
+          "nuts": "Nüsse",
+          "fruit": "Obst",
+          "wine": "Wein"
+        }
+      },
       "range_burner_power_level": {
         "name": "Brenner {number} Leistungsstufe",
         "state": {
@@ -678,9 +691,11 @@
           "kimchi_storage_crunfch": "Knackiges Kimchi",
           "kimchi_storage_buy": "Gekauftes Kimchi",
           "storage_fridge_normal": "Kühlen",
+          "storage_fridge": "Kühlen",
           "storage_fridge_cold": "Kühlen, stark",
           "storage_fridge_warm": "Kühlen, schwach",
           "storage_freezer_normal": "Gefrieren",
+          "storage_freezer": "Gefrieren",
           "storage_freezer_cold": "Gefrieren, stark",
           "storage_freezer_warm": "Gefrieren, schwach",
           "kimchi_ripe_low_temp": "Kimchi-Reifung, niedrige Temperatur",
@@ -693,7 +708,8 @@
           "storage_fresh_cereal": "Getreide",
           "storage_fridge_drink": "Getränke",
           "storage_fresh_wine": "Wein",
-          "storage_fresh_potato_banana": "Kartoffeln und Bananen"
+          "storage_fresh_potato_banana": "Kartoffeln und Bananen",
+          "newmode_kimchi_0000": "Neuer Modus"
         }
       },
       "energy_saving_mode": {
@@ -1143,6 +1159,12 @@
       },
       "auto_door_opener": {
         "name": "Automatischer Türöffner"
+      },
+      "auto_door_sound_control": {
+        "name": "Ton des automatischen Türöffners"
+      },
+      "auto_door_voice_control": {
+        "name": "Sprachsteuerung des automatischen Türöffners"
       },
       "auto_release_dry": {
         "name": "Automatische Trocknungsfreigabe"

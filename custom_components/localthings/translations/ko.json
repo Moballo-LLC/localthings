@@ -225,6 +225,9 @@
       "air_filter_threshold": {
         "name": "필터 알림 기준"
       },
+      "auto_door_timer": {
+        "name": "오토 오픈 도어 타이머"
+      },
       "beverage_zone_mode": {
         "name": "음료 보관 모드",
         "state": {
@@ -472,9 +475,11 @@
           "kimchi_storage_crunfch": "아삭 김치",
           "kimchi_storage_buy": "구입 김치",
           "storage_fridge_normal": "냉장",
+          "storage_fridge": "냉장",
           "storage_fridge_cold": "냉장 강",
           "storage_fridge_warm": "냉장 약",
           "storage_freezer_normal": "냉동",
+          "storage_freezer": "냉동",
           "storage_freezer_cold": "냉동 강",
           "storage_freezer_warm": "냉동 약",
           "kimchi_ripe_low_temp": "김치 저온 숙성",
@@ -487,7 +492,8 @@
           "storage_fresh_cereal": "곡류",
           "storage_fridge_drink": "음료",
           "storage_fresh_wine": "와인",
-          "storage_fresh_potato_banana": "감자 및 바나나"
+          "storage_fresh_potato_banana": "감자 및 바나나",
+          "newmode_kimchi_0000": "새 모드"
         }
       },
       "pantry_zone_mode": {
@@ -496,6 +502,16 @@
           "fdr_wine": "와인",
           "fdr_deli": "델리",
           "fdr_drinks": "음료"
+        }
+      },
+      "winecellar_pantry_zone_mode": {
+        "name": "팬트리실 모드",
+        "state": {
+          "processed_meat": "가공육",
+          "cheese": "치즈",
+          "nuts": "견과류",
+          "fruit": "과일",
+          "wine": "와인"
         }
       },
       "range_burner_power_level": {
@@ -1146,6 +1162,12 @@
       },
       "auto_door_opener": {
         "name": "오토 오픈 도어"
+      },
+      "auto_door_sound_control": {
+        "name": "오토 오픈 도어 소리"
+      },
+      "auto_door_voice_control": {
+        "name": "오토 오픈 도어 음성 안내"
       },
       "auto_release_dry": {
         "name": "자동 문 열림 건조"

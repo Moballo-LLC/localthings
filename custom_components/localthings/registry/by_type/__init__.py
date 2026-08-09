@@ -226,12 +226,14 @@ _OIC_TYPE_TO_KEY: dict[str, str] = {
     "oic.d.dryer": "dryer",
     "oic.d.oven": "oven",
     "oic.d.refrigerator": "refrigerator",
+    "oic.d.krefrigerator": "refrigerator",  # issue #328 -- kimchi refrigerator
     "oic.d.washer": "washer",
     "x.com.st.d.airqualitysensor": "air_monitor",
     "x.com.st.d.dehumidifier": "dehumidifier",
     "x.com.st.d.hood": "range_hood",  # AHD-WW-TP1-22-COMMON
     "x.com.st.d.stickcleaner": "vacuum_station",
     "x.com.st.d.steamcloset": "air_dresser",
+    "x.com.st.d.winecellar": "refrigerator",  # issue #328 -- same TP1X_REF_21K board
 }
 
 

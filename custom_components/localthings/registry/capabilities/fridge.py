@@ -326,8 +326,117 @@ STATUS_LOCK = Capability(
             value_fn=lambda v: v == "On",
             write_fn=_status_lock_write("x.com.samsung.da.device.sound"),
         ),
+        # Auto Door Open's own voice/sound feedback toggles (issue #328,
+        # TP1X_REF_21K family) -- siblings of auto_door_opener above, not
+        # duplicates of fridge_sound (device.sound is the general appliance
+        # beep, these two gate ado's own prompts). Only seen on the
+        # auto-door-equipped variants (single/kimchi/winecellar), not the
+        # earlier TP1X_REF_21K dumps that predate that feature -- gated on
+        # each field's own presence rather than assumed universal.
+        SwitchDesc(
+            key="auto_door_voice_control",
+            field="x.com.samsung.da.ado.voicecontrol",
+            icon="mdi:microphone",
+            entity_category="config",
+            value_fn=lambda v: v == "On",
+            write_fn=_status_lock_write("x.com.samsung.da.ado.voicecontrol"),
+            exists_fn=lambda rep, resources: "x.com.samsung.da.ado.voicecontrol" in rep,
+        ),
+        SwitchDesc(
+            key="auto_door_sound_control",
+            field="x.com.samsung.da.ado.soundcontrol",
+            icon="mdi:volume-medium",
+            entity_category="config",
+            value_fn=lambda v: v == "On",
+            write_fn=_status_lock_write("x.com.samsung.da.ado.soundcontrol"),
+            exists_fn=lambda rep, resources: "x.com.samsung.da.ado.soundcontrol" in rep,
+        ),
     ),
 )
+
+# Auto Door Open's paired delay setting (issue #328, TP1X_REF_21K family):
+# how long the door stays held open before it re-closes, on/off itself is
+# STATUS_LOCK.auto_door_opener above. Same discrete-options-select shape as
+# DEFINITE_TEMPERATURE_COOLER/FREEZER. Unit unconfirmed -- no supportedList
+# field states it and the report carried no app screenshot -- so this is a
+# raw-code select rather than a guessed seconds/minutes NumberDesc.
+
+
+def _auto_door_timer_write(p, rep, href=None):
+    return ["autodoor", "timer", "vs", "0"], {"x.com.samsung.da.time.desired": p}
+
+
+AUTO_DOOR_TIMER = Capability(
+    href="/autodoor/timer/vs/0",
+    poll_tier="warm",
+    entities=(
+        SelectDesc(
+            key="auto_door_timer",
+            field="x.com.samsung.da.time.desired",
+            icon="mdi:timer-outline",
+            translation_key="auto_door_timer",
+            entity_category="config",
+            options_field="x.com.samsung.da.time.supportedOptions",
+            write_fn=_auto_door_timer_write,
+        ),
+    ),
+)
+
+# /autodoor/<variant>/vs/0 -- one per fridge sub-type sharing the Auto Door
+# Open feature (single-door, kimchi, winecellar; issue #328). Each reports
+# only x.com.samsung.da.ado.openOptions, declaring which open styles that
+# variant supports -- every dump seen so far carries exactly one option
+# ('Single') with no paired desired/current field to make a choice against,
+# the same "no real choice to expose yet" shape as ignored.py's /mode/0.
+# Bound with no entities to record the three hrefs as coverage; revisit if
+# a device ever reports more than one option.
+AUTO_DOOR_SINGLE = Capability(href="/autodoor/single/vs/0")
+AUTO_DOOR_KIMCHI = Capability(href="/autodoor/kimchi/vs/0")
+AUTO_DOOR_WINECELLAR = Capability(href="/autodoor/winecellar/vs/0")
+
+# Wine-cellar variant (x.com.st.d.winecellar, issue #328) of the same
+# deodorizing filter AIR_FILTER models -- filterUsage/filterStatus at a
+# different href, same 0-100-percentage-already shape (see AIR_FILTER's own
+# comment). filterUsage reads '-1' on the only dump seen (filterStatus
+# 'normal'), relayed as-is rather than special-cased -- no second dump to
+# confirm whether that's a real sentinel or this unit just not tracking it.
+DEODOR_FILTER = Capability(
+    href="/filter/deodorfilter/vs/0",
+    poll_tier="cold",
+    entities=AIR_FILTER.entities,
+)
+
+# Wine-cellar multi-compartment pantry select (issue #328): same
+# mode/supportedOptions shape as PANTRY_ZONE, at its own href with a 5-way
+# option set (Processed_Meat/Cheese/Nuts/Fruit/Wine) instead of PANTRY_ZONE's.
+# Only a "one" instance seen -- not generalized to a pattern cap, same
+# discipline as PANTRY_ZONE itself.
+
+
+def _winecellar_pantry_write(p, rep, href=None):
+    return ["status", "winecellar", "pantry", "one", "vs", "0"], {"x.com.samsung.da.mode": p}
+
+
+WINECELLAR_PANTRY_ZONE = Capability(
+    href="/status/winecellar/pantry/one/vs/0",
+    poll_tier="warm",
+    entities=(
+        SelectDesc(
+            key="winecellar_pantry_zone_mode",
+            field="x.com.samsung.da.mode",
+            icon="mdi:glass-wine",
+            translation_key="winecellar_pantry_zone_mode",
+            entity_category="config",
+            options_field="x.com.samsung.da.supportedOptions",
+            write_fn=_winecellar_pantry_write,
+        ),
+    ),
+)
+
+# Wine-cellar internal table-revision marker (issue #328) -- versioning
+# metadata, not appliance state. Same treatment as ignored.py's
+# /wm/setinfo/vs/0.
+WINECELLAR_INFO = Capability(href="/information/winecellar/vs/0")
 
 # /defrost/delay/vs/0 is the writable toggle to postpone a scheduled
 # defrost. /defrost/block/vs/0 is unrelated: despite the "block" naming,

@@ -1407,6 +1407,64 @@ def test_registry_reproduces_golden_state_keys_for_refrigerator_tp1x_ref_21k_def
     )
 
 
+def test_registry_reproduces_golden_state_keys_for_refrigerator_tp1x_ref_21k_autodoor():
+    """TP1X_REF_21K, single-freezer-door Auto Door Open variant (issue
+    #328): /autodoor/single/vs/0 + /autodoor/timer/vs/0, plus
+    STATUS_LOCK's ado.voicecontrol sibling toggle."""
+    from tests.conftest import _load_device
+
+    resources = _load_device("refrigerator_tp1x_ref_21k_autodoor")
+    golden = json.loads((GOLDEN / "refrigerator_tp1x_ref_21k_autodoor.json").read_text())
+    state_keys = _new_state_keys("refrigerator_tp1x_ref_21k_autodoor", resources)
+    assert set(state_keys) == set(golden["state_keys"]), (
+        f"state_keys mismatch:\n"
+        f"  extra:   {sorted(set(state_keys) - set(golden['state_keys']))}\n"
+        f"  missing: {sorted(set(golden['state_keys']) - set(state_keys))}"
+    )
+
+
+def test_registry_reproduces_golden_state_keys_for_refrigerator_tp1x_ref_21k_kimchi():
+    """Kimchi-refrigerator Auto Door Open variant (issue #328) -- resolves
+    via /oic/d's oic.d.krefrigerator, not modelNum (the board is the same
+    TP1X_REF_21K as the regular fridge, so only the OCF type tells them
+    apart before checking hrefs)."""
+    from tests.conftest import _load_device
+
+    resources = _load_device("refrigerator_tp1x_ref_21k_kimchi")
+    golden = json.loads((GOLDEN / "refrigerator_tp1x_ref_21k_kimchi.json").read_text())
+    state_keys = _new_state_keys(
+        "refrigerator_tp1x_ref_21k_kimchi",
+        resources,
+        device_types=("oic.wk.d", "oic.d.krefrigerator"),
+    )
+    assert set(state_keys) == set(golden["state_keys"]), (
+        f"state_keys mismatch:\n"
+        f"  extra:   {sorted(set(state_keys) - set(golden['state_keys']))}\n"
+        f"  missing: {sorted(set(golden['state_keys']) - set(state_keys))}"
+    )
+
+
+def test_registry_reproduces_golden_state_keys_for_refrigerator_winecellar():
+    """Wine-cellar refrigerator variant (issue #328) -- resolves via /oic/d's
+    x.com.st.d.winecellar, same TP1X_REF_21K board as the other two. Adds
+    the deodorizing filter at its own href, the multi-compartment pantry
+    select, and the table-revision info resource."""
+    from tests.conftest import _load_device
+
+    resources = _load_device("refrigerator_winecellar")
+    golden = json.loads((GOLDEN / "refrigerator_winecellar.json").read_text())
+    state_keys = _new_state_keys(
+        "refrigerator_winecellar",
+        resources,
+        device_types=("oic.wk.d", "x.com.st.d.winecellar"),
+    )
+    assert set(state_keys) == set(golden["state_keys"]), (
+        f"state_keys mismatch:\n"
+        f"  extra:   {sorted(set(state_keys) - set(golden['state_keys']))}\n"
+        f"  missing: {sorted(set(golden['state_keys']) - set(state_keys))}"
+    )
+
+
 def test_resources_from_batch_preferred_over_flat():
     from tests.conftest import _resources_from_dump
 

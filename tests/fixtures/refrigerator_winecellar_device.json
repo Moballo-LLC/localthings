@@ -1,0 +1,466 @@
+{
+  "device0": [
+    {
+      "rt": [
+        "x.com.samsung.devcol",
+        "oic.wk.col"
+      ],
+      "if": [
+        "oic.if.baseline",
+        "oic.if.ll",
+        "oic.if.b"
+      ]
+    },
+    {
+      "href": "/alarms/vs/0",
+      "rep": {
+        "href": "/alarms/vs/0",
+        "rt": [
+          "x.com.samsung.da.alarms"
+        ],
+        "if": [
+          "oic.if.baseline",
+          "oic.if.a"
+        ]
+      }
+    },
+    {
+      "href": "/autodoor/winecellar/vs/0",
+      "rep": {
+        "x.com.samsung.da.ado.openOptions": [
+          "Single"
+        ],
+        "href": "/autodoor/winecellar/vs/0"
+      }
+    },
+    {
+      "href": "/autodoor/timer/vs/0",
+      "rep": {
+        "x.com.samsung.da.time.desired": "1",
+        "x.com.samsung.da.time.supportedOptions": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6"
+        ],
+        "href": "/autodoor/timer/vs/0"
+      }
+    },
+    {
+      "href": "/bespoke/vs/0",
+      "rep": {
+        "x.com.samsung.da.BespokeProduct": "On",
+        "href": "/bespoke/vs/0"
+      }
+    },
+    {
+      "href": "/cabinet/light/total/vs/0",
+      "rep": {
+        "x.com.samsung.da.lightLevel": "100",
+        "x.com.samsung.da.lightResolution": "1",
+        "x.com.samsung.da.lightControl.off.include": "Off",
+        "x.com.samsung.da.lightControl": "Off",
+        "x.com.samsung.da.timeout.desired": "0",
+        "x.com.samsung.da.timeout.supportedList": [
+          "0",
+          "15",
+          "30",
+          "60"
+        ],
+        "href": "/cabinet/light/total/vs/0",
+        "rt": [
+          "x.com.samsung.da.cabinetlight"
+        ],
+        "if": [
+          "oic.if.baseline",
+          "oic.if.a"
+        ]
+      }
+    },
+    {
+      "href": "/configuration/vs/0",
+      "rep": {
+        "x.com.samsung.da.region": "",
+        "x.com.samsung.da.countryCode": "",
+        "href": "/configuration/vs/0"
+      }
+    },
+    {
+      "href": "/door/winecellar/vs/0",
+      "rep": {
+        "x.com.samsung.da.openState": "Close",
+        "href": "/door/winecellar/vs/0",
+        "rt": [
+          "x.com.samsung.da.doorwinecellar"
+        ],
+        "if": [
+          "oic.if.baseline",
+          "oic.if.s"
+        ]
+      }
+    },
+    {
+      "href": "/doors/vs/0",
+      "rep": {
+        "x.com.samsung.da.items": [
+          {
+            "x.com.samsung.da.openState": "Close",
+            "x.com.samsung.da.id": "9",
+            "x.com.samsung.da.description": "Door"
+          }
+        ],
+        "href": "/doors/vs/0"
+      }
+    },
+    {
+      "href": "/drlc/vs/0",
+      "rep": {
+        "x.com.samsung.da.drlcLevel": "2",
+        "x.com.samsung.da.override": "Not_Supported",
+        "x.com.samsung.da.durationminutes": "1345",
+        "x.com.samsung.da.start": "2026-08-06T02:08:48Z",
+        "x.com.samsung.da.realSaving": "On",
+        "href": "/drlc/vs/0"
+      }
+    },
+    {
+      "href": "/energy/consumption/vs/0",
+      "rep": {
+        "x.com.samsung.da.cumulativeConsumption": "19073",
+        "x.com.samsung.da.instantaneousPower": "5",
+        "x.com.samsung.da.cumulativePower": "210483",
+        "x.com.samsung.da.cumulativeSavedPower": "15696",
+        "x.com.samsung.da.cumulativeUnit": "Wh",
+        "x.com.samsung.da.instantaneousPowerUnit": "W",
+        "href": "/energy/consumption/vs/0"
+      }
+    },
+    {
+      "href": "/file/information/vs/0",
+      "rep": {
+        "x.com.samsung.timeoffset": "+00:00",
+        "x.com.samsung.supprtedtype": 1,
+        "href": "/file/information/vs/0"
+      }
+    },
+    {
+      "href": "/filter/deodorfilter/vs/0",
+      "rep": {
+        "x.com.samsung.da.filterUsage": "-1",
+        "x.com.samsung.da.filterUsageResolution": "1",
+        "x.com.samsung.da.filterResetType": [
+          "replaceable"
+        ],
+        "x.com.samsung.da.filterStatus": "normal",
+        "href": "/filter/deodorfilter/vs/0"
+      }
+    },
+    {
+      "href": "/information/vs/0",
+      "rep": {
+        "x.com.samsung.da.modelNum": "TP1X_REF_21K|00146141|000B0020001513924100000011000000",
+        "x.com.samsung.da.description": "TP1X_REF_21K",
+        "x.com.samsung.da.serialNum": "**REDACTED**",
+        "x.com.samsung.da.otnDUID": "**REDACTED**",
+        "x.com.samsung.da.diagDumpType": "file",
+        "x.com.samsung.da.diagEndPoint": "SSM",
+        "x.com.samsung.da.diagLogType": [
+          "errCode",
+          "dump"
+        ],
+        "x.com.samsung.da.diagMnid": "0AJT",
+        "x.com.samsung.da.diagSetupid": "531",
+        "x.com.samsung.da.diagProtocolType": "WIFI_HTTPS",
+        "x.com.samsung.da.diagMinVersion": "1.0",
+        "x.com.samsung.da.items": [
+          {
+            "x.com.samsung.da.id": "0",
+            "x.com.samsung.da.description": "WiFi Module",
+            "x.com.samsung.da.type": "Software",
+            "x.com.samsung.da.number": "260619",
+            "x.com.samsung.da.newVersionAvailable": "0"
+          },
+          {
+            "x.com.samsung.da.id": "1",
+            "x.com.samsung.da.description": "Micom",
+            "x.com.samsung.da.type": "Firmware",
+            "x.com.samsung.da.number": "24102313, 2201030E",
+            "x.com.samsung.da.newVersionAvailable": "0"
+          }
+        ],
+        "href": "/information/vs/0"
+      }
+    },
+    {
+      "href": "/status/lock/vs/0",
+      "rep": {
+        "x.com.samsung.da.ado.voicecontrol": "Off",
+        "x.com.samsung.da.ado.soundcontrol": "On",
+        "href": "/status/lock/vs/0",
+        "rt": [
+          "x.com.samsung.da.lockstatus"
+        ],
+        "if": [
+          "oic.if.baseline",
+          "oic.if.a"
+        ]
+      }
+    },
+    {
+      "href": "/mode/vs/0",
+      "rep": {
+        "x.com.samsung.da.modes": [
+          "AIRFILTER_DISABLE"
+        ],
+        "x.com.samsung.da.supportedModes": [
+          "HOMECARE_WIZARD_V2",
+          "ENERGY_REPORT_MODEL",
+          "WINE_T_TOTRACK_[6]",
+          "WINE_T_BOTTLE_RACK_[7]",
+          "WINE_B_TOTRACK_[4]",
+          "WINE_B_BOTTLE_RACK_[7]",
+          "WINE_PRESENTATION_[6]",
+          "WINE_BTM_BOTTLE_[20]",
+          "WINE_PANTRY_BOTTLE_[5]"
+        ],
+        "href": "/mode/vs/0",
+        "rt": [
+          "x.com.samsung.da.mode"
+        ],
+        "if": [
+          "oic.if.baseline",
+          "oic.if.a"
+        ]
+      }
+    },
+    {
+      "href": "/realtimenotiforclient/vs/0",
+      "rep": {
+        "x.com.samsung.da.timeforshortnoti": "0",
+        "x.com.samsung.da.periodicnotisubscription": "true",
+        "href": "/realtimenotiforclient/vs/0"
+      }
+    },
+    {
+      "href": "/runningmode/vs/0",
+      "rep": {
+        "x.com.samsung.da.runningMode": 0,
+        "href": "/runningmode/vs/0"
+      }
+    },
+    {
+      "href": "/selfcheck/vs/0",
+      "rep": {
+        "x.com.samsung.da.supportedActions": [
+          "Start"
+        ],
+        "x.com.samsung.da.status": "Ready",
+        "x.com.samsung.da.result": "Success",
+        "x.com.samsung.da.error": [
+          "ErrorCode_None"
+        ],
+        "href": "/selfcheck/vs/0"
+      }
+    },
+    {
+      "href": "/temperature/desired/winecellar/top/vs/0",
+      "rep": {
+        "temperature": 13.0,
+        "range": [
+          4.0,
+          18.0
+        ],
+        "units": "C",
+        "href": "/temperature/desired/winecellar/top/vs/0",
+        "rt": [
+          "oic.r.temperature"
+        ],
+        "if": [
+          "oic.if.baseline",
+          "oic.if.a"
+        ]
+      }
+    },
+    {
+      "href": "/temperature/desired/winecellar/bottom/vs/0",
+      "rep": {
+        "temperature": 7.0,
+        "range": [
+          4.0,
+          18.0
+        ],
+        "units": "C",
+        "href": "/temperature/desired/winecellar/bottom/vs/0",
+        "rt": [
+          "oic.r.temperature"
+        ],
+        "if": [
+          "oic.if.baseline",
+          "oic.if.a"
+        ]
+      }
+    },
+    {
+      "href": "/temperatures/vs/0",
+      "rep": {
+        "x.com.samsung.da.items": [
+          {
+            "x.com.samsung.da.id": "2",
+            "x.com.samsung.da.description": "WineCellar-top",
+            "x.com.samsung.da.desired": "13",
+            "x.com.samsung.da.current": "13",
+            "x.com.samsung.da.maximum": "18",
+            "x.com.samsung.da.minimum": "4",
+            "x.com.samsung.da.unit": "Celsius"
+          },
+          {
+            "x.com.samsung.da.id": "3",
+            "x.com.samsung.da.description": "WineCellar-bottom",
+            "x.com.samsung.da.desired": "7",
+            "x.com.samsung.da.current": "7",
+            "x.com.samsung.da.maximum": "18",
+            "x.com.samsung.da.minimum": "4",
+            "x.com.samsung.da.unit": "Celsius"
+          }
+        ],
+        "href": "/temperatures/vs/0"
+      }
+    },
+    {
+      "href": "/information/winecellar/vs/0",
+      "rep": {
+        "x.com.samsung.da.tbl.revision": "1",
+        "href": "/information/winecellar/vs/0"
+      }
+    },
+    {
+      "href": "/status/winecellar/pantry/one/vs/0",
+      "rep": {
+        "x.com.samsung.da.mode": "Fruit",
+        "x.com.samsung.range": [
+          "4",
+          "13"
+        ],
+        "x.com.samsung.da.room": "0x10",
+        "x.com.samsung.da.name": "MULTI_PANTRY",
+        "x.com.samsung.da.unit": "Celsius",
+        "x.com.samsung.da.supportedOptions": [
+          "Processed_Meat",
+          "Cheese",
+          "Nuts",
+          "Fruit",
+          "Wine"
+        ],
+        "href": "/status/winecellar/pantry/one/vs/0"
+      }
+    },
+    {
+      "href": "/otninformation/vs/0",
+      "rep": {
+        "x.com.samsung.da.target": "",
+        "x.com.samsung.da.newVersionAvailable": "false",
+        "otnStatus": "None",
+        "flashingProgress": "0",
+        "otnCompleteDate": "noHistory",
+        "scheduledTime": "None",
+        "swVersionInfo": {
+          "platform": "Tizen Lite",
+          "oneUiVersion": "7.0 Refrigerator",
+          "osVersion": "4.0"
+        },
+        "otnList": [
+          {
+            "type": "WIFI",
+            "modelId": "A-RFWW-TP1-24-T4-RE2",
+            "versions": [
+              "20260619"
+            ],
+            "visVersion": "260619"
+          },
+          {
+            "type": "Micom",
+            "modelId": "02900014614100146441",
+            "versions": [
+              "24102313",
+              "2201030E"
+            ],
+            "visVersion": "241023"
+          }
+        ]
+      }
+    },
+    {
+      "href": "/timezone/vs/0",
+      "rep": {
+        "timezoneid": "Asia/Seoul",
+        "offset": "+09:00",
+        "DST": "OFF"
+      }
+    },
+    {
+      "href": "/connectionconfig/vs/0",
+      "rep": {
+        "autoReconnectionMinVersion": "1.0",
+        "autoReconnection": "true",
+        "autoReconnectionProtocolType": [
+          "helper_hotspot",
+          "ble_ocf"
+        ],
+        "supportedWiFiAuthType": [
+          "OPEN",
+          "WEP",
+          "WPA-PSK",
+          "WPA2-PSK",
+          "SAE"
+        ],
+        "supportedWiFiCryptoType": [
+          "TKIP",
+          "AES",
+          "WEP-64",
+          "WEP-128"
+        ],
+        "supportedWiFiFreq": [
+          "2.4G"
+        ],
+        "calmConnectionCare": {
+          "version": "1.0",
+          "role": [
+            "things"
+          ]
+        }
+      }
+    },
+    {
+      "href": "/wirelessinfo/vs/0",
+      "rep": {
+        "macaddressWiFi": "**REDACTED**",
+        "macaddressBLE": "**REDACTED**",
+        "connectedApSsid": "Home_IoT"
+      }
+    },
+    {
+      "href": "/quickcontrol/info/vs/0",
+      "rep": {
+        "supportedVersion": "1.0"
+      }
+    },
+    {
+      "href": "/dginformation/vs/0",
+      "rep": {
+        "enrolmentstatus": "Unknown",
+        "devicestate": "Unknown",
+        "lockstatus": "Unknown",
+        "nextduedate": "",
+        "workingminutes": 0,
+        "paymentinfo": {
+          "emiplan": "Unknown",
+          "currency": "Unknown",
+          "totalemi": 0,
+          "totalemipaid": 0
+        }
+      }
+    }
+  ]
+}
