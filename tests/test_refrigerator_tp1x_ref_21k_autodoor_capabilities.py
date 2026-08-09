@@ -3,7 +3,7 @@
 `/status/lock/vs/0`'s ado.devicecontrol switch was already modeled
 (STATUS_LOCK.auto_door_opener); this dump adds the paired voice-feedback
 toggle, the door-hold timer, and the per-variant capability declaration
-href -- see fridge.py's AUTO_DOOR_TIMER/AUTO_DOOR_SINGLE comments.
+href -- see fridge.py's AUTO_DOOR_TIMER/AUTO_DOOR_VARIANT comments.
 """
 
 from custom_components.localthings.registry.adapter import flatten
@@ -67,5 +67,8 @@ def test_auto_door_timer_reads_its_own_options():
 
 def test_auto_door_single_variant_href_bound_with_no_entities():
     """/autodoor/single/vs/0 only ever declares openOptions=['Single'] --
-    no paired current/desired field to expose, so it's coverage-only."""
-    assert fridge.AUTO_DOOR_SINGLE.entities == ()
+    no paired current/desired field to expose, so it's coverage-only via
+    the shared AUTO_DOOR_VARIANT pattern cap, not an entry of its own."""
+    assert fridge.AUTO_DOOR_VARIANT.entities == ()
+    _reg, resources = _fridge()
+    assert fridge.AUTO_DOOR_VARIANT.match_fn(resources["/autodoor/single/vs/0"], resources)

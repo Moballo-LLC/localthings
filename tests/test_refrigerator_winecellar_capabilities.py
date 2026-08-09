@@ -74,5 +74,7 @@ def test_winecellar_pantry_zone_mode_options_and_write():
 
 
 def test_winecellar_variant_and_info_hrefs_bound_with_no_entities():
-    assert fridge.AUTO_DOOR_WINECELLAR.entities == ()
+    assert fridge.AUTO_DOOR_VARIANT.entities == ()
     assert fridge.WINECELLAR_INFO.entities == ()
+    _reg, resources = _fridge()
+    assert fridge.AUTO_DOOR_VARIANT.match_fn(resources["/autodoor/winecellar/vs/0"], resources)

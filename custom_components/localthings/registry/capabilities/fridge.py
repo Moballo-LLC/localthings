@@ -383,16 +383,27 @@ AUTO_DOOR_TIMER = Capability(
 )
 
 # /autodoor/<variant>/vs/0 -- one per fridge sub-type sharing the Auto Door
-# Open feature (single-door, kimchi, winecellar; issue #328). Each reports
-# only x.com.samsung.da.ado.openOptions, declaring which open styles that
-# variant supports -- every dump seen so far carries exactly one option
-# ('Single') with no paired desired/current field to make a choice against,
-# the same "no real choice to expose yet" shape as ignored.py's /mode/0.
-# Bound with no entities to record the three hrefs as coverage; revisit if
-# a device ever reports more than one option.
-AUTO_DOOR_SINGLE = Capability(href="/autodoor/single/vs/0")
-AUTO_DOOR_KIMCHI = Capability(href="/autodoor/kimchi/vs/0")
-AUTO_DOOR_WINECELLAR = Capability(href="/autodoor/winecellar/vs/0")
+# Open feature (single-door, kimchi, winecellar seen so far; issue #328).
+# Each reports only x.com.samsung.da.ado.openOptions, declaring which open
+# styles that variant supports -- every dump seen so far carries exactly
+# one option ('Single') with no paired desired/current field to make a
+# choice against, the same "no real choice to expose yet" shape as
+# ignored.py's /mode/0. Bound with no entities to record coverage; revisit
+# if a device ever reports more than one option.
+#
+# A pattern cap rather than one entry per variant: match_fn (not just the
+# prefix) is what actually gates this, so a future variant href needs no
+# code change to stay covered, and /autodoor/timer/vs/0's own exact-href
+# AUTO_DOOR_TIMER above always wins for that href regardless (discover()
+# only falls through to pattern caps when no exact cap matched). This is
+# registry-scoped, not global -- unlike ignored.IGNORED, the unknown-
+# device-type fallback never reaches it, so the prefix caveat in
+# ignored.py's own docstring doesn't apply here.
+AUTO_DOOR_VARIANT = Capability(
+    href=None,
+    href_prefix="/autodoor/",
+    match_fn=lambda rep, resources: "x.com.samsung.da.ado.openOptions" in rep,
+)
 
 # Wine-cellar variant (x.com.st.d.winecellar, issue #328) of the same
 # deodorizing filter AIR_FILTER models -- filterUsage/filterStatus at a

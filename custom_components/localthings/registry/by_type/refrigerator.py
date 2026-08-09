@@ -16,9 +16,6 @@ REGISTRY = DeviceRegistry(
             fridge.AIR_FILTER,
             fridge.DEODOR_FILTER,
             fridge.AUTO_DOOR_TIMER,
-            fridge.AUTO_DOOR_SINGLE,
-            fridge.AUTO_DOOR_KIMCHI,
-            fridge.AUTO_DOOR_WINECELLAR,
             fridge.WINECELLAR_PANTRY_ZONE,
             fridge.WINECELLAR_INFO,
             dishwasher.DIAGNOSIS,
@@ -51,5 +48,6 @@ REGISTRY = DeviceRegistry(
         fridge.DOOR_GENERIC,
         fridge.KIMCHI_ZONE,
         fridge.KIMCHI_DOOR_GENERIC,
+        fridge.AUTO_DOOR_VARIANT,
     ],
 )
