@@ -117,12 +117,51 @@ It does not survive the second device. Against the WA55A7700AV's
 - spin: `(0x22 - 0x90) / 8` = **negative**
 - rinse: `0x11 - 0x10` = 1 — the only plausible one
 
-What *does* survive is the tag structure. Bytes `49`, `4D`, `4A`, `4C` sit at
-the same offsets on both devices with varying values between them, and the
-byte before the run (`04` vs `05`) looks like a field count — the payload is
-tag/value, not fixed offsets, and the value *scales* are board- or
-region-specific. Decoding it properly needs a third device; one device's fit
-is a coincidence-shaped hypothesis, not a format.
+### What *does* survive is the grammar
+
+The two boards' payloads are different lengths (20 vs 16 bytes) but not a
+different format — same header, same leading fields, two fewer optional
+trailing ones:
+
+```
+WW5000C  00 | 2155 | 04 | 49:28  4D:13  4A:A0  4C:00 | 35:F0  04:F0  05:F0 | AC:00
+WA55     00 | 1C59 | 05 | 49:16  4D:11  4A:22  4C:20 | 37:F0               | AC:22
+```
+
+- `00`, then the 2-byte program id, then one byte (`04` vs `05`) — identical
+  layout on both.
+- Then a tag/value stream whose **first four tags are the same, in the same
+  order, at the same offsets**: `49`, `4D`, `4A`, `4C`. These are exactly the
+  four whose values vary per program.
+- Then a fixed tail, terminated on both by an `AC:<value>` pair. The entire
+  width difference is two trailing pairs the WA55 doesn't carry.
+
+The tail is not program data. Across all nine WW5000C programs, byte 3 is
+always `04` and bytes 12–19 are byte-identical — every trailing pair carries
+value `F0` except the `AC` terminator, and `35` vs `37` looks like a board or
+profile marker rather than a field. (Byte 3 is not a field count: the board
+with the *higher* value has *fewer* pairs.)
+
+So the payload is tag/value, not fixed offsets — but knowing the grammar
+doesn't recover the values. The same four tags carry non-overlapping ranges
+between the two boards:
+
+| tag | WW5000C (9 programs) | WA55 |
+| --- | --- | --- |
+| `49` | `00, 28, 30, 40, 58` | `16` |
+| `4D` | `00, 12, 13, 14` | `11` |
+| `4A` | `A0, B0, B8` | `22` |
+| `4C` | `00` (all nine) | `20` |
+
+Same field, board-specific encoding. Decoding it properly needs a third
+device; one device's fit is a coincidence-shaped hypothesis, not a format.
+
+**A trap for whoever picks this up:** the WA55's `/washer/vs/0` reads
+Warm / High / 1, which looks like it could confirm a decode of that unit's
+`CloudCourse`. It can't — that appliance is sitting on `Course_01` (Normal),
+not on its cloud course, so those values describe the local cycle it has
+selected, not the saved cloud program. A cross-check like this is only
+evidence when the machine is actually loaded with the program being decoded.
 
 So the shipped code never interprets a payload: a blob is recorded whole and
 replayed byte-for-byte, exactly as the device reported it, and never
