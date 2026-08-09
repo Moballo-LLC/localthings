@@ -1406,6 +1406,7 @@
         "title": "LocalThings options",
         "menu_options": {
           "settings": "Device settings",
+          "cloud_courses": "Download cycles",
           "forget_learned_modes": "Forget remembered modes",
           "debug_write": "Debug: write to a resource"
         }
@@ -1444,11 +1445,19 @@
           "debug_write": "Write another resource",
           "finish": "Finish"
         }
+      },
+      "cloud_courses": {
+        "title": "Download cycles",
+        "description": "Your washer reports {total} downloaded cycle(s); {found} have been seen so far.\n\nThe appliance only reveals a downloaded cycle's settings while that cycle is actually loaded, and it never reports their names. To add the missing ones ({pending}): on the appliance, select the Download cycle and turn the dial through each downloaded program, pausing a few seconds on each, then come back here.\n\nGive each one the name you want to see in Home Assistant. Leave a name blank to keep that cycle out of the cycle list. Names must be unique.\n\n\"Download cycle\" is the course on your appliance that runs a downloaded program -- it is detected automatically, but confirm it here before use, since selecting a downloaded cycle writes this course code to the machine.",
+        "data": {
+          "download_course": "Download cycle course code"
+        }
       }
     },
     "error": {
       "empty_payload": "Enter at least one field to write.",
-      "write_failed": "The write failed. Check the Home Assistant logs for details."
+      "write_failed": "The write failed. Check the Home Assistant logs for details.",
+      "cloud_course_name_duplicate": "Two cycles have the same name. Names must be unique."
     },
     "abort": {
       "not_loaded": "This device isn't connected yet. Try again once it has loaded."
@@ -1458,6 +1467,10 @@
     "device_gap": {
       "title": "Incomplete capability coverage for {device_name}",
       "description": "This device is missing full capability coverage. Either its appliance type wasn't recognized, or some of the resources it exposes aren't modeled yet. It'll keep working with whatever is already supported. You can help expand support by going to Settings > Devices & Services > {device_name} > the menu (top right) > Download diagnostics, then filing it with the linked issue template."
+    },
+    "cloud_courses_undiscovered": {
+      "title": "Downloaded cycles not set up for {device_name}",
+      "description": "{device_name} has {pending} of {total} downloaded cycle(s) that Home Assistant can't offer yet. A downloaded cycle can only be used once the appliance has been seen with it loaded and you've given it a name.\n\nTo set them up, go to Settings > Devices & Services > LocalThings > {device_name} > Configure > Download cycles and follow the instructions there."
     }
   },
   "exceptions": {

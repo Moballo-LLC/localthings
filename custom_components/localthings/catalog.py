@@ -48,3 +48,21 @@ def translated_states(platform: str, translation_key: str) -> frozenset[str]:
     """
     entry = _ENTITY_CATALOG.get(platform, {}).get(translation_key)
     return frozenset(entry.get("state", ())) if entry else frozenset()
+
+
+def translated_state_labels(platform: str, translation_key: str) -> dict[str, str]:
+    """`state key -> English label` for `platform`.`translation_key`.
+
+    The labels behind translated_states, for the one caller that has to
+    compare against what a user actually reads rather than which codes are
+    translated: the download-cycle naming step rejects a name that would be
+    indistinguishable from a local course in the same dropdown. English only,
+    matching this catalog -- a name unique here can still collide in another
+    locale, which the select's local-courses-first ordering resolves toward
+    the local course.
+    """
+    entry = _ENTITY_CATALOG.get(platform, {}).get(translation_key)
+    states = entry.get("state") if entry else None
+    if not isinstance(states, dict):
+        return {}
+    return {code: label for code, label in states.items() if isinstance(label, str)}

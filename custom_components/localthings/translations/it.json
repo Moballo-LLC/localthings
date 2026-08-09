@@ -1406,6 +1406,7 @@
         "title": "Opzioni LocalThings",
         "menu_options": {
           "settings": "Impostazioni dispositivo",
+          "cloud_courses": "Download cycles",
           "forget_learned_modes": "Dimentica le modalità memorizzate",
           "debug_write": "Debug: scrivi su una risorsa"
         }
@@ -1444,11 +1445,19 @@
           "debug_write": "Scrivi un'altra risorsa",
           "finish": "Fine"
         }
+      },
+      "cloud_courses": {
+        "title": "Download cycles",
+        "description": "Your washer reports {total} downloaded cycle(s); {found} have been seen so far.\n\nThe appliance only reveals a downloaded cycle's settings while that cycle is actually loaded, and it never reports their names. To add the missing ones ({pending}): on the appliance, select the Download cycle and turn the dial through each downloaded program, pausing a few seconds on each, then come back here.\n\nGive each one the name you want to see in Home Assistant. Leave a name blank to keep that cycle out of the cycle list. Names must be unique.\n\n\"Download cycle\" is the course on your appliance that runs a downloaded program -- it is detected automatically, but confirm it here before use, since selecting a downloaded cycle writes this course code to the machine.",
+        "data": {
+          "download_course": "Download cycle course code"
+        }
       }
     },
     "error": {
       "empty_payload": "Inserisci almeno un campo da scrivere.",
-      "write_failed": "Operazione di scrittura non riuscita. Controlla i registri di Home Assistant per i dettagli."
+      "write_failed": "Operazione di scrittura non riuscita. Controlla i registri di Home Assistant per i dettagli.",
+      "cloud_course_name_duplicate": "Two cycles have the same name. Names must be unique."
     },
     "abort": {
       "not_loaded": "Questo dispositivo non è ancora connesso. Riprova dopo il caricamento."
@@ -1458,6 +1467,10 @@
     "device_gap": {
       "title": "Copertura delle funzionalità incompleta per {device_name}",
       "description": "Questo dispositivo non è completamente supportato. Il tipo di dispositivo non è stato riconosciuto oppure alcune delle risorse che espone non sono ancora state modellate. Continuerò a funzionare con le funzionalità già supportate. Puoi contribuire ad ampliare il supporto andando su Impostazioni > Dispositivi e servizi > {device_name} > il menu (in alto a destra) > Scarica diagnostica, quindi inviando una segnalazione tramite il modulo di segnalazione collegato."
+    },
+    "cloud_courses_undiscovered": {
+      "title": "Downloaded cycles not set up for {device_name}",
+      "description": "{device_name} has {pending} of {total} downloaded cycle(s) that Home Assistant can't offer yet. A downloaded cycle can only be used once the appliance has been seen with it loaded and you've given it a name.\n\nTo set them up, go to Settings > Devices & Services > LocalThings > {device_name} > Configure > Download cycles and follow the instructions there."
     }
   },
   "exceptions": {

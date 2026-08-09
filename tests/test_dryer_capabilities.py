@@ -2,7 +2,7 @@
 
 from custom_components.localthings.registry.adapter import flatten
 from custom_components.localthings.registry.by_type import for_device_by_model
-from custom_components.localthings.registry.capabilities import dryer, ignored, laundry
+from custom_components.localthings.registry.capabilities import dryer, ignored
 from custom_components.localthings.registry.discovery import discover
 from custom_components.localthings.registry.entities import SelectDesc
 from tests.conftest import _load_device
@@ -82,7 +82,8 @@ def test_course_bound_to_shared_course_vs_0():
     table_03 = {"/st/dryercourse/vs/0": {"x.com.samsung.da.st.courseTable": "Table_03"}}
     assert desc.translation_key(table_03) == "dryer_cycle_table_03"
     assert desc.translation_key({}) == "cycle"
-    assert desc.options is laundry.cycle_options
+    live = {"/wm/editcourse/vs/0": {"x.com.samsung.da.editCourseList": "EditCourseList_1620"}}
+    assert desc.options(live) == ["16", "20"]
     rep = {"x.com.samsung.da.options": ["Course_16", "GMT_02"]}
     assert desc.rep_fn is not None
     assert desc.rep_fn(rep) == "16"

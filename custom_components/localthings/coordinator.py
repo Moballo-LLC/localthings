@@ -22,8 +22,12 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from smartthings_local.ocf.state_cache import StateCache
 from smartthings_local.protocol.dtls_session import DtlsCoapSession
 
+from . import cloudcourse
+from .cloudcourse import CloudCourses
+from .cloudcourse import persist as cloud_persist
 from .const import (
     CONF_BYPASS_REMOTE_CONTROL,
+    CONF_CLOUD_COURSES,
     CONF_DEVICE_TYPE,
     CONF_HOST,
     CONF_LEAF_CERT_PEM,
@@ -259,6 +263,9 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # supported (issue #327), restored from the entry so one learned
         # last week is still offered today. See learned.py.
         self._learned = LearnedModes(entry.data.get(CONF_LEARNED_MODES))
+        # Cloud "Download" programs discovered on this device (issue #342).
+        # Same restore-from-entry shape as _learned above; see cloudcourse.py.
+        self._cloud = CloudCourses(entry.data.get(CONF_CLOUD_COURSES))
         # Narrowed to this device's own climate hrefs once discovery has
         # run -- see _refresh_learnable_hrefs.
         self._learnable_hrefs: set[str] = set()
@@ -312,6 +319,29 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         which copies every tracked href to build the snapshot dict."""
         return self._cache.get(href) or {}
 
+    def entity_resources(self) -> dict[str, dict]:
+        """The live snapshot as entity descriptors should see it: the device's
+        own reps, plus this integration's discovered cloud programs merged
+        onto /course/vs/0 under cloudcourse.FIELD (issue #342).
+
+        Merged at read time rather than applied to the state cache, so the
+        synthetic field can never be polled over, written to the device, or
+        reach a diagnostics dump -- `last_resources` stays exactly what the
+        appliance reported. It rides on the rep instead of a resource of its
+        own because rep_fn receives only its own href's rep: a sibling href
+        would be invisible to it, and /course/vs/0 is the one resource every
+        consumer of this data is already bound to.
+        """
+        snapshot = self._cache.snapshot()
+        rep = snapshot.get(cloudcourse.COURSE_HREF)
+        if rep is None:
+            return snapshot
+        view = self._cloud.view()
+        if not view:
+            return snapshot
+        snapshot[cloudcourse.COURSE_HREF] = {**rep, cloudcourse.FIELD: view}
+        return snapshot
+
     def canonical_resources(self, subdevice: Subdevice) -> dict[str, dict]:
         """`subdevice`'s view of the live snapshot, rewritten to canonical
         hrefs (issue #177, see subdevices.canonical_view). Any platform
@@ -325,7 +355,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         cached = self._canonical_cache.get(view_key)
         if cached is not None:
             return cached
-        view = canonical_view(subdevice, self._cache.snapshot(), self.subdevices)
+        view = canonical_view(subdevice, self.entity_resources(), self.subdevices)
         self._canonical_cache[view_key] = view
         return view
 
@@ -389,7 +419,11 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         An 'optimistic' rep is the value this integration just wrote, not
         one the device reported, so there is nothing to learn from it."""
-        if source == "optimistic" or href not in self._learnable_hrefs:
+        if source == "optimistic":
+            return
+        if href == cloudcourse.COURSE_HREF:
+            self._observe_cloud_courses(rep)
+        if href not in self._learnable_hrefs:
             return
         if not self.learning_enabled:
             return
@@ -405,6 +439,85 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     @callback
     def _persist_learned(self) -> None:
         persist(self.hass, self._entry, self._learned.snapshot())
+
+    # ------------------------------------------------------------------
+    # Cloud "Download" programs (issue #342) -- see cloudcourse.py
+    # ------------------------------------------------------------------
+
+    def _observe_cloud_courses(self, rep: dict) -> None:
+        """Learn a downloaded program's replay payload from one applied
+        /course/vs/0 rep. Runs on whichever thread applied the update, so
+        both the persist and the Repairs refresh go through hass.add_job.
+
+        Unlike learned modes this has no opt-out option: it records only
+        what the appliance itself reports about programs it itself
+        advertises, and nothing is offered in the UI until the user names it.
+        """
+        if not self._cloud.observe(rep):
+            return
+        self.hass.add_job(self._persist_cloud_courses)
+
+    @callback
+    def _persist_cloud_courses(self) -> None:
+        cloud_persist(self.hass, self._entry, self._cloud.snapshot())
+        # A newly learned program changes what entity_resources() hands out.
+        self._canonical_cache.clear()
+        self._refresh_cloud_course_issue()
+
+    @property
+    def cloud_courses(self) -> CloudCourses:
+        """The discovered-program store, for the options flow."""
+        return self._cloud
+
+    def cloud_course_rep(self) -> dict:
+        """/course/vs/0's live rep -- what advertises the slot list."""
+        return self.resource(cloudcourse.COURSE_HREF)
+
+    def set_cloud_course_name(self, slot: str, name: str) -> None:
+        self._cloud.set_name(slot, name)
+        self._persist_cloud_courses()
+
+    def set_cloud_download_course(self, code: str | None) -> None:
+        self._cloud.set_download_course(code)
+        self._persist_cloud_courses()
+
+    def forget_cloud_courses(self) -> None:
+        self._cloud.clear()
+        self._persist_cloud_courses()
+
+    @callback
+    def _refresh_cloud_course_issue(self) -> None:
+        """Raise or clear the "you have downloaded programs Home Assistant
+        can't offer yet" Repairs issue (issue #342).
+
+        A downloaded program is only usable once the appliance has been seen
+        sitting on it (that is the only time its replay payload is visible)
+        and the user has given it a name. The device advertises how many it
+        has, so the gap between that and what's usable is knowable -- and
+        it can only be closed by the user walking the appliance through its
+        own Download list, which is exactly what a Repair is for.
+        """
+        issue_id = f"cloud_courses_{self._entry.entry_id}"
+        rep = self.cloud_course_rep()
+        pending = cloudcourse.undiscovered(rep, self._cloud.snapshot())
+        needs_course = bool(cloudcourse.advertised_slots(rep)) and not self._cloud.download_course()
+        if pending or needs_course:
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="cloud_courses_undiscovered",
+                translation_placeholders={
+                    "device_name": self.device_info.get("name") or "This appliance",
+                    "pending": str(len(pending)),
+                    "total": str(len(cloudcourse.advertised_slots(rep))),
+                },
+                learn_more_url=DEVICE_SUPPORT_ISSUE_URL,
+            )
+        else:
+            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
 
     def device_info_for(self, subdevice: Subdevice) -> DeviceInfo:
         """DeviceInfo for one logical subdevice on this connection (issue
@@ -508,7 +621,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         with self._push_pending_lock:
             self._push_pending = False
         if self.bound:
-            self.async_set_updated_data(flatten(self.bound, self._cache.snapshot()))
+            self.async_set_updated_data(flatten(self.bound, self.entity_resources()))
 
     def _poll_once(self) -> dict[str, dict]:
         """GET /device/0, return parsed resources. Blocking.
@@ -1070,7 +1183,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         type(e).__name__,
                         e,
                     )
-                    return flatten(self.bound, self._cache.snapshot())
+                    return flatten(self.bound, self.entity_resources())
                 self._consecutive_poll_timeouts = 0
                 # A lone reconnect is routine (README's "Known device
                 # behavior"); only warn once they pile up. Pause first so
@@ -1099,7 +1212,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     # there are bound entities to carry it.
                     if self._discovered and snapshot:
                         self._log.debug("Full error:", exc_info=e2)
-                        return flatten(self.bound, snapshot)
+                        return flatten(self.bound, self.entity_resources())
                     raise UpdateFailed(f"poll failed after reconnect: {e2}") from e2
                 else:
                     # A fresh session has zero OBSERVE registrations; if we
@@ -1147,6 +1260,14 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         for href, rep in resources.items():
             self._observe.apply(href, rep, source=source)
 
+        if first_cycle:
+            # The apply loop above has just fed this poll's /course/vs/0 to
+            # the cloud-program store, so the gap is knowable now. Explicit
+            # rather than left to _persist_cloud_courses: a device whose
+            # programs are all already named learns nothing on this cycle and
+            # would otherwise never get its stale Repair cleared.
+            self._refresh_cloud_course_issue()
+
         if first_cycle or self._resubscribe_due:
             self._resubscribe_due = False
             await self._attempt_observe_mode()
@@ -1163,7 +1284,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._run_subpolls(force=sweep_mismatch), name="localthings_subpoll"
             )
 
-        return flatten(self.bound, self._cache.snapshot())
+        return flatten(self.bound, self.entity_resources())
 
     # ------------------------------------------------------------------
     # Command dispatch (called by entity platforms in Task 5)
@@ -1185,7 +1306,11 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if write_fn is None:
             return
         href = bound_entity.href
-        rep = self._cache.get(href or "") or {}
+        # Through entity_resources(), not the bare cache: write_fn must see
+        # the same rep exists_fn/rep_fn were handed, including the merged
+        # cloud-program field (issue #342). Identical to the cache entry for
+        # every href that field doesn't touch.
+        rep = self.entity_resources().get(href or "") or {}
         # The remote-control gate below keys off the raw on-the-wire href
         # and a raw snapshot -- /remotectrl/* is a shared, MAIN-only
         # resource that a subdevice's canonical_resources() view (owned

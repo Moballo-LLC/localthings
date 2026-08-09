@@ -1496,3 +1496,26 @@ def test_resources_from_batch_preferred_over_flat():
     }
     result = _resources_from_dump(dump)
     assert result == {"/foo": {"x": 1}}
+
+
+def test_registry_reproduces_golden_state_keys_for_washer_ww5000c_cloud():
+    """The issue #342 reporter's WW5000C (DA_WM_TP1_21_COMMON, Table_02),
+    captured while sitting on its Download course with a one-time Jeans
+    program loaded over a saved Sports default.
+
+    The cloud "Download" programs it advertises add no entity of their own
+    -- they ride in the existing cycle select -- so this golden is the guard
+    that discovering them never grows the entity set.
+
+    Its /wm/editcourse/vs/0 is empty, so its course list comes from the
+    supportedOptions fallback (issue #1)."""
+    from tests.conftest import _load_device
+
+    resources = _load_device("washer_ww5000c_cloud")
+    golden = json.loads((GOLDEN / "washer_ww5000c_cloud.json").read_text())
+    state_keys = _new_state_keys("washer_ww5000c_cloud", resources)
+    assert set(state_keys) == set(golden["state_keys"]), (
+        f"state_keys mismatch:\n"
+        f"  extra:   {sorted(set(state_keys) - set(golden['state_keys']))}\n"
+        f"  missing: {sorted(set(golden['state_keys']) - set(state_keys))}"
+    )

@@ -1406,6 +1406,7 @@
         "title": "LocalThings-Optionen",
         "menu_options": {
           "settings": "Geräteeinstellungen",
+          "cloud_courses": "Download cycles",
           "debug_write": "Debug: In eine Ressource schreiben",
           "forget_learned_modes": "Gemerkte Modi vergessen"
         }
@@ -1444,11 +1445,19 @@
       "forget_learned_modes": {
         "title": "Gemerkte Modi vergessen",
         "description": "Aktuell gemerkt: {codes}\n\nDies sind Modi, in denen sich dieses Gerät selbst gemeldet hat, ohne sie als unterstützt anzugeben; sie werden aufbewahrt, damit sie auswählbar bleiben. Das Vergessen ist die Lösung, wenn sich einer davon als falsch herausgestellt hat -- alles, was das Gerät tatsächlich erneut meldet, wird einfach erneut gemerkt, es sei denn, Sie schalten auch „Vom Gerät gemeldete, aber nicht angegebene Modi merken“ in den Geräteeinstellungen aus."
+      },
+      "cloud_courses": {
+        "title": "Download cycles",
+        "description": "Your washer reports {total} downloaded cycle(s); {found} have been seen so far.\n\nThe appliance only reveals a downloaded cycle's settings while that cycle is actually loaded, and it never reports their names. To add the missing ones ({pending}): on the appliance, select the Download cycle and turn the dial through each downloaded program, pausing a few seconds on each, then come back here.\n\nGive each one the name you want to see in Home Assistant. Leave a name blank to keep that cycle out of the cycle list. Names must be unique.\n\n\"Download cycle\" is the course on your appliance that runs a downloaded program -- it is detected automatically, but confirm it here before use, since selecting a downloaded cycle writes this course code to the machine.",
+        "data": {
+          "download_course": "Download cycle course code"
+        }
       }
     },
     "error": {
       "empty_payload": "Geben Sie mindestens ein zu schreibendes Feld ein.",
-      "write_failed": "Der Schreibvorgang ist fehlgeschlagen. Weitere Details finden Sie im Home-Assistant-Protokoll."
+      "write_failed": "Der Schreibvorgang ist fehlgeschlagen. Weitere Details finden Sie im Home-Assistant-Protokoll.",
+      "cloud_course_name_duplicate": "Two cycles have the same name. Names must be unique."
     },
     "abort": {
       "not_loaded": "Dieses Gerät ist noch nicht verbunden. Versuchen Sie es erneut, sobald es geladen wurde."
@@ -1458,6 +1467,10 @@
     "device_gap": {
       "title": "Unvollständige Funktionsabdeckung für {device_name}",
       "description": "Für dieses Gerät liegt keine vollständige Funktionsabdeckung vor. Entweder wurde sein Gerätetyp nicht erkannt, oder einige der von ihm bereitgestellten Ressourcen sind noch nicht abgebildet. Es funktioniert weiterhin mit dem, was bereits unterstützt wird. Sie können helfen, die Unterstützung zu erweitern, indem Sie zu Einstellungen > Geräte & Dienste > {device_name} > das Menü (oben rechts) > Diagnose herunterladen gehen und diese anschließend über die verlinkte Issue-Vorlage einreichen."
+    },
+    "cloud_courses_undiscovered": {
+      "title": "Downloaded cycles not set up for {device_name}",
+      "description": "{device_name} has {pending} of {total} downloaded cycle(s) that Home Assistant can't offer yet. A downloaded cycle can only be used once the appliance has been seen with it loaded and you've given it a name.\n\nTo set them up, go to Settings > Devices & Services > LocalThings > {device_name} > Configure > Download cycles and follow the instructions there."
     }
   },
   "exceptions": {

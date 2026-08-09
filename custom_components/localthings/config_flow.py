@@ -34,6 +34,8 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
+from . import cloudcourse
+from .catalog import translated_state_labels
 from .const import (
     CLIENTHELLO_PROBE_RETRIES,
     CLIENTHELLO_PROBE_TIMEOUT_S,
@@ -62,6 +64,8 @@ from .const import (
 )
 from .learned import persist as learned_persist
 from .learned import stored as learned_stored
+from .registry.capabilities.laundry import cycle_options
+from .registry.subdevices import MAIN
 
 _TEXT = TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT))
 _MULTILINE = TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True))
@@ -832,10 +836,14 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
         return self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        return self.async_show_menu(
-            step_id="init",
-            menu_options=["settings", "forget_learned_modes", "debug_write"],
-        )
+        menu = ["settings", "forget_learned_modes", "debug_write"]
+        # Only offered on an appliance that actually advertises downloaded
+        # programs (issue #342) -- every other device would get a menu entry
+        # leading to an empty screen.
+        coord = self._coordinator()
+        if coord is not None and cloudcourse.supports_cloud_courses(coord.cloud_course_rep()):
+            menu.insert(1, "cloud_courses")
+        return self.async_show_menu(step_id="init", menu_options=menu)
 
     async def async_step_settings(
         self, user_input: dict[str, Any] | None = None
@@ -899,6 +907,131 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
             step_id="forget_learned_modes",
             data_schema=vol.Schema({}),
             description_placeholders={"codes": ", ".join(codes) if codes else "(none)"},
+        )
+
+    async def async_step_cloud_courses(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Name the cloud "Download" programs this appliance has (issue #342).
+
+        The device advertises how many downloaded programs it holds but never
+        what any of them is called, and only ever exposes the replay payload
+        for the one currently loaded. So this screen can only offer the ones
+        already seen loaded, and asks the user for the names -- the appliance
+        has no name to give and inventing one is not an option (the same rule
+        that governs unrecognized local course codes).
+
+        Also confirms which course code means Download. It is auto-detected
+        by observation, but never used for a write until confirmed here: the
+        options array replaces tokens by prefix and never evicts them, so a
+        stale program token can be reported alongside an unrelated course and
+        make an ordinary wash cycle look like the Download one. Writing the
+        wrong code would start the wrong cycle.
+        """
+        coord = self._coordinator()
+        if coord is None:
+            return self.async_abort(reason="not_loaded")
+
+        store = coord.cloud_courses
+        rep = coord.cloud_course_rep()
+        record = store.snapshot()
+        slots = record["slots"]
+        advertised = cloudcourse.advertised_slots(rep)
+        # Learned slots keep the appliance's own ordering; anything learned
+        # but no longer advertised still gets a row so a name isn't stranded.
+        known = [s for s in advertised if s in slots] + [s for s in slots if s not in advertised]
+
+        if user_input is not None:
+            errors = self._apply_cloud_course_names(coord, known, user_input)
+            if not errors:
+                return self.async_create_entry(data=dict(self.config_entry.options))
+            return self._cloud_courses_form(coord, rep, known, advertised, errors=errors)
+
+        return self._cloud_courses_form(coord, rep, known, advertised)
+
+    def _apply_cloud_course_names(self, coord, known, user_input) -> dict[str, str]:
+        """Validate and store the submitted names + Download course code.
+
+        A name that collides with any other entry in the cycle select --
+        another download cycle, or one of the appliance's own local course
+        names -- is rejected rather than silently accepted. The select maps a
+        chosen label back to a raw value by matching display text, so two
+        options sharing a label would resolve to whichever comes first.
+        """
+        names = {slot: str(user_input.get(f"name_{slot}", "")).strip() for slot in known}
+        taken = {name.casefold() for name in self._local_course_names(coord)}
+        for name in names.values():
+            if not name:
+                continue
+            if name.casefold() in taken:
+                return {"base": "cloud_course_name_duplicate"}
+            taken.add(name.casefold())
+
+        for slot, name in names.items():
+            coord.cloud_courses.set_name(slot, name)
+        coord.set_cloud_download_course(user_input.get("download_course") or None)
+        return {}
+
+    def _local_course_names(self, coord) -> set[str]:
+        """Translated display names of this appliance's own local courses.
+
+        Read through the same catalog the select renders from, so the check
+        matches what the user will actually see side by side in the dropdown.
+        An untranslated code has no display name to collide with.
+        """
+        bound = next(
+            (b for b in coord.bound if b.desc.key == "cycle" and b.href == cloudcourse.COURSE_HREF),
+            None,
+        )
+        if bound is None:
+            return set()
+        resources = coord.canonical_resources(bound.subdevice)
+        key = bound.desc.translation_key
+        if callable(key):
+            key = key(resources)
+        labels = translated_state_labels("select", key) if key else {}
+        return {labels[code.lower()] for code in cycle_options(resources) if code.lower() in labels}
+
+    def _cloud_courses_form(
+        self, coord, rep, known, advertised, errors: dict[str, str] | None = None
+    ) -> ConfigFlowResult:
+        store = coord.cloud_courses
+        record = store.snapshot()
+        slots = record["slots"]
+
+        fields: dict[Any, Any] = {}
+        for slot in known:
+            fields[vol.Optional(f"name_{slot}", default=slots.get(slot, {}).get("name", ""))] = (
+                _TEXT
+            )
+
+        # Course codes this device actually offers, so the Download course
+        # can only ever be set to one of them. Auto-detected candidates come
+        # first -- see CloudCourses.download_candidates.
+        available = cycle_options(coord.canonical_resources(MAIN))
+        candidates = [c for c in store.download_candidates() if c in available]
+        ordered = candidates + [c for c in available if c not in candidates]
+        suggested = record["download_course"] or (candidates[0] if candidates else None)
+        fields[vol.Optional("download_course", description={"suggested_value": suggested})] = (
+            SelectSelector(
+                SelectSelectorConfig(
+                    options=ordered,
+                    custom_value=True,
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            )
+        )
+
+        pending = [s for s in advertised if s not in slots]
+        return self.async_show_form(
+            step_id="cloud_courses",
+            data_schema=vol.Schema(fields),
+            errors=errors or {},
+            description_placeholders={
+                "found": str(len(known)),
+                "total": str(len(advertised)) if advertised else str(len(known)),
+                "pending": ", ".join(pending) if pending else "(none)",
+            },
         )
 
     async def async_step_debug_write(

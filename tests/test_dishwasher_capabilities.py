@@ -5,7 +5,7 @@ cycle_options, cycle_write) is tested in test_laundry_capabilities.py; here we
 check the dishwasher wiring and its device-specific options.
 """
 
-from custom_components.localthings.registry.capabilities import dishwasher, laundry
+from custom_components.localthings.registry.capabilities import dishwasher
 from custom_components.localthings.registry.entities import SwitchDesc
 
 
@@ -15,7 +15,8 @@ class TestCycleOptions:
 
     def test_cycle_desc_uses_shared_cycle_options(self):
         desc = self._cycle()
-        assert desc.options is laundry.cycle_options
+        live = {"/wm/editcourse/vs/0": {"x.com.samsung.da.editCourseList": "EditCourseList_0E82"}}
+        assert desc.options(live) == ["0E", "82"]
         assert desc.translation_key == "dishwasher_cycle"
 
     def test_exists_only_when_edit_course_list_is_live(self):

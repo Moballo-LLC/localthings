@@ -23,6 +23,7 @@ Door-LED keys use NO `x.com.samsung.da.` prefix -- `setBrightness` /
 from datetime import UTC, datetime
 from datetime import time as dt_time
 
+from ... import cloudcourse
 from ...catalog import has_entity_translation
 from ..capability import Capability
 from ..entities import NumberDesc, SelectDesc, SensorDesc, SwitchDesc, TimeDesc
@@ -309,17 +310,117 @@ def _course_codes_from_supported_options(course_rep):
     return []
 
 
+def option_tokens(*pairs):
+    """[(prefix, value), ...] -> ['<prefix>_<value>', ...] -- the general
+    form of option_write, for the one write that needs two tokens to land in
+    the same options[] array together (see cycle_write's cloud branch)."""
+    return [f"{prefix}_{value}" for prefix, value in pairs]
+
+
 def option_write(prefix, new_value):
     """A one-token x.com.samsung.da.options write -- see the module comment
     above for why this doesn't read/rewrite the whole array."""
-    return [f"{prefix}_{new_value}"]
+    return option_tokens((prefix, new_value))
 
 
-def cycle_write(p, rep, href=None):
+# ---------------------------------------------------------------------------
+# Cloud "Download" programs, folded into this same cycle select (issue #342).
+#
+# A device that has downloaded programs advertises them on the same
+# /course/vs/0 options array; cloudcourse.py owns the token shapes, the
+# learned store, and the reasoning for all of it. Everything below is just
+# how that store reaches the select: the coordinator merges it onto this
+# href's rep under cloudcourse.FIELD, so the option list, current value,
+# label, and write path each read it from the rep or snapshot they already
+# receive.
+#
+# They ride in the cycle select rather than a select of their own because
+# that is what they are to a user -- on the appliance's own dial, "Download"
+# occupies one position among the ordinary courses, and picking a downloaded
+# program is picking a cycle. Their raw values are namespaced
+# ('cloud:<slot>') so they can never be confused with, or collide with, a
+# two-hex-char local course code.
+#
+# Confirmed on hardware before any of this was written (issue #342): writing
+# the program token alone, while some other course is selected, is silently
+# ignored -- the course token has to switch to Download in the *same* write.
+# Hence the two-token write, the only one in this module.
+
+
+def _cloud_state(rep):
+    return rep.get(cloudcourse.FIELD) or {}
+
+
+def cloud_options(rep):
+    """Namespaced raw values for every named, learned cloud program."""
+    return [
+        f"{cloudcourse.RAW_PREFIX}{slot}" for slot in sorted(_cloud_state(rep).get("programs", {}))
+    ]
+
+
+def cloud_label(value, resources):
+    """The user's own name for a 'cloud:<slot>' value.
+
+    Cloud program names are user-supplied, never translated: the appliance
+    reports only an opaque slot id, and inventing an English label for one
+    is exactly what this module refuses to do for unrecognized local course
+    codes (see washer_cycle_fallback).
+    """
+    if not isinstance(value, str) or not value.startswith(cloudcourse.RAW_PREFIX):
+        return None
+    slot = value[len(cloudcourse.RAW_PREFIX) :]
+    rep = resources.get(cloudcourse.COURSE_HREF) or {}
+    program = _cloud_state(rep).get("programs", {}).get(slot)
+    return program["name"] if program else None
+
+
+def cloud_current(rep):
+    """'cloud:<slot>' when a named cloud program is the live selection.
+
+    Gated on the course actually being this device's confirmed Download
+    course: tokens in this array are replaced by prefix and never evicted, so
+    a one-time program token outlives the run it belonged to and would
+    otherwise report "Jeans" while an ordinary cotton cycle runs.
+    """
+    state = _cloud_state(rep)
+    download = state.get("download_course")
+    options = rep.get("x.com.samsung.da.options")
+    if not download or option_value(options, "Course") != download:
+        return None
+    blob = option_value(options, cloudcourse.ONESHOT_PREFIX)
+    slot = cloudcourse.slot_of(blob)
+    if slot is None:
+        # No one-time override loaded: the appliance falls back to whatever
+        # the persisted default holds (confirmed with the issue #342
+        # reporter -- leaving Download and returning to it re-selects the
+        # saved program, not the last one-time one).
+        slot = cloudcourse.slot_of(option_value(options, cloudcourse.DEFAULT_PREFIX))
+    if slot is None or slot not in state.get("programs", {}):
+        return None
+    return f"{cloudcourse.RAW_PREFIX}{slot}"
+
+
+def cycle_write(p, rep, href=None, resources=None):
     if not rep.get("x.com.samsung.da.options"):
         return None
+    if isinstance(p, str) and p.startswith(cloudcourse.RAW_PREFIX):
+        return _cloud_cycle_write(p, rep)
     return ["course", "vs", "0"], {
         "x.com.samsung.da.options": option_write("Course", p),
+    }
+
+
+def _cloud_cycle_write(p, rep):
+    state = _cloud_state(rep)
+    download = state.get("download_course")
+    program = state.get("programs", {}).get(p[len(cloudcourse.RAW_PREFIX) :])
+    if not download or program is None:
+        return None
+    # Order matches what the appliance was confirmed to accept.
+    return ["course", "vs", "0"], {
+        "x.com.samsung.da.options": option_tokens(
+            ("Course", download), (cloudcourse.ONESHOT_PREFIX, program["blob"])
+        ),
     }
 
 
@@ -399,6 +500,11 @@ def cycle_select(*, translation_key, icon, table_href=None, display_fn=None):
     Left at its default for dishwasher, which has no equivalent table-id
     resource and no evidence its codes vary by table the way washer/
     dryer's do.
+
+    Any cloud "Download" programs the user has discovered and named join the
+    same option list, after the local courses -- see the cloud section above.
+    A device with none (or one whose owner hasn't named any yet) gets exactly
+    the list it got before they existed.
     """
     key = translation_key
     if table_href is not None:
@@ -410,14 +516,31 @@ def cycle_select(*, translation_key, icon, table_href=None, display_fn=None):
             candidate = f"{translation_key}_{table.lower()}"
             return candidate if has_entity_translation("select", candidate) else "cycle"
 
+    def options(resources):
+        rep = resources.get("/course/vs/0") or {}
+        # Local courses first: a user-supplied cloud name that happens to
+        # match a translated course name resolves back to the real local
+        # course on write, which is the safer of the two. The options flow
+        # rejects such a name outright, so this is a backstop, not the fix.
+        return [*cycle_options(resources), *cloud_options(rep)]
+
+    def current(rep):
+        return cloud_current(rep) or option_value(rep.get("x.com.samsung.da.options"), "Course")
+
+    def label(value, resources):
+        cloud = cloud_label(value, resources)
+        if cloud is not None:
+            return cloud
+        return display_fn(value, resources) if display_fn is not None else None
+
     return SelectDesc(
         key="cycle",
         icon=icon,
         translation_key=key,
-        options=cycle_options,
-        exists_fn=lambda rep, resources: bool(cycle_options(resources)),
-        rep_fn=lambda rep: option_value(rep.get("x.com.samsung.da.options"), "Course"),
-        display_fn=display_fn,
+        options=options,
+        exists_fn=lambda rep, resources: bool(options(resources)),
+        rep_fn=current,
+        display_fn=label,
         write_fn=cycle_write,
     )
 

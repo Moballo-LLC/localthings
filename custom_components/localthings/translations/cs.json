@@ -1406,6 +1406,7 @@
         "title": "Možnosti LocalThings",
         "menu_options": {
           "settings": "Nastavení zápisu pro dálkové ovládání",
+          "cloud_courses": "Download cycles",
           "forget_learned_modes": "Zapomenout zapamatované režimy",
           "debug_write": "Ladění: zápis do prostředku"
         }
@@ -1444,11 +1445,19 @@
           "debug_write": "Zapsat do dalšího prostředku",
           "finish": "Dokončit"
         }
+      },
+      "cloud_courses": {
+        "title": "Download cycles",
+        "description": "Your washer reports {total} downloaded cycle(s); {found} have been seen so far.\n\nThe appliance only reveals a downloaded cycle's settings while that cycle is actually loaded, and it never reports their names. To add the missing ones ({pending}): on the appliance, select the Download cycle and turn the dial through each downloaded program, pausing a few seconds on each, then come back here.\n\nGive each one the name you want to see in Home Assistant. Leave a name blank to keep that cycle out of the cycle list. Names must be unique.\n\n\"Download cycle\" is the course on your appliance that runs a downloaded program -- it is detected automatically, but confirm it here before use, since selecting a downloaded cycle writes this course code to the machine.",
+        "data": {
+          "download_course": "Download cycle course code"
+        }
       }
     },
     "error": {
       "empty_payload": "Zadejte alespoň jedno pole k zápisu.",
-      "write_failed": "Zápis se nezdařil. Podrobnosti najdete v protokolech Home Assistant."
+      "write_failed": "Zápis se nezdařil. Podrobnosti najdete v protokolech Home Assistant.",
+      "cloud_course_name_duplicate": "Two cycles have the same name. Names must be unique."
     },
     "abort": {
       "not_loaded": "Toto zařízení ještě není připojeno. Zkuste to znovu, až se načte."
@@ -1458,6 +1467,10 @@
     "device_gap": {
       "title": "Neúplné pokrytí funkcí pro {device_name}",
       "description": "Toto zařízení nemá úplné pokrytí funkcí. Buď nebyl rozpoznán jeho typ spotřebiče, nebo některé jím poskytované prostředky ještě nejsou namodelovány. Bude i nadále fungovat se vším, co je již podporováno. Podporu můžete pomoci rozšířit tak, že přejdete do Nastavení > Zařízení a služby > {device_name} > nabídka (vpravo nahoře) > Stáhnout diagnostiku a poté ji vložíte do odkazované šablony issue."
+    },
+    "cloud_courses_undiscovered": {
+      "title": "Downloaded cycles not set up for {device_name}",
+      "description": "{device_name} has {pending} of {total} downloaded cycle(s) that Home Assistant can't offer yet. A downloaded cycle can only be used once the appliance has been seen with it loaded and you've given it a name.\n\nTo set them up, go to Settings > Devices & Services > LocalThings > {device_name} > Configure > Download cycles and follow the instructions there."
     }
   },
   "exceptions": {

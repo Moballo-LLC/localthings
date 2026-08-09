@@ -1406,6 +1406,7 @@
         "title": "LocalThings 옵션",
         "menu_options": {
           "settings": "기기 설정",
+          "cloud_courses": "Download cycles",
           "forget_learned_modes": "기억된 모드 지우기",
           "debug_write": "디버그: 리소스에 쓰기"
         }
@@ -1444,11 +1445,19 @@
           "debug_write": "다른 리소스에 쓰기",
           "finish": "완료"
         }
+      },
+      "cloud_courses": {
+        "title": "Download cycles",
+        "description": "Your washer reports {total} downloaded cycle(s); {found} have been seen so far.\n\nThe appliance only reveals a downloaded cycle's settings while that cycle is actually loaded, and it never reports their names. To add the missing ones ({pending}): on the appliance, select the Download cycle and turn the dial through each downloaded program, pausing a few seconds on each, then come back here.\n\nGive each one the name you want to see in Home Assistant. Leave a name blank to keep that cycle out of the cycle list. Names must be unique.\n\n\"Download cycle\" is the course on your appliance that runs a downloaded program -- it is detected automatically, but confirm it here before use, since selecting a downloaded cycle writes this course code to the machine.",
+        "data": {
+          "download_course": "Download cycle course code"
+        }
       }
     },
     "error": {
       "empty_payload": "쓸 필드를 하나 이상 입력하세요.",
-      "write_failed": "쓰기에 실패했습니다. 자세한 내용은 Home Assistant 로그에서 확인하세요."
+      "write_failed": "쓰기에 실패했습니다. 자세한 내용은 Home Assistant 로그에서 확인하세요.",
+      "cloud_course_name_duplicate": "Two cycles have the same name. Names must be unique."
     },
     "abort": {
       "not_loaded": "이 기기는 아직 연결되지 않았습니다. 기기를 불러온 후 다시 시도하세요."
@@ -1458,6 +1467,10 @@
     "device_gap": {
       "title": "{device_name}의 기능 지원이 완전하지 않음",
       "description": "이 기기의 일부 기능이 아직 완전히 지원되지 않습니다. 가전제품 유형이 인식되지 않았거나, 기기가 제공하는 일부 리소스가 아직 구현되지 않았습니다. 현재 지원되는 기능은 계속 사용할 수 있습니다. 설정 > 기기 및 서비스 > {device_name} > 오른쪽 위 메뉴 > 진단 정보 다운로드로 이동하여 진단 정보를 내려받은 뒤, 연결된 이슈 양식에 첨부하면 지원 범위를 넓히는 데 도움을 줄 수 있습니다."
+    },
+    "cloud_courses_undiscovered": {
+      "title": "Downloaded cycles not set up for {device_name}",
+      "description": "{device_name} has {pending} of {total} downloaded cycle(s) that Home Assistant can't offer yet. A downloaded cycle can only be used once the appliance has been seen with it loaded and you've given it a name.\n\nTo set them up, go to Settings > Devices & Services > LocalThings > {device_name} > Configure > Download cycles and follow the instructions there."
     }
   },
   "exceptions": {
