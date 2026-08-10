@@ -148,11 +148,13 @@ COOKTOP_STATUS = Capability(
             value_fn=lambda v: str(v).lower() == "on",
         ),
         # Safe to write -- a lock toggle, not a heat control -- via a
-        # direct single-field PUT, no RMW needed.
+        # direct single-field PUT, no RMW needed. No device_class:
+        # SwitchDeviceClass only has 'outlet'/'switch', not 'lock' --
+        # passing it crashed switch platform setup for the whole device
+        # (issue #349, same bug as water_purifier.py's lock switches).
         SwitchDesc(
             key="cooktop_child_lock",
             field="childLock",
-            device_class="lock",
             entity_category="config",
             icon="mdi:lock",
             value_fn=lambda v: str(v).lower() == "on",

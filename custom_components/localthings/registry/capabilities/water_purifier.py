@@ -182,10 +182,15 @@ FAVORITE_HOTWATER = Capability(
         # adapter.flatten() only ever honors exists_fn, not entity.py's
         # implicit field-presence default -- without it, whichever
         # same-keyed descriptor is processed last would silently win.
+        # No device_class: SwitchDeviceClass only has 'outlet'/'switch',
+        # not 'lock' -- passing it crashed switch platform setup entirely
+        # for the whole device (issue #349), same bug KIDS_LOCK_GENERIC
+        # dodged by switching to BinarySensorDesc (issues #181/#183). This
+        # entity stays a SwitchDesc since it's genuinely writable.
         SwitchDesc(
             key="hotwater_lock",
             field="x.com.samsung.da.switchHotwater",
-            device_class="lock",
+            icon="mdi:lock",
             entity_category="config",
             value_fn=lambda v: v != "Unlocked",
             exists_fn=lambda rep, resources: (
@@ -354,11 +359,13 @@ LOCK = Capability(
     entities=(
         # Shares its key with FAVORITE_HOTWATER's switchHotwater fallback
         # above (issue #144); see the comment there. A stub rep ({}) still
-        # counts as "present" here, matching entity.py's own default.
+        # counts as "present" here, matching entity.py's own default. No
+        # device_class on any of the three locks below -- see the
+        # device_class note on FAVORITE_HOTWATER's hotwater_lock (issue #349).
         SwitchDesc(
             key="hotwater_lock",
             field="x.com.samsung.da.hotwaterLock",
-            device_class="lock",
+            icon="mdi:lock",
             entity_category="config",
             value_fn=lambda v: v != "Unlocked",
             exists_fn=lambda rep, resources: not rep or "x.com.samsung.da.hotwaterLock" in rep,
@@ -370,7 +377,7 @@ LOCK = Capability(
         SwitchDesc(
             key="coldwater_lock",
             field="x.com.samsung.da.coldwaterLock",
-            device_class="lock",
+            icon="mdi:lock",
             entity_category="config",
             value_fn=lambda v: v != "Unlocked",
             write_fn=lambda p, rep, href=None: (
@@ -381,7 +388,7 @@ LOCK = Capability(
         SwitchDesc(
             key="buzz_lock",
             field="x.com.samsung.da.buzzLock",
-            device_class="lock",
+            icon="mdi:lock",
             entity_category="config",
             value_fn=lambda v: v != "Unlocked",
             write_fn=lambda p, rep, href=None: (
