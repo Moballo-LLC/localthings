@@ -52,6 +52,7 @@ from __future__ import annotations
 import threading
 
 from .const import CONF_CLOUD_COURSES
+from .registry.capabilities.common import hex_pairs, option_value
 
 COURSE_HREF = "/course/vs/0"
 
@@ -94,33 +95,29 @@ def _hex_bytes(blob):
         int(blob, 16)
     except ValueError:
         return []
-    return [blob[i : i + 2].upper() for i in range(0, len(blob), 2)]
+    return hex_pairs(blob.upper())
 
 
 def is_loaded(blob) -> bool:
     """True when `blob` names an actual program rather than 'none'."""
-    parts = _hex_bytes(blob)
-    return bool(parts) and not blob.upper().startswith(_SENTINEL_PREFIX)
+    return _slot_and_loaded(blob)[1]
 
 
 def slot_of(blob) -> str | None:
     """The slot id `blob` belongs to, or None if it names no program."""
+    slot, loaded = _slot_and_loaded(blob)
+    return slot if loaded else None
+
+
+def _slot_and_loaded(blob) -> tuple[str | None, bool]:
+    """Both answers off one parse -- the public pair above needs the same
+    byte split, and observe() asks for both about the same payload."""
     parts = _hex_bytes(blob)
-    if not parts or not is_loaded(blob):
-        return None
-    return parts[_SLOT_BYTE]
-
-
-def option_value(options, prefix):
-    """`<prefix>_<value>` from an options[] array. Duplicated from
-    laundry.option_value rather than imported: this module is imported by
-    the coordinator, and reaching into registry.capabilities from there
-    would invert the dependency direction the rest of the integration
-    keeps."""
-    for o in options or []:
-        if isinstance(o, str) and o.startswith(prefix + "_"):
-            return o.split("_", 1)[1]
-    return None
+    if not parts:
+        return None, False
+    if "".join(parts[:2]) == _SENTINEL_PREFIX:
+        return None, False
+    return parts[_SLOT_BYTE], True
 
 
 def advertised_slots(rep) -> list[str]:
@@ -131,10 +128,9 @@ def advertised_slots(rep) -> list[str]:
     raw = option_value(rep.get("x.com.samsung.da.options"), EXTRA_PREFIX)
     if not isinstance(raw, str) or len(raw) % 2:
         return []
-    slots = [raw[i : i + 2].upper() for i in range(0, len(raw), 2)]
     # Preserve the device's own order (first-seen wins) while dropping any
     # repeat, so the flow lists slots the way the appliance does.
-    return list(dict.fromkeys(slots))
+    return list(dict.fromkeys(hex_pairs(raw.upper())))
 
 
 def supports_cloud_courses(rep) -> bool:
@@ -167,13 +163,6 @@ def _coerce(stored) -> tuple[str | None, dict[str, dict[str, str]]]:
                 "name": name if isinstance(name, str) and name.strip() else "",
             }
     return download, slots
-
-
-def stored(entry) -> dict:
-    """What `entry` has persisted, coerced -- for a reader with no
-    coordinator to go through (the options flow, on an unloaded entry)."""
-    download, slots = _coerce(entry.data.get(CONF_CLOUD_COURSES))
-    return {"download_course": download, "slots": slots}
 
 
 def persist(hass, entry, record: dict) -> None:
@@ -230,8 +219,20 @@ class CloudCourses:
         if not options:
             return False
         known_slots = advertised_slots(rep)
-        changed = False
+        oneshot = option_value(options, ONESHOT_PREFIX)
         with self._lock:
+            # Compared once, at the end, against where this pass started --
+            # not set per assignment. The two tokens can name the same slot
+            # with different payloads (a downloaded program with its settings
+            # tweaked for one run is exactly that shape), and a per-assignment
+            # flag would then report a change on every single poll forever:
+            # each pass writes the default's payload and then the one-shot's
+            # over it, so neither is ever "already stored". Every one of those
+            # reports rewrites the config entry, which on the SD-card installs
+            # this integration runs on is the one cost here that really bites.
+            # The end state is stable (the one-shot is written last and wins),
+            # so comparing start to end settles after the first pass.
+            before = {slot: record["blob"] for slot, record in self._slots.items()}
             for prefix in (DEFAULT_PREFIX, ONESHOT_PREFIX):
                 blob = option_value(options, prefix)
                 slot = slot_of(blob)
@@ -242,11 +243,10 @@ class CloudCourses:
                 record = self._slots.get(slot)
                 if record is None:
                     self._slots[slot] = {"blob": blob.upper(), "name": ""}
-                    changed = True
-                elif record["blob"] != blob.upper():
+                else:
                     record["blob"] = blob.upper()
-                    changed = True
-            oneshot = option_value(options, ONESHOT_PREFIX)
+            changed = before != {slot: rec["blob"] for slot, rec in self._slots.items()}
+
             course = option_value(options, COURSE_PREFIX)
             if course and is_loaded(oneshot) and oneshot != self._last_oneshot:
                 self._candidates[course] = self._candidates.get(course, 0) + 1
@@ -255,10 +255,6 @@ class CloudCourses:
 
     # -- reads ------------------------------------------------------------
 
-    def download_course(self) -> str | None:
-        with self._lock:
-            return self._download_course
-
     def download_candidates(self) -> list[str]:
         """Course codes seen at the moment a one-time program was loaded,
         most-observed first -- what the options flow offers as the likely
@@ -266,11 +262,6 @@ class CloudCourses:
         with self._lock:
             ranked = sorted(self._candidates.items(), key=lambda kv: (-kv[1], kv[0]))
         return [code for code, _ in ranked]
-
-    def blob(self, slot: str) -> str | None:
-        with self._lock:
-            record = self._slots.get(slot.upper())
-            return record["blob"] if record else None
 
     def named(self) -> dict[str, str]:
         """Slots that are both learned and named -- the only ones offerable
@@ -299,7 +290,7 @@ class CloudCourses:
                 "programs": {
                     slot: {"blob": record["blob"], "name": record["name"]}
                     for slot, record in self._slots.items()
-                    if record["name"]
+                    if self._is_usable(record)
                 },
             }
 
@@ -315,11 +306,12 @@ class CloudCourses:
             if record is not None:
                 record["name"] = name.strip()
 
-    def clear(self) -> None:
-        with self._lock:
-            self._download_course = None
-            self._slots = {}
-            self._candidates = {}
+    @staticmethod
+    def _is_usable(record) -> bool:
+        """A slot is offerable once it has a name. The device supplies the
+        payload; only the user can supply the label, so this is the whole
+        rule and it is stated once."""
+        return bool(record["name"])
 
 
 def undiscovered(rep: dict, record: dict) -> list[str]:

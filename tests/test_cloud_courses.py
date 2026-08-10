@@ -90,8 +90,8 @@ class TestRealDumps:
 
         store = cloudcourse.CloudCourses()
         assert store.observe(rep) is True
-        assert store.blob("55") == SPORTS
-        assert store.blob("6B") == JEANS
+        assert store.snapshot()["slots"]["55"]["blob"] == SPORTS
+        assert store.snapshot()["slots"]["6B"]["blob"] == JEANS
         # Learned but unnamed -- nothing is offerable yet.
         assert store.named() == {}
         assert store.view() == {}
@@ -102,7 +102,7 @@ class TestRealDumps:
         store.observe(rep)
         assert store.download_candidates() == ["87"]
         # A candidate is never used until confirmed.
-        assert store.download_course() is None
+        assert store.snapshot()["download_course"] is None
 
     def test_wa55_learns_its_saved_program_but_not_the_sentinel(self):
         rep = _load_device("washer_wa55a7700av")["/course/vs/0"]
@@ -110,8 +110,8 @@ class TestRealDumps:
 
         store = cloudcourse.CloudCourses()
         store.observe(rep)
-        assert store.blob("59") == "001C590549164D114A224C2037F0AC22"
-        assert store.blob("01") is None  # the FFFF sentinel's byte 2
+        assert store.snapshot()["slots"]["59"]["blob"] == "001C590549164D114A224C2037F0AC22"
+        assert "01" not in store.snapshot()["slots"]  # the FFFF sentinel's byte 2
 
     def test_wa55_proposes_no_download_course(self):
         """It is sitting on an ordinary local course with no override
@@ -160,7 +160,7 @@ class TestRealDumps:
         for blob in (b06c, b048):
             store = cloudcourse.CloudCourses()
             store.observe(_rep(["CloudExtraCourse_0A", f"CloudCourse_{blob}"]))
-            assert store.blob("0A") == blob
+            assert store.snapshot()["slots"]["0A"]["blob"] == blob
 
     def test_a_sentinel_slot_byte_is_not_the_current_course(self):
         """The two sentinels in the corpus disagree about this -- WA55's byte
@@ -192,14 +192,14 @@ class TestStoreRules:
         offers."""
         store = cloudcourse.CloudCourses()
         store.observe(_rep(["CloudExtraCourse_55", f"OneTimeCloudCourse_{JEANS}"]))
-        assert store.blob("6B") is None
+        assert "6B" not in store.snapshot()["slots"]
 
     def test_a_relearned_blob_replaces_the_old_payload(self):
         store = cloudcourse.CloudCourses()
         store.observe(_rep(["CloudExtraCourse_55", f"CloudCourse_{SPORTS}"]))
         rewritten = SPORTS.replace("F005F0AC00", "F005F0AC11")
         assert store.observe(_rep(["CloudExtraCourse_55", f"CloudCourse_{rewritten}"])) is True
-        assert store.blob("55") == rewritten
+        assert store.snapshot()["slots"]["55"]["blob"] == rewritten
 
     def test_observing_the_same_rep_twice_changes_nothing(self):
         store = cloudcourse.CloudCourses()

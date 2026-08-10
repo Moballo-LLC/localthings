@@ -80,8 +80,8 @@ async def test_a_poll_learns_and_persists_the_loaded_programs(hass: HomeAssistan
     entry = _entry(hass)
     coordinator = await _coordinator(hass, entry)
 
-    assert coordinator.cloud_courses.blob("55") == SPORTS
-    assert coordinator.cloud_courses.blob("6B") == JEANS
+    assert coordinator.cloud_courses.snapshot()["slots"]["55"]["blob"] == SPORTS
+    assert coordinator.cloud_courses.snapshot()["slots"]["6B"]["blob"] == JEANS
     # Survives a restart -- the payload is only visible while loaded.
     assert entry.data[CONF_CLOUD_COURSES]["slots"]["55"]["blob"] == SPORTS
 
@@ -96,7 +96,7 @@ async def test_an_optimistic_write_teaches_nothing(hass: HomeAssistant):
         source="optimistic",
     )
     await _flush(hass)
-    assert coordinator.cloud_courses.blob("55") is None
+    assert "55" not in coordinator.cloud_courses.snapshot()["slots"]
 
 
 async def test_learned_but_unnamed_programs_stay_out_of_the_cycle_select(hass: HomeAssistant):
@@ -109,8 +109,7 @@ async def test_learned_but_unnamed_programs_stay_out_of_the_cycle_select(hass: H
 
 async def test_naming_a_program_puts_it_in_the_cycle_select(hass: HomeAssistant):
     coordinator = await _coordinator(hass)
-    coordinator.set_cloud_download_course("87")
-    coordinator.set_cloud_course_name("55", "Sports")
+    coordinator.apply_cloud_courses({"55": "Sports"}, "87")
     await _flush(hass)
 
     assert "cloud:55" in _cycle_options(coordinator)
@@ -118,7 +117,7 @@ async def test_naming_a_program_puts_it_in_the_cycle_select(hass: HomeAssistant)
     # Jeans is still unnamed -- so the state falls through to the raw course.
     assert _cycle_state(coordinator) == "87"
 
-    coordinator.set_cloud_course_name("6B", "Jeans")
+    coordinator.apply_cloud_courses({"6B": "Jeans"}, "87")
     await _flush(hass)
     assert _cycle_state(coordinator) == "cloud:6B"
 
@@ -128,8 +127,7 @@ async def test_the_synthetic_field_never_reaches_the_device_snapshot(hass: HomeA
     appliance reported, so it can't be polled over, written back, or land in
     a diagnostics dump."""
     coordinator = await _coordinator(hass)
-    coordinator.set_cloud_download_course("87")
-    coordinator.set_cloud_course_name("55", "Sports")
+    coordinator.apply_cloud_courses({"55": "Sports"}, "87")
     await _flush(hass)
 
     assert cloudcourse.FIELD in coordinator.entity_resources()[COURSE]
@@ -142,8 +140,7 @@ async def test_selecting_a_named_program_writes_both_tokens(hass: HomeAssistant)
     command path builds its own rep, and a rep taken straight off the state
     cache carries no cloud programs, so the write would silently no-op."""
     coordinator = await _coordinator(hass)
-    coordinator.set_cloud_download_course("87")
-    coordinator.set_cloud_course_name("55", "Sports")
+    coordinator.apply_cloud_courses({"55": "Sports"}, "87")
     await _flush(hass)
 
     sent: list[tuple[list[str], bytes]] = []
@@ -184,7 +181,6 @@ async def test_a_repair_is_raised_until_every_program_is_named(hass: HomeAssista
     assert issue is not None
     assert (issue.translation_placeholders or {})["total"] == "9"
 
-    coordinator.set_cloud_download_course("87")
     for slot in cloudcourse.advertised_slots(coordinator.cloud_course_rep()):
         # Only two are learned; name every advertised slot to close the gap.
         coordinator.cloud_courses.observe(
@@ -195,7 +191,7 @@ async def test_a_repair_is_raised_until_every_program_is_named(hass: HomeAssista
                 ]
             }
         )
-        coordinator.set_cloud_course_name(slot, f"Program {slot}")
+        coordinator.apply_cloud_courses({slot: f"Program {slot}"}, "87")
     await _flush(hass)
 
     assert registry.async_get_issue(DOMAIN, issue_id) is None
@@ -219,7 +215,7 @@ async def test_a_malformed_entry_record_does_not_block_setup(hass: HomeAssistant
     entry = _entry(hass, data={CONF_CLOUD_COURSES: {"slots": {"55": {"blob": "junk"}}}})
     coordinator = await _coordinator(hass, entry)
     # Dropped on restore, then relearned from the live poll.
-    assert coordinator.cloud_courses.blob("55") == SPORTS
+    assert coordinator.cloud_courses.snapshot()["slots"]["55"]["blob"] == SPORTS
 
 
 # ---------------------------------------------------------------------------
@@ -271,19 +267,6 @@ async def test_the_flow_rejects_two_programs_sharing_a_name(hass: HomeAssistant)
 
     result = await handler.async_step_cloud_courses(
         {"name_55": "Sports", "name_6B": "sports", "download_course": "87"}
-    )
-    assert result["errors"] == {"base": "cloud_course_name_duplicate"}
-    assert coordinator.cloud_courses.named() == {}
-
-
-async def test_the_flow_rejects_a_name_that_shadows_a_local_course(hass: HomeAssistant):
-    """'Drum Clean' is course 74 on this appliance's own list. Two options
-    rendering the same label would resolve to whichever comes first."""
-    coordinator = await _coordinator(hass)
-    handler = await _options_handler(hass, coordinator)
-
-    result = await handler.async_step_cloud_courses(
-        {"name_55": "Drum Clean", "download_course": "87"}
     )
     assert result["errors"] == {"base": "cloud_course_name_duplicate"}
     assert coordinator.cloud_courses.named() == {}
@@ -358,27 +341,30 @@ async def test_the_synthetic_field_never_reaches_diagnostics(
 
     entry = _entry(hass)
     coordinator = await _coordinator(hass, entry)
-    coordinator.set_cloud_download_course("87")
-    coordinator.set_cloud_course_name("55", "Marc's weekend towels")
+    coordinator.apply_cloud_courses({"55": "Marc's weekend towels"}, "87")
     await _flush(hass)
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
-    dump = json.dumps(await async_get_config_entry_diagnostics(hass, entry))
+    diag = await async_get_config_entry_diagnostics(hass, entry)
+    dump = json.dumps(diag)
     assert cloudcourse.FIELD not in dump
-    assert "Marc's weekend towels" not in dump
-    # The device's own tokens are still there -- only our field is dropped.
+    # The device's own tokens are still there -- resources stays what it said.
     assert "CloudExtraCourse_0A5C286B2D0C55301A" in dump
+
+    # The store is reported in its own block, so a triager can see the
+    # payloads -- but not the user's chosen names.
+    assert "Marc's weekend towels" not in dump
+    assert diag["cloud_courses"]["payloads"]["55"] == SPORTS
+    assert diag["cloud_courses"]["named_slots"] == ["55"]
+    assert diag["cloud_courses"]["download_course"] == "87"
 
 
 async def test_the_debug_read_service_reports_only_device_state(hass: HomeAssistant):
-    from custom_components.localthings.registry.redact import strip_synthetic
-
     coordinator = await _coordinator(hass)
-    coordinator.set_cloud_download_course("87")
-    coordinator.set_cloud_course_name("55", "Sports")
+    coordinator.apply_cloud_courses({"55": "Sports"}, "87")
     await _flush(hass)
 
-    stripped = strip_synthetic(coordinator.canonical_resources(MAIN))
+    stripped = coordinator.device_resources(MAIN)
     assert cloudcourse.FIELD not in stripped[COURSE]
     assert "x.com.samsung.da.options" in stripped[COURSE]
 
@@ -392,7 +378,7 @@ async def test_the_flow_rejects_a_download_course_the_device_does_not_offer(
 
     result = await handler.async_step_cloud_courses({"name_55": "Sports", "download_course": "FF"})
     assert result["errors"] == {"base": "cloud_course_unknown_course"}
-    assert coordinator.cloud_courses.download_course() is None
+    assert coordinator.cloud_courses.snapshot()["download_course"] is None
     assert coordinator.cloud_courses.named() == {}
 
 

@@ -35,7 +35,6 @@ from homeassistant.helpers.selector import (
 )
 
 from . import cloudcourse
-from .catalog import translated_state_labels
 from .const import (
     CLIENTHELLO_PROBE_RETRIES,
     CLIENTHELLO_PROBE_TIMEOUT_S,
@@ -945,21 +944,31 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
             errors = self._apply_cloud_course_names(coord, known, user_input)
             if not errors:
                 return self.async_create_entry(data=dict(self.config_entry.options))
-            return self._cloud_courses_form(coord, rep, known, advertised, errors=errors)
+            return self._cloud_courses_form(coord, known, advertised, errors=errors)
 
-        return self._cloud_courses_form(coord, rep, known, advertised)
+        return self._cloud_courses_form(coord, known, advertised)
 
     def _apply_cloud_course_names(self, coord, known, user_input) -> dict[str, str]:
         """Validate and store the submitted names + Download course code.
 
-        A name that collides with any other entry in the cycle select --
-        another download cycle, or one of the appliance's own local course
-        names -- is rejected rather than silently accepted. The select maps a
-        chosen label back to a raw value by matching display text, so two
-        options sharing a label would resolve to whichever comes first.
+        The select maps a chosen label back to a raw value by matching display
+        text, so two options sharing a label resolve to whichever comes first.
+        Two sources of collision are checkable here and both are rejected:
+        the user's own names against each other, and against the appliance's
+        personal-course labels, which the device reports verbatim and the
+        select renders as-is.
+
+        A collision with a *translated* local course name is deliberately not
+        checked. The catalog this process can read is English (catalog.py),
+        while what the user actually sees is localized in the frontend -- so
+        checking it would reject "Cotton" for a German user whose dropdown
+        says "Baumwolle", and still miss the real collision when they type
+        "Baumwolle". Wrong in both directions outside one locale, against an
+        outcome the option ordering already makes deterministic (local
+        courses come first, so a shared label resolves to the real cycle).
         """
         names = {slot: str(user_input.get(f"name_{slot}", "")).strip() for slot in known}
-        taken = {name.casefold() for name in self._local_course_names(coord)}
+        taken = {name.casefold() for name in self._device_course_names(coord)}
         for name in names.values():
             if not name:
                 continue
@@ -975,42 +984,23 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
         if course is not None and course not in cycle_options(coord.canonical_resources(MAIN)):
             return {"base": "cloud_course_unknown_course"}
 
-        for slot, name in names.items():
-            coord.cloud_courses.set_name(slot, name)
-        coord.set_cloud_download_course(course)
+        coord.apply_cloud_courses(names, course)
         return {}
 
-    def _local_course_names(self, coord) -> set[str]:
-        """Display names of this appliance's own local courses.
+    def _device_course_names(self, coord) -> set[str]:
+        """Course names this appliance reports itself.
 
-        Read through the same two sources the select renders from -- the
-        translation catalog, and the device's own personal-course labels
-        (laundry.washer_cycle_fallback) -- so the check matches what the user
-        will actually see side by side in the dropdown. A code neither source
-        names has no display name to collide with.
+        Only the personal-course labels: the device sends these as text and
+        the select renders them unchanged, so they are the same string in
+        every locale and can be compared against safely. See the caller for
+        why translated course names are not included.
         """
-        bound = next(
-            (b for b in coord.bound if b.desc.key == "cycle" and b.href == cloudcourse.COURSE_HREF),
-            None,
-        )
-        if bound is None:
-            return set()
-        resources = coord.canonical_resources(bound.subdevice)
-        key = bound.desc.translation_key
-        if callable(key):
-            key = key(resources)
-        labels = translated_state_labels("select", key) if key else {}
+        resources = coord.canonical_resources(MAIN)
         personal = personal_course_labels(resources)
-        names = set()
-        for code in cycle_options(resources):
-            if (catalogued := labels.get(code.lower())) is not None:
-                names.add(catalogued)
-            if (own := personal.get(code.upper())) is not None:
-                names.add(own)
-        return names
+        return {name for code in cycle_options(resources) if (name := personal.get(code.upper()))}
 
     def _cloud_courses_form(
-        self, coord, rep, known, advertised, errors: dict[str, str] | None = None
+        self, coord, known, advertised, errors: dict[str, str] | None = None
     ) -> ConfigFlowResult:
         store = coord.cloud_courses
         record = store.snapshot()

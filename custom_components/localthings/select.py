@@ -67,28 +67,20 @@ def _display(value, translation_key: str | None, fallback_fn=None):
     """
     if not isinstance(value, str):
         return value
-    # No state table for this key: either the entity isn't translated at all,
-    # or its name is translated but its options deliberately aren't (an
-    # unrecognized course table, say).
-    uncatalogued = False
-    if translation_key:
-        known = translated_states("select", translation_key)
-        if not known:
-            uncatalogued = True
-        elif translated := _translation_state(value, known):
-            return translated
-    if fallback_fn is not None:
-        fallback = fallback_fn(value)
-        if fallback is not None:
-            return fallback
-    if uncatalogued:
-        # Nothing could name this value: not the catalog, and not a
-        # device-specific fallback (either absent, or present and declining
-        # to label this one). The raw device value is the best choice --
-        # cosmetic reshaping below would only mangle an opaque code, turning
-        # a course '0E' into '0 E'. Keyed on the fallback's *result*, not on
-        # whether one was supplied: cycle_select always supplies one now, to
-        # label cloud programs, and it returns None for everything else.
+    known = translated_states("select", translation_key) if translation_key else frozenset()
+    if translated := _translation_state(value, known):
+        return translated
+    if fallback_fn is not None and (fallback := fallback_fn(value)) is not None:
+        return fallback
+    if translation_key and not known:
+        # No state table for this key: either the entity isn't translated at
+        # all, or its name is translated but its options deliberately aren't
+        # (an unrecognized course table, say). Nothing named this value, so
+        # the raw device value is the best choice -- the cosmetic reshaping
+        # below would only mangle an opaque code, turning a course '0E' into
+        # '0 E'. Reached only when the fallback *declined* the value, not
+        # merely when none was supplied: cycle_select always supplies one now
+        # (it labels cloud programs) and returns None for everything else.
         return value
     if value.islower():
         return value.replace("_", " ").title()

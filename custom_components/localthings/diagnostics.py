@@ -16,6 +16,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.loader import async_get_integration
 
+from . import cloudcourse
 from .const import DOMAIN
 from .coordinator import LocalThingsCoordinator
 from .registry.redact import redact_resources
@@ -32,6 +33,7 @@ async def async_get_config_entry_diagnostics(
     # disk (listdir + open + read_text), which trips HA's event-loop blocking
     # detector when called inline here. Offload it to the executor.
     stl_version = await hass.async_add_executor_job(pkg_version, "smartthings-local")
+    cloud_courses = coordinator.cloud_courses.snapshot()
 
     # /oic/p, /oic/d, and /oic/res sit outside the /device/0 batch captured
     # below, so they'd otherwise never reach an issue report. /oic/d's `rt`
@@ -54,7 +56,7 @@ async def async_get_config_entry_diagnostics(
         # than redacting /information/vs/0 again -- modelNum never matches
         # redact.py's substring rules, so the value is the same either way.
         matching = [b for b in coordinator.bound if b.subdevice == su]
-        res = redact_resources(coordinator.canonical_resources(su))
+        res = redact_resources(coordinator.device_resources(su))
         return {
             "kind": su.kind,
             "key": su.key,
@@ -88,7 +90,7 @@ async def async_get_config_entry_diagnostics(
         # /mode/vs/0 under no attribution. Each sibling reports its own
         # resources in `subdevices` below instead. For a device with no
         # subdevices, this is byte-identical to `last_resources`.
-        "resources": redact_resources(coordinator.canonical_resources(MAIN)),
+        "resources": redact_resources(coordinator.device_resources(MAIN)),
         # Sibling indoor subdevices discovered on this connection (issue
         # #177). subdeviceIdList (the UUID a prefixed subdevice's key comes
         # from) is deliberately NOT redacted here, unlike elsewhere in
@@ -136,6 +138,19 @@ async def async_get_config_entry_diagnostics(
         "learned_modes": {
             "enabled": coordinator.learning_enabled,
             "codes": coordinator.learned_snapshot(),
+        },
+        # Cloud "Download" programs discovered on this device (issue #342),
+        # reported separately for the same reason as learned_modes above.
+        # Payloads are the useful part for triage -- they are the only record
+        # of what a downloaded program contains. The names are not included:
+        # they are the user's own words, and a dump gets pasted into public
+        # issues. Which slots are named is still visible, which is all the
+        # triage question ("is this set up?") actually needs.
+        "cloud_courses": {
+            "advertised_slots": cloudcourse.advertised_slots(coordinator.cloud_course_rep()),
+            "download_course": cloud_courses["download_course"],
+            "payloads": {slot: rec["blob"] for slot, rec in cloud_courses["slots"].items()},
+            "named_slots": sorted(s for s, rec in cloud_courses["slots"].items() if rec["name"]),
         },
         "integration_version": integration.version,
         "smartthings_local_version": stl_version,

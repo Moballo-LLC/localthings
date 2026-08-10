@@ -27,6 +27,7 @@ from ... import cloudcourse
 from ...catalog import has_entity_translation
 from ..capability import Capability
 from ..entities import NumberDesc, SelectDesc, SensorDesc, SwitchDesc, TimeDesc
+from .common import hex_pairs, option_value
 
 _LED_LEVELS = ("Low", "High")
 _SOUND_MODES = ("voice", "tone", "mute")
@@ -199,11 +200,6 @@ BUZZER_SOUND = Capability(
 # boards expose the same /course/vs/0 options contract.
 
 
-def hex_pairs(codes):
-    """'1C1D21...' -> ['1C', '1D', '21', ...]."""
-    return [codes[i : i + 2] for i in range(0, len(codes) - 1, 2)]
-
-
 def parse_edit_course_list(raw):
     """'EditCourseList_1C1D21...' -> ['1C', '1D', '21', ...]."""
     if not isinstance(raw, str) or "_" not in raw:
@@ -217,14 +213,6 @@ def cycle_options(resources):
     if codes:
         return codes
     return _course_codes_from_supported_options(resources.get("/course/vs/0") or {})
-
-
-def option_value(options, prefix):
-    """Find `<prefix>_<value>` in the options array and return <value>."""
-    for o in options or []:
-        if isinstance(o, str) and o.startswith(prefix + "_"):
-            return o.split("_", 1)[1]
-    return None
 
 
 # Drum Clean+ maintenance tracking, from the same options[] array as the
@@ -404,7 +392,7 @@ def cloud_current(rep):
     return f"{cloudcourse.RAW_PREFIX}{slot}"
 
 
-def cycle_write(p, rep, href=None, resources=None):
+def cycle_write(p, rep, href=None):
     if not rep.get("x.com.samsung.da.options"):
         return None
     if isinstance(p, str) and p.startswith(cloudcourse.RAW_PREFIX):
@@ -521,7 +509,7 @@ def cycle_select(*, translation_key, icon, table_href=None, display_fn=None):
             return candidate if has_entity_translation("select", candidate) else "cycle"
 
     def options(resources):
-        rep = resources.get("/course/vs/0") or {}
+        rep = resources.get(cloudcourse.COURSE_HREF) or {}
         # Local courses first: a user-supplied cloud name that happens to
         # match a translated course name resolves back to the real local
         # course on write, which is the safer of the two. The options flow

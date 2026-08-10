@@ -325,14 +325,22 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         onto /course/vs/0 under cloudcourse.FIELD (issue #342).
 
         Merged at read time rather than applied to the state cache, so the
-        synthetic field can never be polled over, written to the device, or
-        reach a diagnostics dump -- `last_resources` stays exactly what the
-        appliance reported. It rides on the rep instead of a resource of its
-        own because rep_fn receives only its own href's rep: a sibling href
-        would be invisible to it, and /course/vs/0 is the one resource every
-        consumer of this data is already bound to.
+        synthetic field can never be polled over or written to the device --
+        `last_resources` stays exactly what the appliance reported. It rides
+        on the rep instead of a resource of its own because rep_fn receives
+        only its own href's rep: a sibling href would be invisible to it, and
+        /course/vs/0 is the one resource every consumer of this data is
+        already bound to.
+
+        MAIN only, by construction: cloudcourse.COURSE_HREF is a canonical
+        href and this snapshot is keyed by actual ones, so a composite
+        appliance's second course resource (/<uuid>/course/vs/0 on the
+        one-body washer-dryer) is not merged and not learned from. No device
+        seen so far advertises cloud programs on anything but MAIN; making
+        this per-subdevice means keying the store by actual href the way
+        LearnedModes does, and migrating the persisted shape.
         """
-        snapshot = self._cache.snapshot()
+        snapshot = self.last_resources
         rep = snapshot.get(cloudcourse.COURSE_HREF)
         if rep is None:
             return snapshot
@@ -341,6 +349,30 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return snapshot
         snapshot[cloudcourse.COURSE_HREF] = {**rep, cloudcourse.FIELD: view}
         return snapshot
+
+    def entity_rep(self, href: str) -> dict:
+        """One href's rep as descriptors see it -- `resource()` plus the
+        merge `entity_resources` would have applied. Exists so the write path
+        doesn't copy every tracked href to read one rep, which is the very
+        thing `resource()` was added to avoid."""
+        rep = self.resource(href)
+        if href != cloudcourse.COURSE_HREF or not rep:
+            return rep
+        view = self._cloud.view()
+        return {**rep, cloudcourse.FIELD: view} if view else rep
+
+    def device_resources(self, subdevice: Subdevice) -> dict[str, dict]:
+        """`subdevice`'s canonical view of exactly what the appliance
+        reported -- no integration state merged in.
+
+        The counterpart to canonical_resources for everything that *exports*
+        resources rather than rendering entities from them: diagnostics and
+        the debug read service. Keeping this a separate call rather than
+        filtering the merged view downstream is what makes "a dump is what the
+        device said" a property of which method you call, instead of a
+        convention every future exporter has to remember.
+        """
+        return canonical_view(subdevice, self.last_resources, self.subdevices)
 
     def canonical_resources(self, subdevice: Subdevice) -> dict[str, dict]:
         """`subdevice`'s view of the live snapshot, rewritten to canonical
@@ -466,23 +498,30 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     @property
     def cloud_courses(self) -> CloudCourses:
-        """The discovered-program store, for the options flow."""
+        """The discovered-program store, for reads (snapshot/view/candidates).
+
+        Mutations go through apply_cloud_courses below, not through this --
+        the store itself doesn't persist or invalidate, and `_canonical_cache`
+        now depends on its contents, so a caller that mutates it directly
+        leaves entity options stale with no error to say so.
+        """
         return self._cloud
 
     def cloud_course_rep(self) -> dict:
         """/course/vs/0's live rep -- what advertises the slot list."""
         return self.resource(cloudcourse.COURSE_HREF)
 
-    def set_cloud_course_name(self, slot: str, name: str) -> None:
-        self._cloud.set_name(slot, name)
-        self._persist_cloud_courses()
+    def apply_cloud_courses(self, names: dict[str, str], download_course: str | None) -> None:
+        """The one mutation path for the cloud-program store (issue #342).
 
-    def set_cloud_download_course(self, code: str | None) -> None:
-        self._cloud.set_download_course(code)
-        self._persist_cloud_courses()
-
-    def forget_cloud_courses(self) -> None:
-        self._cloud.clear()
+        Takes the whole submission at once so a nine-program naming pass is
+        one config-entry write rather than nine, and so persistence, the
+        canonical-view invalidation and the Repairs refresh can't be done for
+        one half of a change and skipped for the other.
+        """
+        for slot, name in names.items():
+            self._cloud.set_name(slot, name)
+        self._cloud.set_download_course(download_course)
         self._persist_cloud_courses()
 
     @callback
@@ -1316,11 +1355,12 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if write_fn is None:
             return
         href = bound_entity.href
-        # Through entity_resources(), not the bare cache: write_fn must see
-        # the same rep exists_fn/rep_fn were handed, including the merged
+        # Through entity_rep(), not the bare cache: write_fn must see the
+        # same rep exists_fn/rep_fn were handed, including the merged
         # cloud-program field (issue #342). Identical to the cache entry for
-        # every href that field doesn't touch.
-        rep = self.entity_resources().get(href or "") or {}
+        # every href that field doesn't touch, and without copying the whole
+        # tree to read one rep.
+        rep = self.entity_rep(href or "")
         # The remote-control gate below keys off the raw on-the-wire href
         # and a raw snapshot -- /remotectrl/* is a shared, MAIN-only
         # resource that a subdevice's canonical_resources() view (owned
