@@ -589,3 +589,36 @@ async def test_closing_the_dialog_stops_probing_the_appliance(hass: HomeAssistan
     settled = probes
     await asyncio.sleep(0.05)
     assert probes == settled
+
+
+async def test_guided_lists_the_names_assigned_so_far(hass: HomeAssistant):
+    """The only orientation available on a long walk -- the programs still to
+    do are unnamed by definition, so 'done so far' is all there is to show.
+    It doubles as duplicate avoidance, since the form rejects a repeat."""
+    coordinator = await _coordinator(hass)
+    handler = await _options_handler(hass, coordinator)
+
+    assert handler._cloud_progress_placeholders(coordinator)["named_list"] == "none yet"
+
+    coordinator.apply_cloud_courses({"55": "Sports", "6B": "Jeans"}, "87")
+    await _flush(hass)
+    placeholders = handler._cloud_progress_placeholders(coordinator)
+    assert placeholders["named"] == "2"
+    assert placeholders["total"] == "9"
+    # The appliance's own advertised order, not naming order: 6B precedes 55
+    # in CloudExtraCourse_0A5C286B2D0C55301A.
+    assert placeholders["named_list"] == "Jeans, Sports"
+
+
+async def test_the_name_form_shows_the_other_names_while_typing(hass: HomeAssistant):
+    coordinator = await _coordinator(hass)
+    coordinator.apply_cloud_courses({"6B": "Jeans"}, "87")
+    await _flush(hass)
+
+    handler = await _options_handler(hass, coordinator)
+    await handler.async_step_cloud_guided()
+    _stub_probe(coordinator, ["55"])
+    await _run_wait(handler)
+
+    form = await handler.async_step_cloud_name()
+    assert form["description_placeholders"]["named_list"] == "Jeans"

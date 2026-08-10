@@ -1011,12 +1011,29 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
         return None
 
     def _cloud_progress_placeholders(self, coord) -> dict[str, str]:
+        """Counts plus the names assigned so far.
+
+        Listing them is what makes a nine-program walk followable -- it is
+        the only orientation available, since the programs still to do are
+        unnamed by definition. Shown while naming too, where it doubles as
+        duplicate avoidance: the form rejects a repeated name, so seeing the
+        others first beats being bounced.
+
+        In the appliance's own advertised order, which is at least a stable
+        order, without numbering them -- whether that order matches the dial
+        is plausible but unverified, and implying it would be worse than
+        saying nothing.
+        """
         rep = coord.cloud_course_rep()
         courses = cycle_options(coord.canonical_resources(MAIN))
         record = coord.cloud_courses.snapshot()
         slots = cloudcourse.cloud_slots(rep, courses)
-        named = sum(1 for s in slots if (record["slots"].get(s) or {}).get("name"))
-        return {"named": str(named), "total": str(len(slots))}
+        names = [n for s in slots if (n := (record["slots"].get(s) or {}).get("name"))]
+        return {
+            "named": str(len(names)),
+            "total": str(len(slots)),
+            "named_list": ", ".join(names) if names else "none yet",
+        }
 
     async def async_step_cloud_name(
         self, user_input: dict[str, Any] | None = None

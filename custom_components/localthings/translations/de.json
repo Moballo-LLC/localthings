@@ -1466,14 +1466,14 @@
       },
       "cloud_name": {
         "title": "Name this cycle",
-        "description": "The appliance switched to a downloaded cycle (slot {slot}) and reports {remaining} remaining.\n\nGive it the name you want to see in Home Assistant, then select the next one on the appliance. Leave it blank to keep this cycle out of the list.\n\n{named} of {total} named — you can close this dialog whenever you like, names are saved as you go.",
+        "description": "The appliance switched to a downloaded cycle (slot {slot}) and reports {remaining} remaining.\n\nGive it the name you want to see in Home Assistant, then select the next one on the appliance. Leave it blank to keep this cycle out of the list.\n\nNamed so far ({named} of {total}): {named_list}\n\nNames must be unique. You can close this dialog whenever you like — names are saved as you go.",
         "data": {
           "name": "Name"
         }
       },
       "cloud_timeout": {
         "title": "No cycle selected",
-        "description": "Nothing was selected on the appliance. Make sure it's set to the Download cycle, then step through the downloaded programs.\n\n{named} of {total} named — everything named so far is already saved.",
+        "description": "Nothing was selected on the appliance. Make sure it's set to the Download cycle, then step through the downloaded programs.\n\nNamed so far ({named} of {total}): {named_list}\n\nEverything named so far is already saved.",
         "menu_options": {
           "cloud_guided": "Wait again",
           "cloud_finish": "Finish"
@@ -1490,7 +1490,7 @@
       "not_loaded": "Dieses Gerät ist noch nicht verbunden. Versuchen Sie es erneut, sobald es geladen wurde."
     },
     "progress": {
-      "cloud_wait": "Select a downloaded cycle on the appliance now.\n\n{named} of {total} named — you can close this dialog at any time, names are saved as you go."
+      "cloud_wait": "Select a downloaded cycle on the appliance now.\n\nNamed so far ({named} of {total}): {named_list}\n\nYou can close this dialog at any time — names are saved as you go."
     }
   },
   "issues": {
