@@ -54,6 +54,45 @@ class TestCourseHelpers:
         assert laundry.cycle_options({}) == []
         assert laundry.cycle_options({"/wm/editcourse/vs/0": {}}) == []
 
+    def test_decodes_reported_washer_course_table_including_personal_slots(self):
+        """Real DA_WM_TP1_21_COMMON diagnostics, with every selectable
+        standard and personal-course code preserved in the device's order.
+        F1/F3 are part of the packed list; their labels come from the
+        companion personal-course resource tested below.
+        """
+        resources = {
+            "/wm/editcourse/vs/0": {
+                "x.com.samsung.da.editCourseList": (
+                    "EditCourseList_696F73757801719688706D6A76726C6E6B777479F1F3"
+                ),
+            },
+        }
+
+        assert laundry.cycle_options(resources) == [
+            "69",
+            "6F",
+            "73",
+            "75",
+            "78",
+            "01",
+            "71",
+            "96",
+            "88",
+            "70",
+            "6D",
+            "6A",
+            "76",
+            "72",
+            "6C",
+            "6E",
+            "6B",
+            "77",
+            "74",
+            "79",
+            "F1",
+            "F3",
+        ]
+
     def test_option_value(self):
         opts = ["DeviceType_0167", "Course_1C", "GMT_04"]
         assert laundry.option_value(opts, "Course") == "1C"
