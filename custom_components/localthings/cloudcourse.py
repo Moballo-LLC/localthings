@@ -20,12 +20,12 @@ and the WA55A7700AV dump in ``tests/fixtures``, whose two-slot
 2. Blob width is *not* fixed across boards (20 bytes vs 16), which is one
 reason nothing here ever synthesizes one.
 
-This is not washer-only, and nothing here assumes an appliance type: the
-DW5000C dishwasher in ``tests/fixtures`` advertises four slots on the same
-token. It also carries no payload token at all, so a device can name
-programs whose payloads have never been observed -- ``advertised_slots``
-answers "which exist", the store answers "which are usable", and the two
-are deliberately allowed to disagree.
+``CloudExtraCourse_`` does not mean the same thing on every family, so
+nothing keys off it directly -- see ``cloud_slots``, which is what the rest
+of this module and its callers gate on. Even then, a device can advertise a
+slot whose payload has never been observed, so ``cloud_slots`` answers
+"which exist" while the store answers "which are usable"; the two are
+deliberately allowed to disagree.
 
 What this module does and deliberately does not do
 --------------------------------------------------
@@ -133,9 +133,29 @@ def advertised_slots(rep) -> list[str]:
     return list(dict.fromkeys(hex_pairs(raw.upper())))
 
 
-def supports_cloud_courses(rep) -> bool:
-    """True for a device that advertises any downloaded-program slot."""
-    return bool(advertised_slots(rep))
+def cloud_slots(rep, courses) -> list[str]:
+    """Advertised slots that are not already selectable courses.
+
+    `CloudExtraCourse_` does not mean the same thing on every family. On the
+    washers its bytes are opaque payload slots sharing nothing with the
+    device's own course list, and selecting one needs the full payload. On
+    the DW5000C dishwasher all four of its bytes *are* course codes in that
+    device's own list (8E/8D/8F/02 -- Plastic, Pots and pans, Baby Care, and
+    one untranslated), so there it is tagging which of its ordinary courses
+    came from the cloud. Those are already selectable as plain `Course_`
+    writes and need nothing from this module.
+
+    Subtracting the course list tells the two apart without having to guess
+    the family: what remains is slots that cannot be selected any other way,
+    which is exactly the set this module exists for.
+    """
+    known = {c.upper() for c in courses or ()}
+    return [slot for slot in advertised_slots(rep) if slot not in known]
+
+
+def supports_cloud_courses(rep, courses) -> bool:
+    """True for a device with downloaded programs it cannot otherwise run."""
+    return bool(cloud_slots(rep, courses))
 
 
 def _coerce(stored) -> tuple[str | None, dict[str, dict[str, str]]]:
@@ -314,9 +334,10 @@ class CloudCourses:
         return bool(record["name"])
 
 
-def undiscovered(rep: dict, record: dict) -> list[str]:
-    """Advertised slots that aren't yet usable -- unlearned or unnamed. What
-    the Repairs issue counts, and what the options flow asks the user to walk
-    the appliance through."""
+def undiscovered(rep: dict, record: dict, courses) -> list[str]:
+    """Cloud slots that aren't yet usable -- unlearned or unnamed. What the
+    Repairs issue counts, and what the options flow asks the user to walk the
+    appliance through. Counts against cloud_slots, not every advertised byte:
+    a slot that is already a selectable course is nothing to set up."""
     programs = record.get("slots") or {}
-    return [slot for slot in advertised_slots(rep) if not (programs.get(slot) or {}).get("name")]
+    return [s for s in cloud_slots(rep, courses) if not (programs.get(s) or {}).get("name")]

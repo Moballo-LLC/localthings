@@ -840,7 +840,9 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
         # programs (issue #342) -- every other device would get a menu entry
         # leading to an empty screen.
         coord = self._coordinator()
-        if coord is not None and cloudcourse.supports_cloud_courses(coord.cloud_course_rep()):
+        if coord is not None and cloudcourse.supports_cloud_courses(
+            coord.cloud_course_rep(), cycle_options(coord.canonical_resources(MAIN))
+        ):
             menu.insert(1, "cloud_courses")
         return self.async_show_menu(step_id="init", menu_options=menu)
 
@@ -935,7 +937,7 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
         rep = coord.cloud_course_rep()
         record = store.snapshot()
         slots = record["slots"]
-        advertised = cloudcourse.advertised_slots(rep)
+        advertised = cloudcourse.cloud_slots(rep, cycle_options(coord.canonical_resources(MAIN)))
         # Learned slots keep the appliance's own ordering; anything learned
         # but no longer advertised still gets a row so a name isn't stranded.
         known = [s for s in advertised if s in slots] + [s for s in slots if s not in advertised]

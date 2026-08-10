@@ -78,7 +78,7 @@ class TestBlobParsing:
         ]
 
     def test_no_cloud_tokens_means_unsupported(self):
-        assert cloudcourse.supports_cloud_courses(_rep(["Course_1C"])) is False
+        assert cloudcourse.supports_cloud_courses(_rep(["Course_1C"]), ["1C"]) is False
 
 
 class TestRealDumps:
@@ -122,23 +122,39 @@ class TestRealDumps:
         store.observe(rep)
         assert store.download_candidates() == []
 
-    def test_a_dishwasher_advertises_programs_it_has_never_loaded(self):
-        """DW5000C (issues #113/#123): CloudExtraCourse_ names four slots
-        with no CloudCourse_/OneTimeCloudCourse_ token anywhere in the array.
+    def test_a_dishwasher_tags_its_own_courses_not_payload_slots(self):
+        """DW5000C (issues #113/#123). Its CloudExtraCourse_ names four
+        bytes, and all four are course codes in its *own* course list --
+        8E/8D/8F/02, three of them already translated (Plastic, Pots and
+        pans, Baby Care). There it marks which ordinary courses came from
+        the cloud; they select with a plain Course_ write and need nothing
+        from this module. It carries no payload token at all, consistent
+        with that.
 
-        Two things at once -- the feature is not washer-only (DA_DW, not
-        DA_WM), and a device can advertise programs whose payloads have never
-        been observed. Nothing is learnable here, so nothing is offerable,
-        but the gap is still countable and still worth telling the user
-        about."""
-        rep = _load_device("dishwasher_dw5000c_cloud")["/course/vs/0"]
+        So none of this feature applies to it, and offering its owner a
+        naming flow for programs that already work would be nonsense. The
+        washers are the other shape: zero overlap with their course lists,
+        and a payload required to select one."""
+        resources = _load_device("dishwasher_dw5000c_cloud")
+        rep = resources["/course/vs/0"]
+        courses = laundry.cycle_options(resources)
+
         assert cloudcourse.advertised_slots(rep) == ["8E", "8D", "8F", "02"]
-        assert cloudcourse.supports_cloud_courses(rep) is True
+        assert set(cloudcourse.advertised_slots(rep)) <= set(courses)
+        assert cloudcourse.cloud_slots(rep, courses) == []
+        assert cloudcourse.supports_cloud_courses(rep, courses) is False
+        assert cloudcourse.undiscovered(rep, cloudcourse.CloudCourses().snapshot(), courses) == []
 
-        store = cloudcourse.CloudCourses()
-        assert store.observe(rep) is False
-        assert store.view() == {}
-        assert cloudcourse.undiscovered(rep, store.snapshot()) == ["8E", "8D", "8F", "02"]
+    def test_washer_slots_share_nothing_with_the_course_list(self):
+        """The distinguishing property, on both washers -- which is what
+        makes subtracting the course list a safe way to tell the two
+        meanings of CloudExtraCourse_ apart."""
+        for name in ("washer_ww5000c_cloud", "washer_wa55a7700av"):
+            resources = _load_device(name)
+            rep = resources["/course/vs/0"]
+            courses = laundry.cycle_options(resources)
+            assert set(cloudcourse.advertised_slots(rep)).isdisjoint(courses), name
+            assert cloudcourse.supports_cloud_courses(rep, courses) is True, name
 
     def test_byte_three_is_not_part_of_a_programs_identity(self):
         """Two WW5000C units on different firmware (issue #342's _B06C and
@@ -180,10 +196,11 @@ class TestRealDumps:
         store = cloudcourse.CloudCourses()
         store.observe(rep)
         # Both learned slots are still unnamed, so all nine are outstanding.
-        assert len(cloudcourse.undiscovered(rep, store.snapshot())) == 9
+        courses = laundry.cycle_options(_load_device("washer_ww5000c_cloud"))
+        assert len(cloudcourse.undiscovered(rep, store.snapshot(), courses)) == 9
         store.set_name("55", "Sports")
-        assert "55" not in cloudcourse.undiscovered(rep, store.snapshot())
-        assert len(cloudcourse.undiscovered(rep, store.snapshot())) == 8
+        assert "55" not in cloudcourse.undiscovered(rep, store.snapshot(), courses)
+        assert len(cloudcourse.undiscovered(rep, store.snapshot(), courses)) == 8
 
 
 class TestStoreRules:

@@ -56,6 +56,7 @@ from .registry.capabilities.common import (
     remote_control_enabled,
     remote_control_required_for_write,
 )
+from .registry.capabilities.laundry import cycle_options
 from .registry.discovery import BoundEntity
 from .registry.entities import ClimateDesc
 from .registry.identity import (
@@ -66,6 +67,7 @@ from .registry.identity import (
     resolve_serial,
 )
 from .registry.subdevices import (
+    MAIN,
     Subdevice,
     canonical_view,
     discover_partitioned,
@@ -548,8 +550,10 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         issue_id = f"cloud_courses_{self._entry.entry_id}"
         rep = self.cloud_course_rep()
         record = self._cloud.snapshot()
-        pending = cloudcourse.undiscovered(rep, record)
-        needs_course = bool(cloudcourse.advertised_slots(rep)) and not record["download_course"]
+        courses = cycle_options(self.canonical_resources(MAIN))
+        pending = cloudcourse.undiscovered(rep, record, courses)
+        slots = cloudcourse.cloud_slots(rep, courses)
+        needs_course = bool(slots) and not record["download_course"]
         if record["slots"] and (pending or needs_course):
             ir.async_create_issue(
                 self.hass,
@@ -561,7 +565,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 translation_placeholders={
                     "device_name": self.device_info.get("name") or "This appliance",
                     "pending": str(len(pending)),
-                    "total": str(len(cloudcourse.advertised_slots(rep))),
+                    "total": str(len(slots)),
                 },
                 learn_more_url=DEVICE_SUPPORT_ISSUE_URL,
             )

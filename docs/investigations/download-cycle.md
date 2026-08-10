@@ -15,16 +15,25 @@ no cloud tokens at all, so this is a minority feature):
 | --- | --- | --- | --- | --- |
 | `washer_ww5000c_cloud` | WW5000C `_B06C`, `DA_WM_TP1_21_COMMON`, Table_02 | 9 | 2 | 20 bytes |
 | `washer_wa55a7700av` | WA55A7700AV, `DA_WM_TP1_21_COMMON`, Table_02 | 2 | 1 | 16 bytes |
-| `dishwasher_dw5000c_cloud` | DW5000C, `DA_DW_TP1_21_COMMON` | 4 | **0** | — |
+| `dishwasher_dw5000c_cloud` | DW5000C, `DA_DW_TP1_21_COMMON` | 4 (but see below) | **0** | — |
 | (not fixtured) | WW5000C `_B048`, issues #259/#343, Table_02 | 9 | 1 | 20 bytes |
 
 Three things follow immediately from that table:
 
-- **It isn't washer-only.** The DW5000C is a `DA_DW_` dishwasher.
-- **A device can advertise programs it has never loaded.** The DW5000C names
-  four slots and carries no `CloudCourse_`/`OneTimeCloudCourse_` token at
-  all. Nothing about it is learnable until its owner runs one, which is
-  exactly the situation the Repairs issue exists to explain.
+- **`CloudExtraCourse_` does not mean the same thing on every family.** On
+  the DW5000C all four of its bytes (`8E 8D 8F 02`) are course codes in that
+  dishwasher's *own* course list, three already translated (Plastic, Pots and
+  pans, Baby Care). There it tags which ordinary courses came from the cloud;
+  they select with a plain `Course_` write and need no payload — consistent
+  with it carrying no payload token at all. It also has a
+  `DownloadCourseList_8F` token the washers lack.
+  On both washers the slots share **zero** overlap with the course list and a
+  payload is required. Subtracting the course list is what tells the two
+  apart (`cloudcourse.cloud_slots`), so the feature engages on the washers
+  and correctly does nothing on the dishwasher.
+- **A device can advertise a slot it has never loaded.** True on the washers
+  too — nothing about a program is learnable until its owner runs it, which
+  is what the Repairs issue exists to explain.
 - **Both WW5000C units advertise the byte-identical slot list**
   (`0A5C286B2D0C55301A`, same nine slots in the same order) despite different
   firmware builds. Either the set is a factory/regional default rather than

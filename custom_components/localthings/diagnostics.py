@@ -19,6 +19,7 @@ from homeassistant.loader import async_get_integration
 from . import cloudcourse
 from .const import DOMAIN
 from .coordinator import LocalThingsCoordinator
+from .registry.capabilities.laundry import cycle_options
 from .registry.redact import redact_resources
 from .registry.subdevices import MAIN
 
@@ -153,6 +154,9 @@ async def async_get_config_entry_diagnostics(
         # because its owner chose to download and share it.
         "cloud_courses": {
             "advertised_slots": cloudcourse.advertised_slots(coordinator.cloud_course_rep()),
+            "cloud_slots": cloudcourse.cloud_slots(
+                coordinator.cloud_course_rep(), cycle_options(coordinator.device_resources(MAIN))
+            ),
             **cloud_courses,
         },
         "integration_version": integration.version,
