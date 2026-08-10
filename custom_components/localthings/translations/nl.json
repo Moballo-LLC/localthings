@@ -1406,7 +1406,7 @@
         "title": "LocalThings-opties",
         "menu_options": {
           "settings": "Apparaatinstellingen",
-          "cloud_courses": "Download cycles",
+          "cloud_courses": "Gedownloade programma's",
           "forget_learned_modes": "Onthouden modi vergeten",
           "debug_write": "Foutopsporing: naar een resource schrijven"
         }
@@ -1447,18 +1447,18 @@
         }
       },
       "cloud_courses": {
-        "title": "Download cycles",
-        "description": "This appliance reports {total} downloaded cycle(s); {found} have been seen so far.\n\nA downloaded cycle's settings are only visible while that cycle is loaded, and the appliance never reports their names. To add the missing ones ({pending}): on the appliance, select the Download cycle, then step through each downloaded program in turn, pausing a few seconds on each, and come back here.\n\nGive each one the name you want to see in Home Assistant. Leave a name blank to keep that cycle out of the cycle list. Names must be unique.\n\nThe Download cycle is the course on this appliance that runs a downloaded program. It is detected automatically, but confirm it here before use: selecting a downloaded cycle writes this course code to the appliance.",
+        "title": "Gedownloade programma's",
+        "description": "Dit apparaat meldt {total} gedownloade programma's; {found} daarvan zijn tot nu toe gezien.\n\nDe instellingen van een gedownload programma zijn alleen zichtbaar zolang dat programma geladen is, en het apparaat meldt nooit de naam ervan. Om de ontbrekende ({pending}) toe te voegen: selecteer op het apparaat het programma \"Gedownload\", doorloop dan elk gedownload programma na elkaar, pauzeer bij elk een paar seconden, en kom hierna terug.\n\nGeef elk programma de naam die je in Home Assistant wilt zien. Laat een naam leeg om dat programma buiten de programmalijst te houden. Namen moeten uniek zijn.\n\nHet programma \"Gedownload\" is het programma op dit apparaat dat een gedownload programma uitvoert. Het wordt automatisch gedetecteerd, maar bevestig dit hier voor gebruik: als je een gedownload programma selecteert, wordt deze programmacode naar het apparaat geschreven.",
         "data": {
-          "download_course": "Download cycle course code"
+          "download_course": "Programmacode van \"Gedownload\""
         }
       }
     },
     "error": {
       "empty_payload": "Voer ten minste één veld in om te schrijven.",
       "write_failed": "De schrijfbewerking is mislukt. Raadpleeg de Home Assistant-logboeken voor meer informatie.",
-      "cloud_course_name_duplicate": "Two cycles have the same name. Names must be unique.",
-      "cloud_course_unknown_course": "That course isn't one this appliance offers. Pick one from the list."
+      "cloud_course_name_duplicate": "Twee programma's hebben dezelfde naam. Namen moeten uniek zijn.",
+      "cloud_course_unknown_course": "Dat programma biedt dit apparaat niet aan. Kies er een uit de lijst."
     },
     "abort": {
       "not_loaded": "Dit apparaat is nog niet verbonden. Probeer het opnieuw zodra het is geladen."
@@ -1470,8 +1470,8 @@
       "description": "Niet alle mogelijkheden van dit apparaat worden ondersteund. Het apparaattype is niet herkend of sommige beschikbare resources zijn nog niet gemodelleerd. Het apparaat blijft werken met de mogelijkheden die al worden ondersteund. Je kunt helpen de ondersteuning uit te breiden: ga naar Instellingen > Apparaten & diensten > {device_name} > het menu (rechtsboven) > Diagnostische gegevens downloaden en voeg het bestand daarna bij via de gekoppelde issue-template."
     },
     "cloud_courses_undiscovered": {
-      "title": "Downloaded cycles not set up for {device_name}",
-      "description": "{device_name} has {pending} of {total} downloaded cycle(s) that Home Assistant can't offer yet. A downloaded cycle can only be used once the appliance has been seen with it loaded and you've given it a name.\n\nTo set them up, go to Settings > Devices & Services > LocalThings > {device_name} > Configure > Download cycles and follow the instructions there."
+      "title": "Gedownloade programma's niet ingesteld voor {device_name}",
+      "description": "{device_name} heeft {pending} van de {total} gedownloade programma's die Home Assistant nog niet kan aanbieden. Een gedownload programma kan pas worden gebruikt zodra het apparaat ermee geladen is gezien en je het een naam hebt gegeven.\n\nGa om ze in te stellen naar Instellingen > Apparaten & diensten > LocalThings > {device_name} > Configureren > Gedownloade programma's en volg de instructies daar."
     }
   },
   "exceptions": {

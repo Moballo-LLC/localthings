@@ -1406,7 +1406,7 @@
         "title": "Opzioni LocalThings",
         "menu_options": {
           "settings": "Impostazioni dispositivo",
-          "cloud_courses": "Download cycles",
+          "cloud_courses": "Cicli scaricati",
           "forget_learned_modes": "Dimentica le modalità memorizzate",
           "debug_write": "Debug: scrivi su una risorsa"
         }
@@ -1447,18 +1447,18 @@
         }
       },
       "cloud_courses": {
-        "title": "Download cycles",
-        "description": "This appliance reports {total} downloaded cycle(s); {found} have been seen so far.\n\nA downloaded cycle's settings are only visible while that cycle is loaded, and the appliance never reports their names. To add the missing ones ({pending}): on the appliance, select the Download cycle, then step through each downloaded program in turn, pausing a few seconds on each, and come back here.\n\nGive each one the name you want to see in Home Assistant. Leave a name blank to keep that cycle out of the cycle list. Names must be unique.\n\nThe Download cycle is the course on this appliance that runs a downloaded program. It is detected automatically, but confirm it here before use: selecting a downloaded cycle writes this course code to the appliance.",
+        "title": "Cicli scaricati",
+        "description": "Questo dispositivo segnala {total} cicli scaricati; finora ne sono stati rilevati {found}.\n\nLe impostazioni di un ciclo scaricato sono visibili solo mentre quel ciclo è caricato, e il dispositivo non ne segnala mai il nome. Per aggiungere quelli mancanti ({pending}): sul dispositivo selezionare il ciclo Scaricato, quindi scorrere ciascun programma scaricato uno alla volta, sostando qualche secondo su ognuno, e tornare qui.\n\nAssegnare a ciascuno il nome che si desidera vedere in Home Assistant. Lasciare un nome vuoto per escludere quel ciclo dall'elenco dei cicli. I nomi devono essere univoci.\n\nIl ciclo Scaricato è il programma su questo dispositivo che esegue un programma scaricato. Viene rilevato automaticamente, ma confermarlo qui prima dell'uso: selezionare un ciclo scaricato scrive questo codice di programma sul dispositivo.",
         "data": {
-          "download_course": "Download cycle course code"
+          "download_course": "Codice programma del ciclo Scaricato"
         }
       }
     },
     "error": {
       "empty_payload": "Inserisci almeno un campo da scrivere.",
       "write_failed": "Operazione di scrittura non riuscita. Controlla i registri di Home Assistant per i dettagli.",
-      "cloud_course_name_duplicate": "Two cycles have the same name. Names must be unique.",
-      "cloud_course_unknown_course": "That course isn't one this appliance offers. Pick one from the list."
+      "cloud_course_name_duplicate": "Due cicli hanno lo stesso nome. I nomi devono essere univoci.",
+      "cloud_course_unknown_course": "Quel programma non è tra quelli offerti da questo dispositivo. Selezionarne uno dall'elenco."
     },
     "abort": {
       "not_loaded": "Questo dispositivo non è ancora connesso. Riprova dopo il caricamento."
@@ -1470,8 +1470,8 @@
       "description": "Questo dispositivo non è completamente supportato. Il tipo di dispositivo non è stato riconosciuto oppure alcune delle risorse che espone non sono ancora state modellate. Continuerò a funzionare con le funzionalità già supportate. Puoi contribuire ad ampliare il supporto andando su Impostazioni > Dispositivi e servizi > {device_name} > il menu (in alto a destra) > Scarica diagnostica, quindi inviando una segnalazione tramite il modulo di segnalazione collegato."
     },
     "cloud_courses_undiscovered": {
-      "title": "Downloaded cycles not set up for {device_name}",
-      "description": "{device_name} has {pending} of {total} downloaded cycle(s) that Home Assistant can't offer yet. A downloaded cycle can only be used once the appliance has been seen with it loaded and you've given it a name.\n\nTo set them up, go to Settings > Devices & Services > LocalThings > {device_name} > Configure > Download cycles and follow the instructions there."
+      "title": "Cicli scaricati non configurati per {device_name}",
+      "description": "{device_name} ha {pending} cicli scaricati su {total} che Home Assistant non può ancora offrire. Un ciclo scaricato può essere usato solo dopo che il dispositivo è stato rilevato con quel ciclo caricato ed è stato assegnato un nome.\n\nPer configurarli, andare su Impostazioni > Dispositivi e servizi > LocalThings > {device_name} > Configura > Cicli scaricati e seguire le istruzioni presenti lì."
     }
   },
   "exceptions": {

@@ -1406,7 +1406,7 @@
         "title": "LocalThings-Optionen",
         "menu_options": {
           "settings": "Geräteeinstellungen",
-          "cloud_courses": "Download cycles",
+          "cloud_courses": "Download-Programme",
           "debug_write": "Debug: In eine Ressource schreiben",
           "forget_learned_modes": "Gemerkte Modi vergessen"
         }
@@ -1447,18 +1447,18 @@
         "description": "Aktuell gemerkt: {codes}\n\nDies sind Modi, in denen sich dieses Gerät selbst gemeldet hat, ohne sie als unterstützt anzugeben; sie werden aufbewahrt, damit sie auswählbar bleiben. Das Vergessen ist die Lösung, wenn sich einer davon als falsch herausgestellt hat -- alles, was das Gerät tatsächlich erneut meldet, wird einfach erneut gemerkt, es sei denn, Sie schalten auch „Vom Gerät gemeldete, aber nicht angegebene Modi merken“ in den Geräteeinstellungen aus."
       },
       "cloud_courses": {
-        "title": "Download cycles",
-        "description": "This appliance reports {total} downloaded cycle(s); {found} have been seen so far.\n\nA downloaded cycle's settings are only visible while that cycle is loaded, and the appliance never reports their names. To add the missing ones ({pending}): on the appliance, select the Download cycle, then step through each downloaded program in turn, pausing a few seconds on each, and come back here.\n\nGive each one the name you want to see in Home Assistant. Leave a name blank to keep that cycle out of the cycle list. Names must be unique.\n\nThe Download cycle is the course on this appliance that runs a downloaded program. It is detected automatically, but confirm it here before use: selecting a downloaded cycle writes this course code to the appliance.",
+        "title": "Download-Programme",
+        "description": "Dieses Gerät meldet {total} heruntergeladene Programme; {found} davon wurden bisher erkannt.\n\nDie Einstellungen eines heruntergeladenen Programms sind nur sichtbar, während dieses Programm geladen ist, und das Gerät meldet nie deren Namen. Um die fehlenden ({pending}) hinzuzufügen: Wählen Sie am Gerät das Download-Programm aus, gehen Sie dann nacheinander jedes heruntergeladene Programm durch, halten Sie bei jedem ein paar Sekunden inne, und kommen Sie danach hierher zurück.\n\nGeben Sie jedem den Namen, den Sie in Home Assistant sehen möchten. Lassen Sie einen Namen leer, um das Programm aus der Programmliste auszuschließen. Namen müssen eindeutig sein.\n\nDas Download-Programm ist das Programm auf diesem Gerät, das ein heruntergeladenes Programm ausführt. Es wird automatisch erkannt, bestätigen Sie es aber hier vor der Verwendung: Die Auswahl eines heruntergeladenen Programms schreibt diesen Programmcode auf das Gerät.",
         "data": {
-          "download_course": "Download cycle course code"
+          "download_course": "Programmcode des Download-Programms"
         }
       }
     },
     "error": {
       "empty_payload": "Geben Sie mindestens ein zu schreibendes Feld ein.",
       "write_failed": "Der Schreibvorgang ist fehlgeschlagen. Weitere Details finden Sie im Home-Assistant-Protokoll.",
-      "cloud_course_name_duplicate": "Two cycles have the same name. Names must be unique.",
-      "cloud_course_unknown_course": "That course isn't one this appliance offers. Pick one from the list."
+      "cloud_course_name_duplicate": "Zwei Programme haben denselben Namen. Namen müssen eindeutig sein.",
+      "cloud_course_unknown_course": "Dieses Programm wird von diesem Gerät nicht angeboten. Wählen Sie eines aus der Liste."
     },
     "abort": {
       "not_loaded": "Dieses Gerät ist noch nicht verbunden. Versuchen Sie es erneut, sobald es geladen wurde."
@@ -1470,8 +1470,8 @@
       "description": "Für dieses Gerät liegt keine vollständige Funktionsabdeckung vor. Entweder wurde sein Gerätetyp nicht erkannt, oder einige der von ihm bereitgestellten Ressourcen sind noch nicht abgebildet. Es funktioniert weiterhin mit dem, was bereits unterstützt wird. Sie können helfen, die Unterstützung zu erweitern, indem Sie zu Einstellungen > Geräte & Dienste > {device_name} > das Menü (oben rechts) > Diagnose herunterladen gehen und diese anschließend über die verlinkte Issue-Vorlage einreichen."
     },
     "cloud_courses_undiscovered": {
-      "title": "Downloaded cycles not set up for {device_name}",
-      "description": "{device_name} has {pending} of {total} downloaded cycle(s) that Home Assistant can't offer yet. A downloaded cycle can only be used once the appliance has been seen with it loaded and you've given it a name.\n\nTo set them up, go to Settings > Devices & Services > LocalThings > {device_name} > Configure > Download cycles and follow the instructions there."
+      "title": "Heruntergeladene Programme für {device_name} nicht eingerichtet",
+      "description": "{device_name} hat {pending} von {total} heruntergeladenen Programmen, die Home Assistant noch nicht anbieten kann. Ein heruntergeladenes Programm kann erst verwendet werden, sobald das Gerät damit geladen gesehen wurde und Sie ihm einen Namen gegeben haben.\n\nUm sie einzurichten, gehen Sie zu Einstellungen > Geräte & Dienste > LocalThings > {device_name} > Konfigurieren > Download-Programme und folgen Sie den dortigen Anweisungen."
     }
   },
   "exceptions": {
