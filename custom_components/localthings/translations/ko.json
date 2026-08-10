@@ -1406,6 +1406,7 @@
         "title": "LocalThings 옵션",
         "menu_options": {
           "settings": "기기 설정",
+          "cloud_courses": "다운로드 코스",
           "forget_learned_modes": "기억된 모드 지우기",
           "debug_write": "디버그: 리소스에 쓰기"
         }
@@ -1444,20 +1445,63 @@
           "debug_write": "다른 리소스에 쓰기",
           "finish": "완료"
         }
+      },
+      "cloud_manual": {
+        "title": "다운로드 코스",
+        "description": "이 기기는 다운로드한 코스를 {total}개 보고하며, 지금까지 {found}개를 확인했습니다.\n\n다운로드한 코스의 설정은 해당 코스가 로드되어 있는 동안에만 확인할 수 있고, 기기는 그 이름을 전달하지 않습니다. 누락된 항목({pending}개)을 추가하려면 기기에서 다운로드 코스를 선택한 다음, 다운로드된 프로그램을 하나씩 차례로 실행하면서 몇 초씩 머무른 뒤 이 화면으로 돌아오세요.\n\n각 코스에 Home Assistant에서 보고 싶은 이름을 입력하세요. 이름을 비워 두면 해당 코스는 코스 목록에서 제외됩니다. 이름은 서로 달라야 합니다.\n\n다운로드 코스는 이 기기에서 다운로드된 프로그램을 실행하는 코스입니다. 자동으로 감지되지만 사용하기 전에 여기서 확인하세요. 다운로드한 코스를 선택하면 이 코스 코드가 기기에 기록됩니다.",
+        "data": {
+          "download_course": "다운로드 코스 코드"
+        }
+      },
+      "cloud_courses": {
+        "title": "다운로드 코스",
+        "description": "안내 설정은 기기와 함께 진행됩니다. 기기에서 다운로드한 코스를 선택하고, 코스가 확인될 때마다 하나씩 이름을 지정하세요.\n\n이름 편집은 지금까지 찾은 모든 코스를 한 번에 보여줍니다. 나중에 이름을 바꾸거나 수정할 때 사용하세요.",
+        "menu_options": {
+          "cloud_guided": "안내 설정",
+          "cloud_manual": "이름 편집"
+        }
+      },
+      "cloud_wait": {
+        "title": "다운로드 코스"
+      },
+      "cloud_name": {
+        "title": "이 코스 이름 지정",
+        "description": "기기가 다운로드한 코스(슬롯 {slot})로 전환되었으며 {remaining} 남았다고 표시됩니다.\n\nHome Assistant에서 보고 싶은 이름을 입력한 다음, 기기에서 다음 코스를 선택하세요. 비워 두면 이 코스는 목록에서 제외됩니다.\n\n지금까지 이름 지정됨 ({named}/{total}개): {named_list}\n\n이름은 서로 달라야 합니다. 이 창은 언제든지 닫을 수 있습니다. 이름은 진행하는 대로 저장됩니다.",
+        "data": {
+          "name": "이름",
+          "download_course": "다운로드 코스 코드"
+        }
+      },
+      "cloud_timeout": {
+        "title": "선택된 코스 없음",
+        "description": "기기에서 아무것도 선택되지 않았습니다. 다운로드 코스로 설정되어 있는지 확인한 다음, 다운로드된 프로그램을 하나씩 실행해 보세요.\n\n지금까지 이름 지정됨 ({named}/{total}개): {named_list}\n\n지금까지 이름을 지정한 항목은 이미 저장되었습니다.",
+        "menu_options": {
+          "cloud_guided": "다시 대기",
+          "cloud_finish": "완료"
+        }
       }
     },
     "error": {
       "empty_payload": "쓸 필드를 하나 이상 입력하세요.",
-      "write_failed": "쓰기에 실패했습니다. 자세한 내용은 Home Assistant 로그에서 확인하세요."
+      "write_failed": "쓰기에 실패했습니다. 자세한 내용은 Home Assistant 로그에서 확인하세요.",
+      "cloud_course_name_duplicate": "두 코스의 이름이 같습니다. 이름은 서로 달라야 합니다.",
+      "cloud_course_unknown_course": "이 기기가 제공하지 않는 코스입니다. 목록에서 선택하세요."
     },
     "abort": {
       "not_loaded": "이 기기는 아직 연결되지 않았습니다. 기기를 불러온 후 다시 시도하세요."
+    },
+    "progress": {
+      "cloud_wait": "지금 기기에서 다운로드한 코스를 선택하세요.\n\n지금까지 이름 지정됨 ({named}/{total}개): {named_list}\n\n이 창은 언제든지 닫을 수 있습니다. 이름은 진행하는 대로 저장됩니다."
     }
   },
   "issues": {
     "device_gap": {
       "title": "{device_name}의 기능 지원이 완전하지 않음",
       "description": "이 기기의 일부 기능이 아직 완전히 지원되지 않습니다. 가전제품 유형이 인식되지 않았거나, 기기가 제공하는 일부 리소스가 아직 구현되지 않았습니다. 현재 지원되는 기능은 계속 사용할 수 있습니다. 설정 > 기기 및 서비스 > {device_name} > 오른쪽 위 메뉴 > 진단 정보 다운로드로 이동하여 진단 정보를 내려받은 뒤, 연결된 이슈 양식에 첨부하면 지원 범위를 넓히는 데 도움을 줄 수 있습니다."
+    },
+    "cloud_courses_undiscovered": {
+      "title": "{device_name}의 다운로드 코스가 설정되지 않음",
+      "description": "{device_name}에는 Home Assistant가 아직 제공할 수 없는 다운로드한 코스가 {total}개 중 {pending}개 있습니다. 다운로드한 코스는 기기에서 해당 코스가 로드된 상태로 확인되고 이름을 지정한 후에만 사용할 수 있습니다.\n\n설정하려면 설정 > 기기 및 서비스 > LocalThings > {device_name} > 구성 > 다운로드 코스로 이동하여 안내를 따르세요."
     }
   },
   "exceptions": {

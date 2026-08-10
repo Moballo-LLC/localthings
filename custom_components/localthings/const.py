@@ -48,6 +48,15 @@ CONF_LEARNED_MODES = "learned_modes"
 CONF_LEARN_MODES = "learn_device_modes"
 DEFAULT_LEARN_MODES = True
 
+# entry.data key: cloud "Download" programs discovered on a laundry device
+# (issue #342). Same rationale as CONF_LEARNED_MODES -- a program's full
+# replay payload is only ever visible while the device happens to be sitting
+# on it, so it has to survive a restart -- but a richer shape, because a
+# cloud program also needs a user-supplied name and the device's own
+# Download course code. See cloudcourse.py, which owns the shape. Shape:
+# {"download_course": "87"|null, "slots": {slot: {"blob": ..., "name": ...}}}
+CONF_CLOUD_COURSES = "cloud_courses"
+
 # Options-flow key (entry.options, not entry.data): lets a user override
 # the device-wide remote-control-off write block for a specific device
 # (issue #54). Some devices accept certain writes even while reporting

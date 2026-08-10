@@ -1406,6 +1406,7 @@
         "title": "Opzioni LocalThings",
         "menu_options": {
           "settings": "Impostazioni dispositivo",
+          "cloud_courses": "Cicli scaricati",
           "forget_learned_modes": "Dimentica le modalità memorizzate",
           "debug_write": "Debug: scrivi su una risorsa"
         }
@@ -1444,20 +1445,63 @@
           "debug_write": "Scrivi un'altra risorsa",
           "finish": "Fine"
         }
+      },
+      "cloud_manual": {
+        "title": "Cicli scaricati",
+        "description": "Questo dispositivo segnala {total} cicli scaricati; finora ne sono stati rilevati {found}.\n\nLe impostazioni di un ciclo scaricato sono visibili solo mentre quel ciclo è caricato, e il dispositivo non ne segnala mai il nome. Per aggiungere quelli mancanti ({pending}): sul dispositivo selezionare il ciclo Scaricato, quindi scorrere ciascun programma scaricato uno alla volta, sostando qualche secondo su ognuno, e tornare qui.\n\nAssegnare a ciascuno il nome che si desidera vedere in Home Assistant. Lasciare un nome vuoto per escludere quel ciclo dall'elenco dei cicli. I nomi devono essere univoci.\n\nIl ciclo Scaricato è il programma su questo dispositivo che esegue un programma scaricato. Viene rilevato automaticamente, ma confermarlo qui prima dell'uso: selezionare un ciclo scaricato scrive questo codice di programma sul dispositivo.",
+        "data": {
+          "download_course": "Codice programma del ciclo Scaricato"
+        }
+      },
+      "cloud_courses": {
+        "title": "Cicli scaricati",
+        "description": "La configurazione guidata accompagna l'utente al dispositivo: selezionare un ciclo scaricato sul dispositivo e assegnargli un nome non appena viene rilevato, uno alla volta.\n\nModifica nomi mostra tutto ciò che è stato trovato finora in una sola volta — usarla in seguito per rinominare o correggere qualcosa.",
+        "menu_options": {
+          "cloud_guided": "Configurazione guidata",
+          "cloud_manual": "Modifica nomi"
+        }
+      },
+      "cloud_wait": {
+        "title": "Cicli scaricati"
+      },
+      "cloud_name": {
+        "title": "Assegna un nome a questo ciclo",
+        "description": "Il dispositivo è passato a un ciclo scaricato (slot {slot}) e segnala {remaining} rimanenti.\n\nAssegnargli il nome che si desidera vedere in Home Assistant, quindi selezionare il successivo sul dispositivo. Lasciare vuoto per escludere questo ciclo dall'elenco.\n\nAssegnati finora ({named} di {total}): {named_list}\n\nI nomi devono essere univoci. È possibile chiudere questa finestra in qualsiasi momento — i nomi vengono salvati man mano.",
+        "data": {
+          "name": "Nome",
+          "download_course": "Codice programma del ciclo Scaricato"
+        }
+      },
+      "cloud_timeout": {
+        "title": "Nessun ciclo selezionato",
+        "description": "Non è stato selezionato nulla sul dispositivo. Assicurarsi che sia impostato sul ciclo Scaricato, quindi scorrere i programmi scaricati.\n\nAssegnati finora ({named} di {total}): {named_list}\n\nTutto ciò che è stato assegnato finora è già salvato.",
+        "menu_options": {
+          "cloud_guided": "Attendi di nuovo",
+          "cloud_finish": "Fine"
+        }
       }
     },
     "error": {
       "empty_payload": "Inserisci almeno un campo da scrivere.",
-      "write_failed": "Operazione di scrittura non riuscita. Controlla i registri di Home Assistant per i dettagli."
+      "write_failed": "Operazione di scrittura non riuscita. Controlla i registri di Home Assistant per i dettagli.",
+      "cloud_course_name_duplicate": "Due cicli hanno lo stesso nome. I nomi devono essere univoci.",
+      "cloud_course_unknown_course": "Quel programma non è tra quelli offerti da questo dispositivo. Selezionarne uno dall'elenco."
     },
     "abort": {
       "not_loaded": "Questo dispositivo non è ancora connesso. Riprova dopo il caricamento."
+    },
+    "progress": {
+      "cloud_wait": "Selezionare ora un ciclo scaricato sul dispositivo.\n\nAssegnati finora ({named} di {total}): {named_list}\n\nÈ possibile chiudere questa finestra in qualsiasi momento — i nomi vengono salvati man mano."
     }
   },
   "issues": {
     "device_gap": {
       "title": "Copertura delle funzionalità incompleta per {device_name}",
       "description": "Questo dispositivo non è completamente supportato. Il tipo di dispositivo non è stato riconosciuto oppure alcune delle risorse che espone non sono ancora state modellate. Continuerò a funzionare con le funzionalità già supportate. Puoi contribuire ad ampliare il supporto andando su Impostazioni > Dispositivi e servizi > {device_name} > il menu (in alto a destra) > Scarica diagnostica, quindi inviando una segnalazione tramite il modulo di segnalazione collegato."
+    },
+    "cloud_courses_undiscovered": {
+      "title": "Cicli scaricati non configurati per {device_name}",
+      "description": "{device_name} ha {pending} cicli scaricati su {total} che Home Assistant non può ancora offrire. Un ciclo scaricato può essere usato solo dopo che il dispositivo è stato rilevato con quel ciclo caricato ed è stato assegnato un nome.\n\nPer configurarli, andare su Impostazioni > Dispositivi e servizi > LocalThings > {device_name} > Configura > Cicli scaricati e seguire le istruzioni presenti lì."
     }
   },
   "exceptions": {

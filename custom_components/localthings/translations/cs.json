@@ -1406,6 +1406,7 @@
         "title": "Možnosti LocalThings",
         "menu_options": {
           "settings": "Nastavení zápisu pro dálkové ovládání",
+          "cloud_courses": "Stažené cykly",
           "forget_learned_modes": "Zapomenout zapamatované režimy",
           "debug_write": "Ladění: zápis do prostředku"
         }
@@ -1444,20 +1445,63 @@
           "debug_write": "Zapsat do dalšího prostředku",
           "finish": "Dokončit"
         }
+      },
+      "cloud_manual": {
+        "title": "Stažené cykly",
+        "description": "Toto zařízení hlásí {total} stažených cyklů; {found} jich bylo dosud zjištěno.\n\nNastavení staženého cyklu jsou viditelná pouze tehdy, když je daný cyklus právě načtený, a zařízení nikdy nehlásí jejich názvy. Chcete-li doplnit chybějící ({pending}): na zařízení vyberte Stažený program, poté postupně projděte jednotlivé stažené programy, u každého se na pár sekund zastavte, a vraťte se sem.\n\nKaždému z nich zadejte název, který chcete vidět v Home Assistant. Necháte-li název prázdný, daný cyklus zůstane mimo seznam cyklů. Názvy musí být jedinečné.\n\nStažený program je program na tomto zařízení, který spouští stažený cyklus. Rozpoznává se automaticky, ale před použitím jej zde potvrďte: výběrem staženého cyklu se do zařízení zapíše tento kód programu.",
+        "data": {
+          "download_course": "Kód programu „Stažený program“"
+        }
+      },
+      "cloud_courses": {
+        "title": "Stažené cykly",
+        "description": "Průvodce nastavením vás provede zařízením: na zařízení vyberte stažený cyklus a jakmile je nalezen, pojmenujte ho – jeden po druhém.\n\nÚprava názvů zobrazí vše dosud nalezené najednou – použijte ji později k přejmenování nebo opravě.",
+        "menu_options": {
+          "cloud_guided": "Průvodce nastavením",
+          "cloud_manual": "Upravit názvy"
+        }
+      },
+      "cloud_wait": {
+        "title": "Stažené cykly"
+      },
+      "cloud_name": {
+        "title": "Pojmenujte tento cyklus",
+        "description": "Zařízení přepnulo na stažený cyklus (pozice {slot}) a hlásí zbývající čas {remaining}.\n\nZadejte název, který chcete vidět v Home Assistant, a poté na zařízení vyberte další cyklus. Necháte-li pole prázdné, tento cyklus zůstane mimo seznam.\n\nDosud pojmenováno ({named} z {total}): {named_list}\n\nNázvy musí být jedinečné. Toto okno můžete kdykoli zavřít – názvy se ukládají průběžně.",
+        "data": {
+          "name": "Název",
+          "download_course": "Kód programu „Stažený program“"
+        }
+      },
+      "cloud_timeout": {
+        "title": "Nebyl vybrán žádný cyklus",
+        "description": "Na zařízení nebylo nic vybráno. Ujistěte se, že je nastaveno na Stažený program, a poté postupně procházejte stažené programy.\n\nDosud pojmenováno ({named} z {total}): {named_list}\n\nVše dosud pojmenované je již uloženo.",
+        "menu_options": {
+          "cloud_guided": "Počkat znovu",
+          "cloud_finish": "Dokončit"
+        }
       }
     },
     "error": {
       "empty_payload": "Zadejte alespoň jedno pole k zápisu.",
-      "write_failed": "Zápis se nezdařil. Podrobnosti najdete v protokolech Home Assistant."
+      "write_failed": "Zápis se nezdařil. Podrobnosti najdete v protokolech Home Assistant.",
+      "cloud_course_name_duplicate": "Dva cykly mají stejný název. Názvy musí být jedinečné.",
+      "cloud_course_unknown_course": "Tento program zařízení nenabízí. Vyberte jej ze seznamu."
     },
     "abort": {
       "not_loaded": "Toto zařízení ještě není připojeno. Zkuste to znovu, až se načte."
+    },
+    "progress": {
+      "cloud_wait": "Nyní na zařízení vyberte stažený cyklus.\n\nDosud pojmenováno ({named} z {total}): {named_list}\n\nToto okno můžete kdykoli zavřít – názvy se ukládají průběžně."
     }
   },
   "issues": {
     "device_gap": {
       "title": "Neúplné pokrytí funkcí pro {device_name}",
       "description": "Toto zařízení nemá úplné pokrytí funkcí. Buď nebyl rozpoznán jeho typ spotřebiče, nebo některé jím poskytované prostředky ještě nejsou namodelovány. Bude i nadále fungovat se vším, co je již podporováno. Podporu můžete pomoci rozšířit tak, že přejdete do Nastavení > Zařízení a služby > {device_name} > nabídka (vpravo nahoře) > Stáhnout diagnostiku a poté ji vložíte do odkazované šablony issue."
+    },
+    "cloud_courses_undiscovered": {
+      "title": "Stažené cykly nejsou nastaveny pro {device_name}",
+      "description": "{device_name} má {pending} z {total} stažených cyklů, které Home Assistant zatím nemůže nabídnout. Stažený cyklus lze použít až poté, co byl na zařízení zjištěn načtený a co jste mu dali název.\n\nChcete-li je nastavit, přejděte do Nastavení > Zařízení a služby > LocalThings > {device_name} > Konfigurovat > Stažené cykly a postupujte podle pokynů."
     }
   },
   "exceptions": {

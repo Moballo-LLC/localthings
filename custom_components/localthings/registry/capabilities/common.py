@@ -136,6 +136,28 @@ def _active_alarm_codes(items):
     return ", ".join(codes) if codes else "none"
 
 
+def hex_pairs(codes):
+    """'1C1D21...' -> ['1C', '1D', '21', ...]."""
+    return [codes[i : i + 2] for i in range(0, len(codes) - 1, 2)]
+
+
+def option_value(options, prefix):
+    """Find `<prefix>_<value>` in an options[] array and return <value>.
+
+    Lives here rather than in laundry.py, which is where it grew, because
+    cloudcourse.py needs it too and laundry.py imports *that* -- so the
+    reverse import would be a module cycle. The coordinator already imports
+    from this module, so nothing about the dependency direction is unusual;
+    it is specifically the laundry/cloudcourse pair that can't reach each
+    other. Anchored at position 0 so 'Course_' never matches
+    'CloudCourse_'/'OneTimeCloudCourse_'.
+    """
+    for o in options or []:
+        if isinstance(o, str) and o.startswith(prefix + "_"):
+            return o.split("_", 1)[1]
+    return None
+
+
 def merge_options_field(cached, new_tokens):
     """Merge freshly-written `<Prefix>_<Value>` tokens into a cached
     x.com.samsung.da.options[]-style array the same way the device itself

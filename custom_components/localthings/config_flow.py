@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import datetime
 import errno
@@ -34,6 +35,7 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
+from . import cloudcourse
 from .const import (
     CLIENTHELLO_PROBE_RETRIES,
     CLIENTHELLO_PROBE_TIMEOUT_S,
@@ -62,6 +64,8 @@ from .const import (
 )
 from .learned import persist as learned_persist
 from .learned import stored as learned_stored
+from .registry.capabilities.laundry import cycle_options, personal_course_labels
+from .registry.subdevices import MAIN
 
 _TEXT = TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT))
 _MULTILINE = TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True))
@@ -73,6 +77,14 @@ _HYSTERESIS_MINUTES = NumberSelector(
         mode=NumberSelectorMode.BOX,
     )
 )
+
+# Guided download-cycle setup: how long a round waits for the user to
+# select a program, and how often it live-reads /course/vs/0 while doing
+# so. The read takes the session lock, so the interval is a few seconds
+# rather than sub-second -- fast enough to feel immediate to someone
+# standing at the appliance, slow enough not to starve polling.
+_CLOUD_WAIT_TIMEOUT_S = 180.0
+_CLOUD_PROBE_INTERVAL_S = 3.0
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -827,15 +839,27 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
     def __init__(self) -> None:
         self._debug_href: str = ""
         self._debug_result: tuple[int, dict] | None = None
+        # Guided download-cycle setup. `_cloud_task` is created once per
+        # round and reused across re-entries (Home Assistant re-enters a
+        # progress step while its spinner is up).
+        self._cloud_task: asyncio.Task[str | None] | None = None
+        self._cloud_slot: str | None = None
+        self._cloud_baseline: str | None = None
 
     def _coordinator(self):
         return self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        return self.async_show_menu(
-            step_id="init",
-            menu_options=["settings", "forget_learned_modes", "debug_write"],
-        )
+        menu = ["settings", "forget_learned_modes", "debug_write"]
+        # Only offered on an appliance that actually advertises downloaded
+        # programs (issue #342) -- every other device would get a menu entry
+        # leading to an empty screen.
+        coord = self._coordinator()
+        if coord is not None and cloudcourse.supports_cloud_courses(
+            coord.cloud_course_rep(), cycle_options(coord.canonical_resources(MAIN))
+        ):
+            menu.insert(1, "cloud_courses")
+        return self.async_show_menu(step_id="init", menu_options=menu)
 
     async def async_step_settings(
         self, user_input: dict[str, Any] | None = None
@@ -899,6 +923,385 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
             step_id="forget_learned_modes",
             data_schema=vol.Schema({}),
             description_placeholders={"codes": ", ".join(codes) if codes else "(none)"},
+        )
+
+    async def async_step_cloud_courses(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Entry point for download-cycle setup (issue #342).
+
+        Guided setup is offered first because it is the only version of this
+        that a first-time user can complete confidently: it asks about a
+        program in the moment they select it, rather than about a list of hex
+        ids some time later. The bulk form stays for renaming afterwards,
+        which guided setup is bad at.
+        """
+        return self.async_show_menu(
+            step_id="cloud_courses",
+            menu_options=["cloud_guided", "cloud_manual"],
+        )
+
+    @callback
+    def async_remove(self) -> None:
+        """Stop probing when the flow goes away.
+
+        Closing the dialog is the documented way to leave guided setup, so it
+        has to actually stop: an abandoned round would otherwise go on
+        live-reading /course/vs/0 every few seconds until its timeout, taking
+        the session lock each time, for a user who has walked away.
+        """
+        if self._cloud_task is not None and not self._cloud_task.done():
+            self._cloud_task.cancel()
+        self._cloud_task = None
+
+    async def async_step_cloud_guided(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Start (or restart) a guided discovery round."""
+        coord = self._coordinator()
+        if coord is None:
+            return self.async_abort(reason="not_loaded")
+        self._cloud_task = None
+        self._cloud_slot = None
+        # Baseline: whatever is loaded right now. The round completes when
+        # the appliance moves off it, so the program the user has *already*
+        # selected can't immediately re-trigger and loop the flow.
+        self._cloud_baseline = cloudcourse.loaded_slot(coord.cloud_course_rep())
+        return await self.async_step_cloud_wait()
+
+    async def async_step_cloud_wait(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Wait for the user to select a different downloaded program.
+
+        The task is created once and reused across re-entries -- Home
+        Assistant polls this step while the spinner is up, and building a
+        fresh task each time would restart the wait forever.
+        """
+        coord = self._coordinator()
+        if coord is None:
+            return self.async_abort(reason="not_loaded")
+
+        if self._cloud_task is None:
+            self._cloud_task = self.hass.async_create_task(
+                self._await_cloud_selection(coord), eager_start=False
+            )
+        if not self._cloud_task.done():
+            return self.async_show_progress(
+                step_id="cloud_wait",
+                progress_action="cloud_wait",
+                progress_task=self._cloud_task,
+                description_placeholders=self._cloud_progress_placeholders(coord),
+            )
+
+        self._cloud_slot = self._cloud_task.result()
+        self._cloud_task = None
+        if self._cloud_slot is None:
+            return self.async_show_progress_done(next_step_id="cloud_timeout")
+        return self.async_show_progress_done(next_step_id="cloud_name")
+
+    async def _await_cloud_selection(self, coord) -> str | None:
+        """Poll until the loaded program changes; None on timeout."""
+        deadline = time.monotonic() + _CLOUD_WAIT_TIMEOUT_S
+        while time.monotonic() < deadline:
+            slot = await coord.async_probe_cloud_courses()
+            # Only a slot the store actually recorded. The probe reports
+            # whatever payload is loaded, while observe() declines one whose
+            # slot the device doesn't advertise -- offering to name that would
+            # take a name and silently discard it, since there is no record to
+            # hang it on and no payload to replay.
+            if (
+                slot is not None
+                and slot != self._cloud_baseline
+                and coord.cloud_courses.snapshot()["slots"].get(slot)
+            ):
+                return slot
+            await asyncio.sleep(_CLOUD_PROBE_INTERVAL_S)
+        return None
+
+    def _cloud_progress_placeholders(self, coord) -> dict[str, str]:
+        """Counts plus the names assigned so far.
+
+        Listing them is what makes a nine-program walk followable -- it is
+        the only orientation available, since the programs still to do are
+        unnamed by definition. Shown while naming too, where it doubles as
+        duplicate avoidance: the form rejects a repeated name, so seeing the
+        others first beats being bounced.
+
+        In the appliance's own advertised order, which is at least a stable
+        order, without numbering them -- whether that order matches the dial
+        is plausible but unverified, and implying it would be worse than
+        saying nothing.
+        """
+        rep = coord.cloud_course_rep()
+        courses = cycle_options(coord.canonical_resources(MAIN))
+        record = coord.cloud_courses.snapshot()
+        slots = cloudcourse.cloud_slots(rep, courses)
+        names = [n for s in slots if (n := (record["slots"].get(s) or {}).get("name"))]
+        return {
+            "named": str(len(names)),
+            "total": str(len(slots)),
+            "named_list": ", ".join(names) if names else "none yet",
+        }
+
+    async def async_step_cloud_name(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Name the program the user just selected.
+
+        Persists immediately rather than batching to the end of the flow, so
+        closing the dialog at any point is a clean "save and exit" -- there is
+        no pending work to lose, and reopening resumes from the store.
+        """
+        coord = self._coordinator()
+        if coord is None or self._cloud_slot is None:
+            return self.async_abort(reason="not_loaded")
+        slot = self._cloud_slot
+        existing = (coord.cloud_courses.snapshot()["slots"].get(slot) or {}).get("name", "")
+
+        if user_input is not None:
+            # Rebuilt into the shared validator's shape. `download_course`
+            # is forwarded only when this form actually carried it, so its
+            # absence still means "not asked about" rather than "clear it".
+            payload: dict[str, Any] = {f"name_{slot}": str(user_input.get("name", "")).strip()}
+            if "download_course" in user_input:
+                payload["download_course"] = user_input["download_course"]
+            errors = self._apply_cloud_course_names(coord, [slot], payload)
+            if errors:
+                return self._cloud_name_form(coord, slot, existing, errors=errors)
+            # Straight back to waiting: the appliance is still sitting on this
+            # program, and the next round baselines on it, so there is nothing
+            # to click through.
+            self._cloud_baseline = slot
+            return await self.async_step_cloud_wait()
+
+        return self._cloud_name_form(coord, slot, existing)
+
+    def _cloud_name_form(
+        self, coord, slot: str, existing: str, errors: dict[str, str] | None = None
+    ) -> ConfigFlowResult:
+        """One text field, with the copy switched on whether this program is
+        already set up. Re-selecting one is not an error -- it is how someone
+        checks their work -- so it gets an edit form rather than a rejection,
+        and the counter deliberately does not move.
+
+        The Download course joins the form the first time round, and only
+        until it is confirmed. Guided setup would otherwise finish having
+        collected names but no course, and a program needs both before it can
+        be offered -- so the whole walk would produce nothing selectable. It
+        is asked here rather than up front because this is the first moment
+        there is evidence to prefill: the user has just loaded a program, so
+        the course showing alongside it is the Download one.
+        """
+        placeholders = self._cloud_progress_placeholders(coord)
+        placeholders["slot"] = slot
+        placeholders["remaining"] = (
+            coord.resource("/operational/state/vs/0").get("x.com.samsung.da.remainingTime") or "--"
+        )
+        fields: dict[Any, Any] = {vol.Optional("name", default=existing): _TEXT}
+        if not coord.cloud_courses.snapshot()["download_course"]:
+            fields[
+                vol.Optional("download_course", description={"suggested_value": self._cloud_course})
+            ] = self._cloud_course_selector(coord)
+        return self.async_show_form(
+            step_id="cloud_name",
+            data_schema=vol.Schema(fields),
+            errors=errors or {},
+            description_placeholders=placeholders,
+            last_step=False,
+        )
+
+    @property
+    def _cloud_course(self) -> str | None:
+        """The best observed candidate, narrowed to what the selector offers.
+
+        Unfiltered, a candidate the appliance's own course list no longer
+        contains would prefill a dropdown that rejects it, and the form would
+        fail validation on a value the user never chose.
+        """
+        coord = self._coordinator()
+        if coord is None:
+            return None
+        available = cycle_options(coord.canonical_resources(MAIN))
+        return next((c for c in coord.cloud_courses.download_candidates() if c in available), None)
+
+    def _cloud_course_selector(self, coord):
+        """The appliance's own course codes, observed candidates first.
+
+        custom_value stays off deliberately: whatever lands here becomes the
+        Course_ token of a real write, and a typed-in code the appliance
+        doesn't offer would start something nobody chose.
+        """
+        available = cycle_options(coord.canonical_resources(MAIN))
+        candidates = [c for c in coord.cloud_courses.download_candidates() if c in available]
+        ordered = candidates + [c for c in available if c not in candidates]
+        return SelectSelector(
+            SelectSelectorConfig(
+                options=ordered,
+                custom_value=False,
+                mode=SelectSelectorMode.DROPDOWN,
+            )
+        )
+
+    async def async_step_cloud_timeout(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Nothing was selected in time. Offer another round rather than
+        dropping the user out of the flow -- and an explicit finish, for
+        anyone who doesn't think to close the dialog."""
+        coord = self._coordinator()
+        if coord is None:
+            return self.async_abort(reason="not_loaded")
+        return self.async_show_menu(
+            step_id="cloud_timeout",
+            menu_options=["cloud_guided", "cloud_finish"],
+            description_placeholders=self._cloud_progress_placeholders(coord),
+        )
+
+    async def async_step_cloud_finish(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        return self.async_create_entry(data=dict(self.config_entry.options))
+
+    async def async_step_cloud_manual(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Name the cloud "Download" programs this appliance has (issue #342).
+
+        The device advertises how many downloaded programs it holds but never
+        what any of them is called, and only ever exposes the replay payload
+        for the one currently loaded. So this screen can only offer the ones
+        already seen loaded, and asks the user for the names -- the appliance
+        has no name to give and inventing one is not an option (the same rule
+        that governs unrecognized local course codes).
+
+        Also confirms which course code means Download. It is auto-detected
+        by observation, but never used for a write until confirmed here: the
+        options array replaces tokens by prefix and never evicts them, so a
+        stale program token can be reported alongside an unrelated course and
+        make an ordinary wash cycle look like the Download one. Writing the
+        wrong code would start the wrong cycle.
+        """
+        coord = self._coordinator()
+        if coord is None:
+            return self.async_abort(reason="not_loaded")
+
+        store = coord.cloud_courses
+        rep = coord.cloud_course_rep()
+        record = store.snapshot()
+        slots = record["slots"]
+        advertised = cloudcourse.cloud_slots(rep, cycle_options(coord.canonical_resources(MAIN)))
+        # Learned slots keep the appliance's own ordering; anything learned
+        # but no longer advertised still gets a row so a name isn't stranded.
+        known = [s for s in advertised if s in slots] + [s for s in slots if s not in advertised]
+
+        if user_input is not None:
+            errors = self._apply_cloud_course_names(coord, known, user_input)
+            if not errors:
+                return self.async_create_entry(data=dict(self.config_entry.options))
+            return self._cloud_courses_form(coord, known, advertised, errors=errors)
+
+        return self._cloud_courses_form(coord, known, advertised)
+
+    def _apply_cloud_course_names(self, coord, known, user_input) -> dict[str, str]:
+        """Validate and store the submitted names + Download course code.
+
+        The select maps a chosen label back to a raw value by matching display
+        text, so two options sharing a label resolve to whichever comes first.
+        Two sources of collision are checkable here and both are rejected:
+        the user's own names against each other, and against the appliance's
+        personal-course labels, which the device reports verbatim and the
+        select renders as-is.
+
+        A collision with a *translated* local course name is deliberately not
+        checked. The catalog this process can read is English (catalog.py),
+        while what the user actually sees is localized in the frontend -- so
+        checking it would reject "Cotton" for a German user whose dropdown
+        says "Baumwolle", and still miss the real collision when they type
+        "Baumwolle". Wrong in both directions outside one locale, against an
+        outcome the option ordering already makes deterministic (local
+        courses come first, so a shared label resolves to the real cycle).
+        """
+        names = {slot: str(user_input.get(f"name_{slot}", "")).strip() for slot in known}
+        stored_slots = coord.cloud_courses.snapshot()["slots"]
+        taken = {name.casefold() for name in self._device_course_names(coord)}
+        # Programs this form isn't editing. The bulk form edits every slot at
+        # once so this adds nothing there, but guided setup submits one at a
+        # time -- without it, naming two programs the same was accepted, and
+        # the select resolves a shared label to whichever option comes first,
+        # so picking the second would run the first one's payload.
+        taken |= {
+            record["name"].casefold()
+            for slot, record in stored_slots.items()
+            if record["name"] and slot not in known
+        }
+        for name in names.values():
+            if not name:
+                continue
+            if name.casefold() in taken:
+                return {"base": "cloud_course_name_duplicate"}
+            taken.add(name.casefold())
+
+        # Absent means "this form didn't ask" -- the guided name form drops
+        # the field once the course is confirmed -- which must leave the
+        # stored value alone rather than clearing it. A program is only
+        # offerable when both a name and the course are set, so clearing it
+        # here would make naming things remove them from the cycle list.
+        if "download_course" not in user_input:
+            coord.apply_cloud_courses(names)
+            return {}
+
+        # Belt and braces over the selector's own custom_value=False: this
+        # value becomes the Course_ token of a real write, so it is checked
+        # against the appliance's own course list here too, where the store
+        # is actually updated.
+        course = user_input.get("download_course") or None
+        if course is not None and course not in cycle_options(coord.canonical_resources(MAIN)):
+            return {"base": "cloud_course_unknown_course"}
+
+        coord.apply_cloud_courses(names, course)
+        return {}
+
+    def _device_course_names(self, coord) -> set[str]:
+        """Course names this appliance reports itself.
+
+        Only the personal-course labels: the device sends these as text and
+        the select renders them unchanged, so they are the same string in
+        every locale and can be compared against safely. See the caller for
+        why translated course names are not included.
+        """
+        resources = coord.canonical_resources(MAIN)
+        personal = personal_course_labels(resources)
+        return {name for code in cycle_options(resources) if (name := personal.get(code.upper()))}
+
+    def _cloud_courses_form(
+        self, coord, known, advertised, errors: dict[str, str] | None = None
+    ) -> ConfigFlowResult:
+        store = coord.cloud_courses
+        record = store.snapshot()
+        slots = record["slots"]
+
+        fields: dict[Any, Any] = {}
+        for slot in known:
+            fields[vol.Optional(f"name_{slot}", default=slots.get(slot, {}).get("name", ""))] = (
+                _TEXT
+            )
+
+        suggested = record["download_course"] or self._cloud_course
+        fields[vol.Optional("download_course", description={"suggested_value": suggested})] = (
+            self._cloud_course_selector(coord)
+        )
+
+        pending = [s for s in advertised if s not in slots]
+        return self.async_show_form(
+            step_id="cloud_manual",
+            data_schema=vol.Schema(fields),
+            errors=errors or {},
+            description_placeholders={
+                "found": str(len(known)),
+                "total": str(len(advertised)) if advertised else str(len(known)),
+                "pending": ", ".join(pending) if pending else "(none)",
+            },
         )
 
     async def async_step_debug_write(

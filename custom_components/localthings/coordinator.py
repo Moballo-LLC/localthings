@@ -10,7 +10,7 @@ import threading
 import time
 import zlib
 from datetime import timedelta
-from typing import Any
+from typing import Any, cast
 
 import cbor2
 from homeassistant.config_entries import ConfigEntry
@@ -22,8 +22,12 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from smartthings_local.ocf.state_cache import StateCache
 from smartthings_local.protocol.dtls_session import DtlsCoapSession
 
+from . import cloudcourse
+from .cloudcourse import CloudCourses
+from .cloudcourse import persist as cloud_persist
 from .const import (
     CONF_BYPASS_REMOTE_CONTROL,
+    CONF_CLOUD_COURSES,
     CONF_DEVICE_TYPE,
     CONF_HOST,
     CONF_LEAF_CERT_PEM,
@@ -52,6 +56,7 @@ from .registry.capabilities.common import (
     remote_control_enabled,
     remote_control_required_for_write,
 )
+from .registry.capabilities.laundry import cycle_options
 from .registry.discovery import BoundEntity
 from .registry.entities import ClimateDesc
 from .registry.identity import (
@@ -62,12 +67,17 @@ from .registry.identity import (
     resolve_serial,
 )
 from .registry.subdevices import (
+    MAIN,
     Subdevice,
     canonical_view,
     discover_partitioned,
     enumerate_subdevices,
     normalize_seed_batch,
 )
+
+# Sentinel for apply_cloud_courses: "leave this field as it is",
+# distinct from None which means "clear it".
+_KEEP = object()
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -259,6 +269,9 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # supported (issue #327), restored from the entry so one learned
         # last week is still offered today. See learned.py.
         self._learned = LearnedModes(entry.data.get(CONF_LEARNED_MODES))
+        # Cloud "Download" programs discovered on this device (issue #342).
+        # Same restore-from-entry shape as _learned above; see cloudcourse.py.
+        self._cloud = CloudCourses(entry.data.get(CONF_CLOUD_COURSES))
         # Narrowed to this device's own climate hrefs once discovery has
         # run -- see _refresh_learnable_hrefs.
         self._learnable_hrefs: set[str] = set()
@@ -312,6 +325,61 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         which copies every tracked href to build the snapshot dict."""
         return self._cache.get(href) or {}
 
+    def entity_resources(self) -> dict[str, dict]:
+        """The live snapshot as entity descriptors should see it: the device's
+        own reps, plus this integration's discovered cloud programs merged
+        onto /course/vs/0 under cloudcourse.FIELD (issue #342).
+
+        Merged at read time rather than applied to the state cache, so the
+        synthetic field can never be polled over or written to the device --
+        `last_resources` stays exactly what the appliance reported. It rides
+        on the rep instead of a resource of its own because rep_fn receives
+        only its own href's rep: a sibling href would be invisible to it, and
+        /course/vs/0 is the one resource every consumer of this data is
+        already bound to.
+
+        MAIN only, by construction: cloudcourse.COURSE_HREF is a canonical
+        href and this snapshot is keyed by actual ones, so a composite
+        appliance's second course resource (/<uuid>/course/vs/0 on the
+        one-body washer-dryer) is not merged and not learned from. No device
+        seen so far advertises cloud programs on anything but MAIN; making
+        this per-subdevice means keying the store by actual href the way
+        LearnedModes does, and migrating the persisted shape.
+        """
+        snapshot = self.last_resources
+        rep = snapshot.get(cloudcourse.COURSE_HREF)
+        if rep is None:
+            return snapshot
+        view = self._cloud.view()
+        if not view:
+            return snapshot
+        snapshot[cloudcourse.COURSE_HREF] = {**rep, cloudcourse.FIELD: view}
+        return snapshot
+
+    def entity_rep(self, href: str) -> dict:
+        """One href's rep as descriptors see it -- `resource()` plus the
+        merge `entity_resources` would have applied. Exists so the write path
+        doesn't copy every tracked href to read one rep, which is the very
+        thing `resource()` was added to avoid."""
+        rep = self.resource(href)
+        if href != cloudcourse.COURSE_HREF or not rep:
+            return rep
+        view = self._cloud.view()
+        return {**rep, cloudcourse.FIELD: view} if view else rep
+
+    def device_resources(self, subdevice: Subdevice) -> dict[str, dict]:
+        """`subdevice`'s canonical view of exactly what the appliance
+        reported -- no integration state merged in.
+
+        The counterpart to canonical_resources for everything that *exports*
+        resources rather than rendering entities from them: diagnostics and
+        the debug read service. Keeping this a separate call rather than
+        filtering the merged view downstream is what makes "a dump is what the
+        device said" a property of which method you call, instead of a
+        convention every future exporter has to remember.
+        """
+        return canonical_view(subdevice, self.last_resources, self.subdevices)
+
     def canonical_resources(self, subdevice: Subdevice) -> dict[str, dict]:
         """`subdevice`'s view of the live snapshot, rewritten to canonical
         hrefs (issue #177, see subdevices.canonical_view). Any platform
@@ -325,7 +393,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         cached = self._canonical_cache.get(view_key)
         if cached is not None:
             return cached
-        view = canonical_view(subdevice, self._cache.snapshot(), self.subdevices)
+        view = canonical_view(subdevice, self.entity_resources(), self.subdevices)
         self._canonical_cache[view_key] = view
         return view
 
@@ -389,7 +457,11 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         An 'optimistic' rep is the value this integration just wrote, not
         one the device reported, so there is nothing to learn from it."""
-        if source == "optimistic" or href not in self._learnable_hrefs:
+        if source == "optimistic":
+            return
+        if href == cloudcourse.COURSE_HREF:
+            self._observe_cloud_courses(rep)
+        if href not in self._learnable_hrefs:
             return
         if not self.learning_enabled:
             return
@@ -405,6 +477,134 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     @callback
     def _persist_learned(self) -> None:
         persist(self.hass, self._entry, self._learned.snapshot())
+
+    # ------------------------------------------------------------------
+    # Cloud "Download" programs (issue #342) -- see cloudcourse.py
+    # ------------------------------------------------------------------
+
+    def _observe_cloud_courses(self, rep: dict) -> None:
+        """Learn a downloaded program's replay payload from one applied
+        /course/vs/0 rep. Runs on whichever thread applied the update, so
+        both the persist and the Repairs refresh go through hass.add_job.
+
+        Unlike learned modes this has no opt-out option: it records only
+        what the appliance itself reports about programs it itself
+        advertises, and nothing is offered in the UI until the user names it.
+        """
+        if not self._cloud.observe(rep):
+            return
+        self.hass.add_job(self._persist_cloud_courses)
+
+    @callback
+    def _persist_cloud_courses(self) -> None:
+        cloud_persist(self.hass, self._entry, self._cloud.snapshot())
+        # A newly learned program changes what entity_resources() hands out.
+        self._canonical_cache.clear()
+        self._refresh_cloud_course_issue()
+
+    @property
+    def cloud_courses(self) -> CloudCourses:
+        """The discovered-program store, for reads (snapshot/view/candidates).
+
+        Mutations go through apply_cloud_courses below, not through this --
+        the store itself doesn't persist or invalidate, and `_canonical_cache`
+        now depends on its contents, so a caller that mutates it directly
+        leaves entity options stale with no error to say so.
+        """
+        return self._cloud
+
+    def cloud_course_rep(self) -> dict:
+        """/course/vs/0's live rep -- what advertises the slot list."""
+        return self.resource(cloudcourse.COURSE_HREF)
+
+    async def async_probe_cloud_courses(self) -> str | None:
+        """Live-read /course/vs/0, apply it, and report which slot is loaded.
+
+        /course/vs/0 is cold-tier, so passively a program selection can take
+        a whole poll interval to show up -- far too slow for the guided setup
+        flow, which is a person standing at the appliance waiting for Home
+        Assistant to notice. The read goes through the normal apply path, so
+        learning and persistence still happen in exactly one place.
+
+        Returns None when the read fails; the caller is a retry loop and a
+        single missed read is not worth surfacing.
+        """
+        try:
+            code, rep = await self.async_raw_read(cloudcourse.COURSE_HREF)
+        except Exception:
+            # One missed probe; the caller is a retry loop.
+            self._log.debug("cloud-course probe failed", exc_info=True)
+            return None
+        if not _coap_accepted(code) or not rep:
+            return None
+        self._observe.apply(cloudcourse.COURSE_HREF, rep, source="poll")
+        return cloudcourse.loaded_slot(rep)
+
+    def apply_cloud_courses(self, names: dict[str, str], download_course: object = _KEEP) -> None:
+        """The one mutation path for the cloud-program store (issue #342).
+
+        Takes the whole submission at once so a nine-program naming pass is
+        one config-entry write rather than nine, and so persistence, the
+        canonical-view invalidation and the Repairs refresh can't be done for
+        one half of a change and skipped for the other.
+
+        `download_course` defaults to "leave it alone" rather than None.
+        Guided setup submits one name at a time and says nothing about the
+        course; with None as the default that silently cleared a course the
+        user had already confirmed, and since a program is only offerable
+        once both are set, naming things made them disappear.
+        """
+        for slot, name in names.items():
+            self._cloud.set_name(slot, name)
+        if download_course is not _KEEP:
+            self._cloud.set_download_course(cast("str | None", download_course))
+        self._persist_cloud_courses()
+
+    @callback
+    def _refresh_cloud_course_issue(self) -> None:
+        """Raise or clear the "you have downloaded programs Home Assistant
+        can't offer yet" Repairs issue (issue #342).
+
+        A downloaded program is only usable once the appliance has been seen
+        sitting on it (that is the only time its replay payload is visible)
+        and the user has given it a name. The device advertises how many it
+        has, so the gap between that and what's usable is knowable -- and
+        it can only be closed by the user walking the appliance through its
+        own Download list, which is exactly what a Repair is for.
+
+        Gated on having seen at least one payload, which is the only
+        available evidence that this household uses downloaded programs at
+        all. Without it, an appliance that merely advertises slots -- the
+        DW5000C fixture reports four and has never loaded any -- would carry
+        a permanent warning about a feature its owner may never touch, and
+        nothing they do in Home Assistant could clear it. Running one
+        downloaded program is what turns the nudge on, and naming them is
+        what turns it off.
+        """
+        issue_id = f"cloud_courses_{self._entry.entry_id}"
+        rep = self.cloud_course_rep()
+        record = self._cloud.snapshot()
+        courses = cycle_options(self.canonical_resources(MAIN))
+        pending = cloudcourse.undiscovered(rep, record, courses)
+        slots = cloudcourse.cloud_slots(rep, courses)
+        needs_course = bool(slots) and not record["download_course"]
+        if record["slots"] and (pending or needs_course):
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="cloud_courses_undiscovered",
+                translation_placeholders={
+                    "device_name": self.device_info.get("name") or "This appliance",
+                    "pending": str(len(pending)),
+                    "total": str(len(slots)),
+                },
+                learn_more_url=DEVICE_SUPPORT_ISSUE_URL,
+            )
+        else:
+            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
 
     def device_info_for(self, subdevice: Subdevice) -> DeviceInfo:
         """DeviceInfo for one logical subdevice on this connection (issue
@@ -508,7 +708,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         with self._push_pending_lock:
             self._push_pending = False
         if self.bound:
-            self.async_set_updated_data(flatten(self.bound, self._cache.snapshot()))
+            self.async_set_updated_data(flatten(self.bound, self.entity_resources()))
 
     def _poll_once(self) -> dict[str, dict]:
         """GET /device/0, return parsed resources. Blocking.
@@ -1070,7 +1270,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         type(e).__name__,
                         e,
                     )
-                    return flatten(self.bound, self._cache.snapshot())
+                    return flatten(self.bound, self.entity_resources())
                 self._consecutive_poll_timeouts = 0
                 # A lone reconnect is routine (README's "Known device
                 # behavior"); only warn once they pile up. Pause first so
@@ -1099,7 +1299,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     # there are bound entities to carry it.
                     if self._discovered and snapshot:
                         self._log.debug("Full error:", exc_info=e2)
-                        return flatten(self.bound, snapshot)
+                        return flatten(self.bound, self.entity_resources())
                     raise UpdateFailed(f"poll failed after reconnect: {e2}") from e2
                 else:
                     # A fresh session has zero OBSERVE registrations; if we
@@ -1147,6 +1347,14 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         for href, rep in resources.items():
             self._observe.apply(href, rep, source=source)
 
+        if first_cycle:
+            # The apply loop above has just fed this poll's /course/vs/0 to
+            # the cloud-program store, so the gap is knowable now. Explicit
+            # rather than left to _persist_cloud_courses: a device whose
+            # programs are all already named learns nothing on this cycle and
+            # would otherwise never get its stale Repair cleared.
+            self._refresh_cloud_course_issue()
+
         if first_cycle or self._resubscribe_due:
             self._resubscribe_due = False
             await self._attempt_observe_mode()
@@ -1163,7 +1371,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._run_subpolls(force=sweep_mismatch), name="localthings_subpoll"
             )
 
-        return flatten(self.bound, self._cache.snapshot())
+        return flatten(self.bound, self.entity_resources())
 
     # ------------------------------------------------------------------
     # Command dispatch (called by entity platforms in Task 5)
@@ -1185,7 +1393,12 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if write_fn is None:
             return
         href = bound_entity.href
-        rep = self._cache.get(href or "") or {}
+        # Through entity_rep(), not the bare cache: write_fn must see the
+        # same rep exists_fn/rep_fn were handed, including the merged
+        # cloud-program field (issue #342). Identical to the cache entry for
+        # every href that field doesn't touch, and without copying the whole
+        # tree to read one rep.
+        rep = self.entity_rep(href or "")
         # The remote-control gate below keys off the raw on-the-wire href
         # and a raw snapshot -- /remotectrl/* is a shared, MAIN-only
         # resource that a subdevice's canonical_resources() view (owned

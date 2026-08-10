@@ -67,22 +67,21 @@ def _display(value, translation_key: str | None, fallback_fn=None):
     """
     if not isinstance(value, str):
         return value
-    if translation_key:
-        known = translated_states("select", translation_key)
-        if not known:
-            # No state table for this key: either the entity isn't translated
-            # at all, or its name is translated but its options deliberately
-            # aren't (an unrecognized course table, say). Give an explicit
-            # device-specific fallback the opportunity to make an opaque value
-            # readable; otherwise the raw device value remains the best choice.
-            if fallback_fn is None:
-                return value
-        elif translated := _translation_state(value, known):
-            return translated
-    if fallback_fn is not None:
-        fallback = fallback_fn(value)
-        if fallback is not None:
-            return fallback
+    known = translated_states("select", translation_key) if translation_key else frozenset()
+    if translated := _translation_state(value, known):
+        return translated
+    if fallback_fn is not None and (fallback := fallback_fn(value)) is not None:
+        return fallback
+    if translation_key and not known:
+        # No state table for this key: either the entity isn't translated at
+        # all, or its name is translated but its options deliberately aren't
+        # (an unrecognized course table, say). Nothing named this value, so
+        # the raw device value is the best choice -- the cosmetic reshaping
+        # below would only mangle an opaque code, turning a course '0E' into
+        # '0 E'. Reached only when the fallback *declined* the value, not
+        # merely when none was supplied: cycle_select always supplies one now
+        # (it labels cloud programs) and returns None for everything else.
+        return value
     if value.islower():
         return value.replace("_", " ").title()
     return _CAMEL_BOUNDARY_RE.sub(" ", value)

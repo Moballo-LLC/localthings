@@ -170,7 +170,10 @@ async def _async_read_resource(hass: HomeAssistant, call: ServiceCall) -> Servic
         # href: lets a user enumerate what exists without hammering the
         # device (see this module's docstring and the coordinator's
         # canonical_resources).
-        snapshot: dict[str, Any] = {"resources": coordinator.canonical_resources(subdevice)}
+        # device_resources, not canonical_resources: this response is what
+        # the appliance reported, without the fields this integration merges
+        # on for its own use (see coordinator.entity_resources).
+        snapshot: dict[str, Any] = {"resources": coordinator.device_resources(subdevice)}
         return cast(ServiceResponse, snapshot)
 
     # Same normalize-before-translate order as the write path above.

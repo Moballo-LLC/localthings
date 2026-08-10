@@ -16,8 +16,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.loader import async_get_integration
 
+from . import cloudcourse
 from .const import DOMAIN
 from .coordinator import LocalThingsCoordinator
+from .registry.capabilities.laundry import cycle_options
 from .registry.redact import redact_resources
 from .registry.subdevices import MAIN
 
@@ -32,6 +34,7 @@ async def async_get_config_entry_diagnostics(
     # disk (listdir + open + read_text), which trips HA's event-loop blocking
     # detector when called inline here. Offload it to the executor.
     stl_version = await hass.async_add_executor_job(pkg_version, "smartthings-local")
+    cloud_courses = coordinator.cloud_courses.snapshot()
 
     # /oic/p, /oic/d, and /oic/res sit outside the /device/0 batch captured
     # below, so they'd otherwise never reach an issue report. /oic/d's `rt`
@@ -54,7 +57,7 @@ async def async_get_config_entry_diagnostics(
         # than redacting /information/vs/0 again -- modelNum never matches
         # redact.py's substring rules, so the value is the same either way.
         matching = [b for b in coordinator.bound if b.subdevice == su]
-        res = redact_resources(coordinator.canonical_resources(su))
+        res = redact_resources(coordinator.device_resources(su))
         return {
             "kind": su.kind,
             "key": su.key,
@@ -88,7 +91,7 @@ async def async_get_config_entry_diagnostics(
         # /mode/vs/0 under no attribution. Each sibling reports its own
         # resources in `subdevices` below instead. For a device with no
         # subdevices, this is byte-identical to `last_resources`.
-        "resources": redact_resources(coordinator.canonical_resources(MAIN)),
+        "resources": redact_resources(coordinator.device_resources(MAIN)),
         # Sibling indoor subdevices discovered on this connection (issue
         # #177). subdeviceIdList (the UUID a prefixed subdevice's key comes
         # from) is deliberately NOT redacted here, unlike elsewhere in
@@ -136,6 +139,25 @@ async def async_get_config_entry_diagnostics(
         "learned_modes": {
             "enabled": coordinator.learning_enabled,
             "codes": coordinator.learned_snapshot(),
+        },
+        # Cloud "Download" programs discovered on this device (issue #342),
+        # reported separately from `resources` for the same reason as
+        # learned_modes above -- the dump there stays exactly what the device
+        # said, and this is what the integration made of it.
+        #
+        # Reported in full, names included. Half of what can go wrong with
+        # this feature is a configuration question -- which programs got
+        # named, which Download course was confirmed, whether a payload was
+        # ever captured for a slot the device advertises -- and none of that
+        # is answerable from the payloads alone. The names are the user's own
+        # words, so this is the one place they appear; they reach a dump only
+        # because its owner chose to download and share it.
+        "cloud_courses": {
+            "advertised_slots": cloudcourse.advertised_slots(coordinator.cloud_course_rep()),
+            "cloud_slots": cloudcourse.cloud_slots(
+                coordinator.cloud_course_rep(), cycle_options(coordinator.device_resources(MAIN))
+            ),
+            **cloud_courses,
         },
         "integration_version": integration.version,
         "smartthings_local_version": stl_version,

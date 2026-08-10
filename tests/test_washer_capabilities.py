@@ -7,7 +7,7 @@ fallback pairs and the energy meter in test_common_capabilities.py.
 
 from datetime import UTC
 
-from custom_components.localthings.registry.capabilities import laundry, washer
+from custom_components.localthings.registry.capabilities import washer
 from custom_components.localthings.registry.entities import SelectDesc
 
 
@@ -157,8 +157,20 @@ class TestWasherCourse:
             for e in washer.WASHER_COURSE.entities
             if e.key == "cycle" and isinstance(e, SelectDesc)
         )
-        assert desc.options is laundry.cycle_options
-        assert desc.display_fn is laundry.washer_cycle_fallback
+        # Behavior, not identity: cycle_select wraps both hooks to fold in
+        # cloud "Download" programs (issue #342), so the plain functions are
+        # no longer handed through as-is.
+        live = {"/wm/editcourse/vs/0": {"x.com.samsung.da.editCourseList": "EditCourseList_1C1D"}}
+        assert desc.options(live) == ["1C", "1D"]
+        # display_fn still resolves a personal course name through
+        # washer_cycle_fallback for a non-cloud value.
+        assert desc.display_fn is not None
+        personal = {
+            "/wm/personalcourse/vs/0": {
+                "x.com.samsung.da.courses": ["A1_01044D79436F"],
+            }
+        }
+        assert desc.display_fn("A1", personal) == "MyCo"
 
     def test_exists_only_when_edit_course_list_is_live(self):
         """No hardcoded course table is kept -- the selector only appears

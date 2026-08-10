@@ -233,7 +233,10 @@ class TestCycleSelect:
         assert desc.key == "cycle"
         assert desc.translation_key == "dryer_cycle"
         assert desc.icon == "mdi:tumble-dryer"
-        assert desc.options is laundry.cycle_options
+        # Behavior, not identity: the option list is the device's own live
+        # course list (plus any named cloud programs -- see cycle_select).
+        live = {"/wm/editcourse/vs/0": {"x.com.samsung.da.editCourseList": "EditCourseList_161C"}}
+        assert desc.options(live) == ["16", "1C"]
 
     def test_reads_raw_course_code_from_options(self):
         desc = laundry.cycle_select(translation_key="dryer_cycle", icon="x")
