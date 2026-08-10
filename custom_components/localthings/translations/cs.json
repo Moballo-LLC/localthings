@@ -1454,29 +1454,30 @@
         }
       },
       "cloud_courses": {
-        "title": "Download cycles",
-        "description": "Guided setup walks the appliance with you: select a downloaded cycle on the appliance and name it as it's found, one at a time.\n\nEdit names shows everything found so far at once — use it to rename or correct something later.",
+        "title": "Stažené cykly",
+        "description": "Průvodce nastavením vás provede zařízením: na zařízení vyberte stažený cyklus a jakmile je nalezen, pojmenujte ho – jeden po druhém.\n\nÚprava názvů zobrazí vše dosud nalezené najednou – použijte ji později k přejmenování nebo opravě.",
         "menu_options": {
-          "cloud_guided": "Guided setup",
-          "cloud_manual": "Edit names"
+          "cloud_guided": "Průvodce nastavením",
+          "cloud_manual": "Upravit názvy"
         }
       },
       "cloud_wait": {
-        "title": "Download cycles"
+        "title": "Stažené cykly"
       },
       "cloud_name": {
-        "title": "Name this cycle",
-        "description": "The appliance switched to a downloaded cycle (slot {slot}) and reports {remaining} remaining.\n\nGive it the name you want to see in Home Assistant, then select the next one on the appliance. Leave it blank to keep this cycle out of the list.\n\nNamed so far ({named} of {total}): {named_list}\n\nNames must be unique. You can close this dialog whenever you like — names are saved as you go.",
+        "title": "Pojmenujte tento cyklus",
+        "description": "Zařízení přepnulo na stažený cyklus (pozice {slot}) a hlásí zbývající čas {remaining}.\n\nZadejte název, který chcete vidět v Home Assistant, a poté na zařízení vyberte další cyklus. Necháte-li pole prázdné, tento cyklus zůstane mimo seznam.\n\nDosud pojmenováno ({named} z {total}): {named_list}\n\nNázvy musí být jedinečné. Toto okno můžete kdykoli zavřít – názvy se ukládají průběžně.",
         "data": {
-          "name": "Name"
+          "name": "Název",
+          "download_course": "Kód programu „Stažený program“"
         }
       },
       "cloud_timeout": {
-        "title": "No cycle selected",
-        "description": "Nothing was selected on the appliance. Make sure it's set to the Download cycle, then step through the downloaded programs.\n\nNamed so far ({named} of {total}): {named_list}\n\nEverything named so far is already saved.",
+        "title": "Nebyl vybrán žádný cyklus",
+        "description": "Na zařízení nebylo nic vybráno. Ujistěte se, že je nastaveno na Stažený program, a poté postupně procházejte stažené programy.\n\nDosud pojmenováno ({named} z {total}): {named_list}\n\nVše dosud pojmenované je již uloženo.",
         "menu_options": {
-          "cloud_guided": "Wait again",
-          "cloud_finish": "Finish"
+          "cloud_guided": "Počkat znovu",
+          "cloud_finish": "Dokončit"
         }
       }
     },
@@ -1490,7 +1491,7 @@
       "not_loaded": "Toto zařízení ještě není připojeno. Zkuste to znovu, až se načte."
     },
     "progress": {
-      "cloud_wait": "Select a downloaded cycle on the appliance now.\n\nNamed so far ({named} of {total}): {named_list}\n\nYou can close this dialog at any time — names are saved as you go."
+      "cloud_wait": "Nyní na zařízení vyberte stažený cyklus.\n\nDosud pojmenováno ({named} z {total}): {named_list}\n\nToto okno můžete kdykoli zavřít – názvy se ukládají průběžně."
     }
   },
   "issues": {

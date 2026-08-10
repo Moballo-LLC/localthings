@@ -622,3 +622,62 @@ async def test_the_name_form_shows_the_other_names_while_typing(hass: HomeAssist
 
     form = await handler.async_step_cloud_name()
     assert form["description_placeholders"]["named_list"] == "Jeans"
+
+
+async def test_guided_naming_never_clears_a_confirmed_download_course(hass: HomeAssistant):
+    """A program needs both a name and the Download course before it can be
+    offered. The guided name form says nothing about the course, and passing
+    that silence through as None wiped a confirmed one -- so naming a program
+    removed every already-named program from the cycle list."""
+    coordinator = await _coordinator(hass)
+    coordinator.apply_cloud_courses({"6B": "Jeans"}, "87")
+    await _flush(hass)
+    assert "cloud:6B" in _cycle_options(coordinator)
+
+    handler = await _options_handler(hass, coordinator)
+    await handler.async_step_cloud_guided()
+    _stub_probe(coordinator, ["55"])
+    await _run_wait(handler)
+    await handler.async_step_cloud_name({"name": "Sports"})
+    await _flush(hass)
+
+    assert coordinator.cloud_courses.snapshot()["download_course"] == "87"
+    assert {"cloud:55", "cloud:6B"} <= set(_cycle_options(coordinator))
+
+
+async def test_guided_setup_alone_produces_a_selectable_cycle(hass: HomeAssistant):
+    """The walk has to stand on its own: someone who only ever uses guided
+    setup must end up with something in the cycle list. So the first name
+    form also asks for the Download course, prefilled from what was just
+    observed, and drops the field once it is confirmed."""
+    coordinator = await _coordinator(hass)
+    handler = await _options_handler(hass, coordinator)
+    await handler.async_step_cloud_guided()
+    _stub_probe(coordinator, ["55"])
+    await _run_wait(handler)
+
+    first = await handler.async_step_cloud_name()
+    assert "download_course" in str(first["data_schema"].schema)
+    # Prefilled from the observation the fixture already carries.
+    assert handler._cloud_course == "87"
+
+    await handler.async_step_cloud_name({"name": "Sports", "download_course": "87"})
+    await _flush(hass)
+    assert "cloud:55" in _cycle_options(coordinator)
+
+    # Confirmed now, so the next program is asked for its name only.
+    handler._cloud_slot = "6B"
+    second = await handler.async_step_cloud_name()
+    assert "download_course" not in str(second["data_schema"].schema)
+
+
+async def test_guided_rejects_a_download_course_the_device_does_not_offer(hass: HomeAssistant):
+    coordinator = await _coordinator(hass)
+    handler = await _options_handler(hass, coordinator)
+    await handler.async_step_cloud_guided()
+    _stub_probe(coordinator, ["55"])
+    await _run_wait(handler)
+
+    result = await handler.async_step_cloud_name({"name": "Sports", "download_course": "FF"})
+    assert result["errors"] == {"base": "cloud_course_unknown_course"}
+    assert coordinator.cloud_courses.snapshot()["download_course"] is None

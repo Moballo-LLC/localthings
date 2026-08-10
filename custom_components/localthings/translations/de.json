@@ -1454,29 +1454,30 @@
         }
       },
       "cloud_courses": {
-        "title": "Download cycles",
-        "description": "Guided setup walks the appliance with you: select a downloaded cycle on the appliance and name it as it's found, one at a time.\n\nEdit names shows everything found so far at once — use it to rename or correct something later.",
+        "title": "Download-Programme",
+        "description": "Die geführte Einrichtung begleitet Sie am Gerät: Wählen Sie am Gerät ein heruntergeladenes Programm aus und benennen Sie es, sobald es gefunden wird – eines nach dem anderen.\n\nNamen bearbeiten zeigt alles bisher Gefundene auf einmal an – nutzen Sie es später, um etwas umzubenennen oder zu korrigieren.",
         "menu_options": {
-          "cloud_guided": "Guided setup",
-          "cloud_manual": "Edit names"
+          "cloud_guided": "Geführte Einrichtung",
+          "cloud_manual": "Namen bearbeiten"
         }
       },
       "cloud_wait": {
-        "title": "Download cycles"
+        "title": "Download-Programme"
       },
       "cloud_name": {
-        "title": "Name this cycle",
-        "description": "The appliance switched to a downloaded cycle (slot {slot}) and reports {remaining} remaining.\n\nGive it the name you want to see in Home Assistant, then select the next one on the appliance. Leave it blank to keep this cycle out of the list.\n\nNamed so far ({named} of {total}): {named_list}\n\nNames must be unique. You can close this dialog whenever you like — names are saved as you go.",
+        "title": "Dieses Programm benennen",
+        "description": "Das Gerät ist zu einem heruntergeladenen Programm gewechselt (Platz {slot}) und meldet eine verbleibende Zeit von {remaining}.\n\nGeben Sie den Namen ein, den Sie in Home Assistant sehen möchten, und wählen Sie dann am Gerät das nächste aus. Lassen Sie das Feld leer, um dieses Programm von der Liste auszuschließen.\n\nBisher benannt ({named} von {total}): {named_list}\n\nNamen müssen eindeutig sein. Sie können dieses Fenster jederzeit schließen – die Namen werden fortlaufend gespeichert.",
         "data": {
-          "name": "Name"
+          "name": "Name",
+          "download_course": "Programmcode des Download-Programms"
         }
       },
       "cloud_timeout": {
-        "title": "No cycle selected",
-        "description": "Nothing was selected on the appliance. Make sure it's set to the Download cycle, then step through the downloaded programs.\n\nNamed so far ({named} of {total}): {named_list}\n\nEverything named so far is already saved.",
+        "title": "Kein Programm ausgewählt",
+        "description": "Am Gerät wurde nichts ausgewählt. Stellen Sie sicher, dass es auf das Download-Programm eingestellt ist, und gehen Sie dann die heruntergeladenen Programme durch.\n\nBisher benannt ({named} von {total}): {named_list}\n\nAlles bisher Benannte ist bereits gespeichert.",
         "menu_options": {
-          "cloud_guided": "Wait again",
-          "cloud_finish": "Finish"
+          "cloud_guided": "Erneut warten",
+          "cloud_finish": "Fertig"
         }
       }
     },
@@ -1490,7 +1491,7 @@
       "not_loaded": "Dieses Gerät ist noch nicht verbunden. Versuchen Sie es erneut, sobald es geladen wurde."
     },
     "progress": {
-      "cloud_wait": "Select a downloaded cycle on the appliance now.\n\nNamed so far ({named} of {total}): {named_list}\n\nYou can close this dialog at any time — names are saved as you go."
+      "cloud_wait": "Wählen Sie jetzt ein heruntergeladenes Programm am Gerät aus.\n\nBisher benannt ({named} von {total}): {named_list}\n\nSie können dieses Fenster jederzeit schließen – die Namen werden fortlaufend gespeichert."
     }
   },
   "issues": {

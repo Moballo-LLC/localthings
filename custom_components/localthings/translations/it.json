@@ -1454,29 +1454,30 @@
         }
       },
       "cloud_courses": {
-        "title": "Download cycles",
-        "description": "Guided setup walks the appliance with you: select a downloaded cycle on the appliance and name it as it's found, one at a time.\n\nEdit names shows everything found so far at once — use it to rename or correct something later.",
+        "title": "Cicli scaricati",
+        "description": "La configurazione guidata accompagna l'utente al dispositivo: selezionare un ciclo scaricato sul dispositivo e assegnargli un nome non appena viene rilevato, uno alla volta.\n\nModifica nomi mostra tutto ciò che è stato trovato finora in una sola volta — usarla in seguito per rinominare o correggere qualcosa.",
         "menu_options": {
-          "cloud_guided": "Guided setup",
-          "cloud_manual": "Edit names"
+          "cloud_guided": "Configurazione guidata",
+          "cloud_manual": "Modifica nomi"
         }
       },
       "cloud_wait": {
-        "title": "Download cycles"
+        "title": "Cicli scaricati"
       },
       "cloud_name": {
-        "title": "Name this cycle",
-        "description": "The appliance switched to a downloaded cycle (slot {slot}) and reports {remaining} remaining.\n\nGive it the name you want to see in Home Assistant, then select the next one on the appliance. Leave it blank to keep this cycle out of the list.\n\nNamed so far ({named} of {total}): {named_list}\n\nNames must be unique. You can close this dialog whenever you like — names are saved as you go.",
+        "title": "Assegna un nome a questo ciclo",
+        "description": "Il dispositivo è passato a un ciclo scaricato (slot {slot}) e segnala {remaining} rimanenti.\n\nAssegnargli il nome che si desidera vedere in Home Assistant, quindi selezionare il successivo sul dispositivo. Lasciare vuoto per escludere questo ciclo dall'elenco.\n\nAssegnati finora ({named} di {total}): {named_list}\n\nI nomi devono essere univoci. È possibile chiudere questa finestra in qualsiasi momento — i nomi vengono salvati man mano.",
         "data": {
-          "name": "Name"
+          "name": "Nome",
+          "download_course": "Codice programma del ciclo Scaricato"
         }
       },
       "cloud_timeout": {
-        "title": "No cycle selected",
-        "description": "Nothing was selected on the appliance. Make sure it's set to the Download cycle, then step through the downloaded programs.\n\nNamed so far ({named} of {total}): {named_list}\n\nEverything named so far is already saved.",
+        "title": "Nessun ciclo selezionato",
+        "description": "Non è stato selezionato nulla sul dispositivo. Assicurarsi che sia impostato sul ciclo Scaricato, quindi scorrere i programmi scaricati.\n\nAssegnati finora ({named} di {total}): {named_list}\n\nTutto ciò che è stato assegnato finora è già salvato.",
         "menu_options": {
-          "cloud_guided": "Wait again",
-          "cloud_finish": "Finish"
+          "cloud_guided": "Attendi di nuovo",
+          "cloud_finish": "Fine"
         }
       }
     },
@@ -1490,7 +1491,7 @@
       "not_loaded": "Questo dispositivo non è ancora connesso. Riprova dopo il caricamento."
     },
     "progress": {
-      "cloud_wait": "Select a downloaded cycle on the appliance now.\n\nNamed so far ({named} of {total}): {named_list}\n\nYou can close this dialog at any time — names are saved as you go."
+      "cloud_wait": "Selezionare ora un ciclo scaricato sul dispositivo.\n\nAssegnati finora ({named} di {total}): {named_list}\n\nÈ possibile chiudere questa finestra in qualsiasi momento — i nomi vengono salvati man mano."
     }
   },
   "issues": {

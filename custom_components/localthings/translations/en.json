@@ -1468,7 +1468,8 @@
         "title": "Name this cycle",
         "description": "The appliance switched to a downloaded cycle (slot {slot}) and reports {remaining} remaining.\n\nGive it the name you want to see in Home Assistant, then select the next one on the appliance. Leave it blank to keep this cycle out of the list.\n\nNamed so far ({named} of {total}): {named_list}\n\nNames must be unique. You can close this dialog whenever you like — names are saved as you go.",
         "data": {
-          "name": "Name"
+          "name": "Name",
+          "download_course": "Download cycle course code"
         }
       },
       "cloud_timeout": {

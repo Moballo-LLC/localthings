@@ -10,7 +10,7 @@ import threading
 import time
 import zlib
 from datetime import timedelta
-from typing import Any
+from typing import Any, cast
 
 import cbor2
 from homeassistant.config_entries import ConfigEntry
@@ -74,6 +74,10 @@ from .registry.subdevices import (
     enumerate_subdevices,
     normalize_seed_batch,
 )
+
+# Sentinel for apply_cloud_courses: "leave this field as it is",
+# distinct from None which means "clear it".
+_KEEP = object()
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -536,17 +540,24 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._observe.apply(cloudcourse.COURSE_HREF, rep, source="poll")
         return cloudcourse.loaded_slot(rep)
 
-    def apply_cloud_courses(self, names: dict[str, str], download_course: str | None) -> None:
+    def apply_cloud_courses(self, names: dict[str, str], download_course: object = _KEEP) -> None:
         """The one mutation path for the cloud-program store (issue #342).
 
         Takes the whole submission at once so a nine-program naming pass is
         one config-entry write rather than nine, and so persistence, the
         canonical-view invalidation and the Repairs refresh can't be done for
         one half of a change and skipped for the other.
+
+        `download_course` defaults to "leave it alone" rather than None.
+        Guided setup submits one name at a time and says nothing about the
+        course; with None as the default that silently cleared a course the
+        user had already confirmed, and since a program is only offerable
+        once both are set, naming things made them disappear.
         """
         for slot, name in names.items():
             self._cloud.set_name(slot, name)
-        self._cloud.set_download_course(download_course)
+        if download_course is not _KEEP:
+            self._cloud.set_download_course(cast("str | None", download_course))
         self._persist_cloud_courses()
 
     @callback

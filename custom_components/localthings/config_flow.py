@@ -1051,8 +1051,13 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
         existing = (coord.cloud_courses.snapshot()["slots"].get(slot) or {}).get("name", "")
 
         if user_input is not None:
-            name = str(user_input.get("name", "")).strip()
-            errors = self._apply_cloud_course_names(coord, [slot], {f"name_{slot}": name})
+            # Rebuilt into the shared validator's shape. `download_course`
+            # is forwarded only when this form actually carried it, so its
+            # absence still means "not asked about" rather than "clear it".
+            payload: dict[str, Any] = {f"name_{slot}": str(user_input.get("name", "")).strip()}
+            if "download_course" in user_input:
+                payload["download_course"] = user_input["download_course"]
+            errors = self._apply_cloud_course_names(coord, [slot], payload)
             if errors:
                 return self._cloud_name_form(coord, slot, existing, errors=errors)
             # Straight back to waiting: the appliance is still sitting on this
@@ -1069,18 +1074,58 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
         """One text field, with the copy switched on whether this program is
         already set up. Re-selecting one is not an error -- it is how someone
         checks their work -- so it gets an edit form rather than a rejection,
-        and the counter deliberately does not move."""
+        and the counter deliberately does not move.
+
+        The Download course joins the form the first time round, and only
+        until it is confirmed. Guided setup would otherwise finish having
+        collected names but no course, and a program needs both before it can
+        be offered -- so the whole walk would produce nothing selectable. It
+        is asked here rather than up front because this is the first moment
+        there is evidence to prefill: the user has just loaded a program, so
+        the course showing alongside it is the Download one.
+        """
         placeholders = self._cloud_progress_placeholders(coord)
         placeholders["slot"] = slot
         placeholders["remaining"] = (
             coord.resource("/operational/state/vs/0").get("x.com.samsung.da.remainingTime") or "--"
         )
+        fields: dict[Any, Any] = {vol.Optional("name", default=existing): _TEXT}
+        if not coord.cloud_courses.snapshot()["download_course"]:
+            fields[
+                vol.Optional("download_course", description={"suggested_value": self._cloud_course})
+            ] = self._cloud_course_selector(coord)
         return self.async_show_form(
             step_id="cloud_name",
-            data_schema=vol.Schema({vol.Optional("name", default=existing): _TEXT}),
+            data_schema=vol.Schema(fields),
             errors=errors or {},
             description_placeholders=placeholders,
             last_step=False,
+        )
+
+    @property
+    def _cloud_course(self) -> str | None:
+        coord = self._coordinator()
+        if coord is None:
+            return None
+        candidates = coord.cloud_courses.download_candidates()
+        return candidates[0] if candidates else None
+
+    def _cloud_course_selector(self, coord):
+        """The appliance's own course codes, observed candidates first.
+
+        custom_value stays off deliberately: whatever lands here becomes the
+        Course_ token of a real write, and a typed-in code the appliance
+        doesn't offer would start something nobody chose.
+        """
+        available = cycle_options(coord.canonical_resources(MAIN))
+        candidates = [c for c in coord.cloud_courses.download_candidates() if c in available]
+        ordered = candidates + [c for c in available if c not in candidates]
+        return SelectSelector(
+            SelectSelectorConfig(
+                options=ordered,
+                custom_value=False,
+                mode=SelectSelectorMode.DROPDOWN,
+            )
         )
 
     async def async_step_cloud_timeout(
@@ -1167,6 +1212,15 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
                 return {"base": "cloud_course_name_duplicate"}
             taken.add(name.casefold())
 
+        # Absent means "this form didn't ask" -- the guided name form drops
+        # the field once the course is confirmed -- which must leave the
+        # stored value alone rather than clearing it. A program is only
+        # offerable when both a name and the course are set, so clearing it
+        # here would make naming things remove them from the cycle list.
+        if "download_course" not in user_input:
+            coord.apply_cloud_courses(names)
+            return {}
+
         # Belt and braces over the selector's own custom_value=False: this
         # value becomes the Course_ token of a real write, so it is checked
         # against the appliance's own course list here too, where the store
@@ -1203,24 +1257,9 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
                 _TEXT
             )
 
-        # Course codes this device actually offers, so the Download course
-        # can only ever be set to one of them. Auto-detected candidates come
-        # first -- see CloudCourses.download_candidates. custom_value stays
-        # off deliberately: whatever lands here becomes the Course_ token of a
-        # real write, and a typed-in code the appliance doesn't offer would
-        # start something nobody chose.
-        available = cycle_options(coord.canonical_resources(MAIN))
-        candidates = [c for c in store.download_candidates() if c in available]
-        ordered = candidates + [c for c in available if c not in candidates]
-        suggested = record["download_course"] or (candidates[0] if candidates else None)
+        suggested = record["download_course"] or self._cloud_course
         fields[vol.Optional("download_course", description={"suggested_value": suggested})] = (
-            SelectSelector(
-                SelectSelectorConfig(
-                    options=ordered,
-                    custom_value=False,
-                    mode=SelectSelectorMode.DROPDOWN,
-                )
-            )
+            self._cloud_course_selector(coord)
         )
 
         pending = [s for s in advertised if s not in slots]
