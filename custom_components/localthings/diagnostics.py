@@ -140,17 +140,20 @@ async def async_get_config_entry_diagnostics(
             "codes": coordinator.learned_snapshot(),
         },
         # Cloud "Download" programs discovered on this device (issue #342),
-        # reported separately for the same reason as learned_modes above.
-        # Payloads are the useful part for triage -- they are the only record
-        # of what a downloaded program contains. The names are not included:
-        # they are the user's own words, and a dump gets pasted into public
-        # issues. Which slots are named is still visible, which is all the
-        # triage question ("is this set up?") actually needs.
+        # reported separately from `resources` for the same reason as
+        # learned_modes above -- the dump there stays exactly what the device
+        # said, and this is what the integration made of it.
+        #
+        # Reported in full, names included. Half of what can go wrong with
+        # this feature is a configuration question -- which programs got
+        # named, which Download course was confirmed, whether a payload was
+        # ever captured for a slot the device advertises -- and none of that
+        # is answerable from the payloads alone. The names are the user's own
+        # words, so this is the one place they appear; they reach a dump only
+        # because its owner chose to download and share it.
         "cloud_courses": {
             "advertised_slots": cloudcourse.advertised_slots(coordinator.cloud_course_rep()),
-            "download_course": cloud_courses["download_course"],
-            "payloads": {slot: rec["blob"] for slot, rec in cloud_courses["slots"].items()},
-            "named_slots": sorted(s for s, rec in cloud_courses["slots"].items() if rec["name"]),
+            **cloud_courses,
         },
         "integration_version": integration.version,
         "smartthings_local_version": stl_version,

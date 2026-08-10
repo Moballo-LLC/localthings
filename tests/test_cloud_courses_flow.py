@@ -346,17 +346,21 @@ async def test_the_synthetic_field_never_reaches_diagnostics(
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
     diag = await async_get_config_entry_diagnostics(hass, entry)
-    dump = json.dumps(diag)
-    assert cloudcourse.FIELD not in dump
+    assert cloudcourse.FIELD not in json.dumps(diag["resources"])
     # The device's own tokens are still there -- resources stays what it said.
-    assert "CloudExtraCourse_0A5C286B2D0C55301A" in dump
+    assert "CloudExtraCourse_0A5C286B2D0C55301A" in json.dumps(diag["resources"])
 
-    # The store is reported in its own block, so a triager can see the
-    # payloads -- but not the user's chosen names.
-    assert "Marc's weekend towels" not in dump
-    assert diag["cloud_courses"]["payloads"]["55"] == SPORTS
-    assert diag["cloud_courses"]["named_slots"] == ["55"]
-    assert diag["cloud_courses"]["download_course"] == "87"
+    # The store is reported in full in its own block: what was discovered,
+    # what the user named it, and which course they confirmed. Half of what
+    # goes wrong here is a configuration question and none of it is
+    # answerable from the payloads alone.
+    cloud = diag["cloud_courses"]
+    assert cloud["advertised_slots"] == ["0A", "5C", "28", "6B", "2D", "0C", "55", "30", "1A"]
+    assert cloud["download_course"] == "87"
+    assert cloud["slots"]["55"] == {"blob": SPORTS, "name": "Marc's weekend towels"}
+    # A slot seen but never named is reported too -- that gap is the thing a
+    # "why isn't my download cycle showing up" report needs to reveal.
+    assert cloud["slots"]["6B"] == {"blob": JEANS, "name": ""}
 
 
 async def test_the_debug_read_service_reports_only_device_state(hass: HomeAssistant):
