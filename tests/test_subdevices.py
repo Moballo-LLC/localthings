@@ -697,9 +697,7 @@ def test_uuid_prefixed_file_links_do_not_trigger_flat_subdevice_probe():
     sess = _FakeSession({})
     probes: dict[str, bool] = {}
 
-    subdevices, _extra = enumerate_subdevices(
-        sess, {}, oic_res, probe_log=probes.__setitem__
-    )
+    subdevices, _extra = enumerate_subdevices(sess, {}, oic_res, probe_log=probes.__setitem__)
 
     assert subdevices == []
     assert not any(href.startswith(f"/{_UUID}/") for href in probes)
