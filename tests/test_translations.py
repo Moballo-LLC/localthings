@@ -190,6 +190,38 @@ def test_confirmed_washer_table_02_missing_course_names():
     }
 
 
+def test_reported_washer_standard_courses_all_have_table_02_labels():
+    """Every non-personal code in the reported washer's live course list
+    must resolve through the Table_02 catalog instead of appearing as raw
+    text. F1/F3 deliberately come from device-provided personal names.
+    """
+    states = _load("en")["entity"]["select"]["washer_cycle_table_02"]["state"]
+    reported = {
+        "69",
+        "6f",
+        "73",
+        "75",
+        "78",
+        "01",
+        "71",
+        "96",
+        "88",
+        "70",
+        "6d",
+        "6a",
+        "76",
+        "72",
+        "6c",
+        "6e",
+        "6b",
+        "77",
+        "74",
+        "79",
+    }
+
+    assert reported <= states.keys()
+
+
 def test_confirmed_dishwasher_course_names():
     states = _load("en")["entity"]["select"]["dishwasher_cycle"]["state"]
     assert {

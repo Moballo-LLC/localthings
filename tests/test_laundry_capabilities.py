@@ -54,6 +54,45 @@ class TestCourseHelpers:
         assert laundry.cycle_options({}) == []
         assert laundry.cycle_options({"/wm/editcourse/vs/0": {}}) == []
 
+    def test_decodes_reported_washer_course_table_including_personal_slots(self):
+        """Real DA_WM_TP1_21_COMMON diagnostics, with every selectable
+        standard and personal-course code preserved in the device's order.
+        F1/F3 are part of the packed list; their labels come from the
+        companion personal-course resource tested below.
+        """
+        resources = {
+            "/wm/editcourse/vs/0": {
+                "x.com.samsung.da.editCourseList": (
+                    "EditCourseList_696F73757801719688706D6A76726C6E6B777479F1F3"
+                ),
+            },
+        }
+
+        assert laundry.cycle_options(resources) == [
+            "69",
+            "6F",
+            "73",
+            "75",
+            "78",
+            "01",
+            "71",
+            "96",
+            "88",
+            "70",
+            "6D",
+            "6A",
+            "76",
+            "72",
+            "6C",
+            "6E",
+            "6B",
+            "77",
+            "74",
+            "79",
+            "F1",
+            "F3",
+        ]
+
     def test_option_value(self):
         opts = ["DeviceType_0167", "Course_1C", "GMT_04"]
         assert laundry.option_value(opts, "Course") == "1C"
@@ -221,6 +260,37 @@ class TestCourseCodesFromSupportedOptions:
             "86",
             "07",
             "90",
+            "8D",
+            "8E",
+            "8F",
+        ]
+
+    def test_decodes_reported_dishwasher_course_table_without_editcourse(self):
+        """Real DA_DW_A51_20_COMMON diagnostics: the board has no
+        /wm/editcourse/vs/0, so every selectable code must come from its
+        packed supportedOptions table, including the newer 82/8A/A7/A8/8C
+        family that previously appeared as raw UI text.
+        """
+        resources = {
+            "/course/vs/0": {
+                "x.com.samsung.da.options": ["Course_82"],
+                "x.com.samsung.da.supportedOptions": [
+                    "482E0026002F00270028AE0026002F0027002A7E0026002F00270028"
+                    "0E0006000F0027000A8E0026002F002700288E0006000F00070008C"
+                    "E0026002F00270028DE0026002F00270028EE0006000F00270028FE"
+                    "0006002F0027002"
+                ],
+            },
+        }
+
+        assert laundry.cycle_options(resources) == [
+            "82",
+            "8A",
+            "A7",
+            "80",
+            "A8",
+            "88",
+            "8C",
             "8D",
             "8E",
             "8F",
