@@ -20,6 +20,7 @@ states exist, which is something the Python side genuinely needs to know:
 Reading it from the catalog instead of restating it in Python means adding a
 state or a course table is a one-file change, and the two can't drift.
 """
+
 from __future__ import annotations
 
 import json
@@ -28,8 +29,8 @@ from pathlib import Path
 # Read at import, not lazily: custom integrations are imported in an executor
 # thread, so this stays off the event loop no matter who asks first.
 _ENTITY_CATALOG: dict[str, dict[str, dict]] = json.loads(
-    (Path(__file__).parent / 'translations' / 'en.json').read_text(encoding='utf-8')
-).get('entity', {})
+    (Path(__file__).parent / "translations" / "en.json").read_text(encoding="utf-8")
+).get("entity", {})
 
 
 def has_entity_translation(platform: str, translation_key: str) -> bool:
@@ -46,4 +47,4 @@ def translated_states(platform: str, translation_key: str) -> frozenset[str]:
     leave the device's value untouched.
     """
     entry = _ENTITY_CATALOG.get(platform, {}).get(translation_key)
-    return frozenset(entry.get('state', ())) if entry else frozenset()
+    return frozenset(entry.get("state", ())) if entry else frozenset()

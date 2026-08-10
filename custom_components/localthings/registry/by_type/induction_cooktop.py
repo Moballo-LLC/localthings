@@ -11,20 +11,24 @@ units pair with. Distinct registry key from cooktop.REGISTRY ('cooktop')
 embedded in /mode/vs/0's options array, a completely different OCF
 surface that happens to share the English word "cooktop").
 """
-from ..capabilities import common, cooktop as cooktop_caps, ignored
+
+from ..capabilities import common, ignored
+from ..capabilities import cooktop as cooktop_caps
 from ..capabilities import range as range_caps
 from ._base import DeviceRegistry, _build
 
 REGISTRY = DeviceRegistry(
-    name='induction_cooktop',
-    capabilities=_build([
-        *ignored.IGNORED,
-        *common.UNIVERSAL,
-        *common.POWER,
-        range_caps.COOKTOP_STATUS,
-        range_caps.COOKTOP_SPEC,
-        range_caps.COOKTOP_SAFETY,
-        range_caps.PROBE_STATUS,
-        cooktop_caps.PAIRED_HOOD_STATUS,
-    ]),
+    name="induction_cooktop",
+    capabilities=_build(
+        [
+            *ignored.IGNORED,
+            *common.UNIVERSAL,
+            *common.POWER,
+            range_caps.COOKTOP_STATUS,
+            range_caps.COOKTOP_SPEC,
+            range_caps.COOKTOP_SAFETY,
+            range_caps.PROBE_STATUS,
+            cooktop_caps.PAIRED_HOOD_STATUS,
+        ]
+    ),
 )

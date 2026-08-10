@@ -1,0 +1,33 @@
+{
+  "state_keys": [
+    "air_filter_status",
+    "air_filter_threshold",
+    "air_filter_usage",
+    "air_filter_usage_hours",
+    "air_purify",
+    "alarm_code",
+    "auto_clean",
+    "auto_clean_progress",
+    "auto_clean_running",
+    "beep",
+    "climate",
+    "current_temperature_c",
+    "diagnosis_status",
+    "display_light",
+    "energy_kwh",
+    "energy_saved_kwh",
+    "firmware_update",
+    "humidity",
+    "mute_once",
+    "odor_controller_active",
+    "odor_controller_progress",
+    "power_energy_kwh",
+    "power_watts",
+    "selfcheck_error",
+    "selfcheck_result",
+    "selfcheck_status",
+    "tropical_night_mode",
+    "uv_led",
+    "ventilation_alarm"
+  ]
+}

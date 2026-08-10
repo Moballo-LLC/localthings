@@ -11,10 +11,11 @@ doesn't have that filter) is *not* a gap — a maintainer already looked at
 that href and decided how to handle it. Only hrefs absent from the registry
 entirely are reported.
 """
+
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Callable, Iterable, Optional
 
 from .capability import Capability
 from .entities import SamsungEntityDescription
@@ -26,24 +27,23 @@ class BoundEntity:
     href: str
     capability: Capability
     desc: SamsungEntityDescription
-    instance: str = ''
-    key_override: Optional[str] = None
-    instance_name: Optional[str] = None
+    instance: str = ""
+    key_override: str | None = None
+    instance_name: str | None = None
     # Which logical indoor subdevice (issue #177) this entity belongs to.
-    # `href` above is always the *actual*, on-the-wire href for that
-    # subdevice -- MAIN's
-    # to_actual is the identity transform, so every device with no subdevices
-    # behaves exactly as before this field existed.
+    # `href` above is always the actual, on-the-wire href for that
+    # subdevice -- MAIN's to_actual is the identity transform, so a device
+    # with no subdevices is unaffected.
     subdevice: Subdevice = MAIN
 
 
 def _snake_to_title(s: str) -> str:
     """'CUBED_ICE'/'cubed_ice' -> 'Cubed Ice'. Shared with entity.py's
     _derive_name, which applies the same transform to an href-derived key."""
-    return s.replace('_', ' ').title()
+    return s.replace("_", " ").title()
 
 
-def _instance_name(cap: Capability, rep: dict) -> Optional[str]:
+def _instance_name(cap: Capability, rep: dict) -> str | None:
     """Normalize `cap.name_field`'s raw value ("CUBED_ICE" -> "Cubed Ice")
     for use as a display-name prefix, or None if the cap doesn't declare
     one or the device didn't report it."""
@@ -57,15 +57,20 @@ def _instance_name(cap: Capability, rep: dict) -> Optional[str]:
 
 def instance_suffix(href: str) -> str:
     """'' for the index-0 instance, else '_<n>' from the trailing segment."""
-    tail = href.rstrip('/').rsplit('/', 1)[-1]
-    if tail.isdigit() and tail != '0':
-        return f'_{tail}'
-    return ''
+    tail = href.rstrip("/").rsplit("/", 1)[-1]
+    if tail.isdigit() and tail != "0":
+        return f"_{tail}"
+    return ""
 
 
-def _bind(cap: Capability, href: str, inst: str, inst_name: Optional[str],
-          key_prefix: Optional[str] = None,
-          subdevice: Subdevice = MAIN) -> list[BoundEntity]:
+def _bind(
+    cap: Capability,
+    href: str,
+    inst: str,
+    inst_name: str | None,
+    key_prefix: str | None = None,
+    subdevice: Subdevice = MAIN,
+) -> list[BoundEntity]:
     """Build one BoundEntity per entity on `cap`, sharing the instance/
     key-prefix/instance-name computed once by the caller.
 
@@ -74,10 +79,15 @@ def _bind(cap: Capability, href: str, inst: str, inst_name: Optional[str],
     actually reads/writes (identity for MAIN, so single-subdevice devices are
     unaffected -- see subdevices.py)."""
     return [
-        BoundEntity(href=subdevice.to_actual(href), capability=cap, desc=desc,
-                    instance=inst,
-                    key_override=f'{key_prefix}_{desc.key}' if key_prefix else None,
-                    instance_name=inst_name, subdevice=subdevice)
+        BoundEntity(
+            href=subdevice.to_actual(href),
+            capability=cap,
+            desc=desc,
+            instance=inst,
+            key_override=f"{key_prefix}_{desc.key}" if key_prefix else None,
+            instance_name=inst_name,
+            subdevice=subdevice,
+        )
         for desc in cap.entities
     ]
 
@@ -86,35 +96,30 @@ def discover(
     resources: dict[str, dict],
     registry: dict[str, list[Capability]],
     pattern_caps: Iterable[Capability] = (),
-    log: Optional[Callable[[str], None]] = None,
-    tier_log: Optional[Callable[[str, str], None]] = None,
+    log: Callable[[str], None] | None = None,
+    tier_log: Callable[[str, str], None] | None = None,
     subdevice: Subdevice = MAIN,
 ) -> list[BoundEntity]:
-    """`tier_log(href, poll_tier)` fires for every href a capability actually
-    matches, even a no-entity "coverage-only" capability (see COVERAGE lists
-    in capabilities/*.py) that `_bind()` turns into zero `BoundEntity` rows.
-    Callers that need a href's poll cadence (the coordinator's hot/warm
-    sub-poll and OBSERVE-attempt lists) must use this, not `bound` -- a
-    coverage-only capability's `poll_tier` would otherwise be silently
-    dropped since it never appears in `bound`.
+    """`tier_log(href, poll_tier)` fires for every href a capability
+    actually matches, even a no-entity "coverage-only" capability that
+    `_bind()` turns into zero `BoundEntity` rows. Callers that need a
+    href's poll cadence must use this, not `bound` -- a coverage-only
+    capability's `poll_tier` would otherwise never appear in `bound`.
 
-    `resources` is always keyed by *canonical* hrefs -- for a subdevice
-    (issue #177) that means its own canonical view (see
-    subdevices.canonical_view), the same shape as a plain single-subdevice
-    device's resources dict, so registry lookups/rt_filter/match_fn/
-    instance_suffix all behave identically regardless of which subdevice is
-    being discovered.
-    `subdevice` only affects the *href* stamped onto each BoundEntity (via
-    `_bind`, see above) and the href `log`/`tier_log` report -- both the
-    real, subscribable/pollable path, not the canonical one the registry is
-    keyed on.
+    `resources` is always keyed by canonical hrefs -- for a subdevice
+    (issue #177), its own canonical view (see subdevices.canonical_view),
+    the same shape as a single-subdevice device's resources dict, so
+    registry lookups behave identically regardless of which subdevice is
+    being discovered. `subdevice` only affects the href stamped onto each
+    BoundEntity and the href `log`/`tier_log` report -- the real,
+    subscribable/pollable path, not the canonical one.
     """
     out: list[BoundEntity] = []
 
     for href, rep in resources.items():
         if not isinstance(rep, dict):
             continue
-        rts = rep.get('rt') or ()
+        rts = rep.get("rt") or ()
         caps = registry.get(href) or []
         matched = False
 
@@ -142,10 +147,17 @@ def discover(
                 continue
             inst = instance_suffix(href)
             # Auto-derive key prefix from href segments (skip digits and 'vs')
-            src = href[len(cap.href_prefix):] if (cap.strip_prefix_in_key and cap.href_prefix) else href
-            segs = [s for s in src.strip('/').split('/') if s and not s.isdigit() and s != 'vs']
-            out.extend(_bind(cap, href, inst, _instance_name(cap, rep), '_'.join(segs),
-                              subdevice=subdevice))
+            src = (
+                href[len(cap.href_prefix) :]
+                if (cap.strip_prefix_in_key and cap.href_prefix)
+                else href
+            )
+            segs = [s for s in src.strip("/").split("/") if s and not s.isdigit() and s != "vs"]
+            out.extend(
+                _bind(
+                    cap, href, inst, _instance_name(cap, rep), "_".join(segs), subdevice=subdevice
+                )
+            )
             matched = True
             if tier_log is not None:
                 tier_log(subdevice.to_actual(href), cap.poll_tier)

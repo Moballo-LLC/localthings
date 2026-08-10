@@ -1,0 +1,27 @@
+{
+  "state_keys": [
+    "air_filter_status",
+    "air_filter_threshold",
+    "air_filter_usage",
+    "air_filter_usage_hours",
+    "alarm_code",
+    "auto_clean",
+    "auto_clean_progress",
+    "auto_clean_running",
+    "child_lock",
+    "display",
+    "energy_kwh",
+    "energy_saved_kwh",
+    "firmware_update",
+    "humidity",
+    "mute_once",
+    "operating_mode",
+    "power_switch",
+    "power_watts",
+    "target_humidity",
+    "watertank_full_alarm_status",
+    "watertank_light",
+    "watertank_light_brightness",
+    "watertank_light_color"
+  ]
+}

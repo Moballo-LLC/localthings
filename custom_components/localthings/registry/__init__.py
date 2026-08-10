@@ -6,8 +6,9 @@ to the matching capabilities, and flattens the result into HA-ready entity
 state. The DTLS/CoAP transport itself lives in the smartthings-local
 package, not here.
 """
-from .adapter import flatten, _key
+
+from .adapter import _key, flatten
 from .discovery import BoundEntity, discover
 from .registry import CAPABILITIES
 
-__all__ = ['CAPABILITIES', 'discover', 'BoundEntity', 'flatten', '_key']
+__all__ = ["CAPABILITIES", "BoundEntity", "_key", "discover", "flatten"]

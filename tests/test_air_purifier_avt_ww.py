@@ -8,25 +8,26 @@ diagnostics showed device_type 'unknown' with empty oneUiVersion and every
 resource unbound -- once routed to the existing air_purifier registry, every
 resource here binds with zero gaps.
 """
+
 from custom_components.localthings.registry.adapter import flatten
 from custom_components.localthings.registry.by_type import for_device_by_model
 from custom_components.localthings.registry.discovery import discover
-
 from tests.conftest import _load_device
 
 
 def _resources():
-    return _load_device('air_purifier_avt_ww')
+    return _load_device("air_purifier_avt_ww")
 
 
 def _reg(resources):
-    info = resources['/information/vs/0']
+    info = resources["/information/vs/0"]
     return for_device_by_model(
-        info['x.com.samsung.da.modelNum'], info['x.com.samsung.da.description'])
+        info["x.com.samsung.da.modelNum"], info["x.com.samsung.da.description"]
+    )
 
 
 def test_resolves_to_air_purifier_registry():
-    assert _reg(_resources()).name == 'air_purifier'
+    assert _reg(_resources()).name == "air_purifier"
 
 
 def test_no_unbound_hrefs():
@@ -45,9 +46,9 @@ def test_wind_strength_fan_preset_names():
     reg = _reg(resources)
     bound = discover(resources, reg.capabilities, reg.pattern_capabilities)
     state = flatten(bound, resources)
-    assert state['wind_strength_fan'] == '87'
-    wind = resources['/wind/strength/vs/0']
-    assert wind['x.com.samsung.da.modesName'] == ['SMART', 'MAX', 'WINDFREE', 'Sleep']
+    assert state["wind_strength_fan"] == "87"
+    wind = resources["/wind/strength/vs/0"]
+    assert wind["x.com.samsung.da.modesName"] == ["SMART", "MAX", "WINDFREE", "Sleep"]
 
 
 def test_air_quality_and_filter_sensors_present():
@@ -55,8 +56,8 @@ def test_air_quality_and_filter_sensors_present():
     reg = _reg(resources)
     bound = discover(resources, reg.capabilities, reg.pattern_capabilities)
     state = flatten(bound, resources)
-    assert state['dust'] == 10
-    assert state['fine_dust'] == 9
-    assert state['odor'] == 1
-    assert state['hepa_filter_usage'] == 0
-    assert state['hepa_filter_status'] == 'normal'
+    assert state["dust"] == 10
+    assert state["fine_dust"] == 9
+    assert state["odor"] == 1
+    assert state["hepa_filter_usage"] == 30
+    assert state["hepa_filter_status"] == "normal"

@@ -5,6 +5,7 @@ write_fn/validate_fn, so this only exercises the primitive itself: it
 POSTs exactly the caller's body, reads the href back, and validates its
 inputs.
 """
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock
@@ -16,15 +17,19 @@ from homeassistant.exceptions import ServiceValidationError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.localthings.const import (
-    CONF_HOST, CONF_LEAF_CERT_PEM, CONF_LEAF_KEY_PEM, CONF_PORT, DOMAIN,
+    CONF_HOST,
+    CONF_LEAF_CERT_PEM,
+    CONF_LEAF_KEY_PEM,
+    CONF_PORT,
+    DOMAIN,
 )
 from custom_components.localthings.coordinator import LocalThingsCoordinator
 
 ENTRY_DATA = {
-    CONF_HOST: '10.0.0.199',
+    CONF_HOST: "10.0.0.199",
     CONF_PORT: 49154,
-    CONF_LEAF_CERT_PEM: '-----BEGIN CERTIFICATE-----\nTEST-LEAF\n-----END CERTIFICATE-----',
-    CONF_LEAF_KEY_PEM: '-----BEGIN PRIVATE KEY-----\nTEST-LEAF-KEY\n-----END PRIVATE KEY-----',
+    CONF_LEAF_CERT_PEM: "-----BEGIN CERTIFICATE-----\nTEST-LEAF\n-----END CERTIFICATE-----",
+    CONF_LEAF_KEY_PEM: "-----BEGIN PRIVATE KEY-----\nTEST-LEAF-KEY\n-----END PRIVATE KEY-----",
 }
 
 
@@ -41,7 +46,7 @@ class _FakeRawWriteSession:
 
     def post(self, path_segs, payload, timeout=None):
         self.post_calls.append((list(path_segs), payload))
-        return self._post_code, b''
+        return self._post_code, b""
 
     def get(self, path_segs, timeout=None):
         self.get_calls.append(list(path_segs))
@@ -54,7 +59,9 @@ class _FakeRawWriteSession:
 @pytest.fixture
 def coordinator(hass: HomeAssistant) -> LocalThingsCoordinator:
     entry = MockConfigEntry(
-        domain=DOMAIN, data=ENTRY_DATA, unique_id='localthings_RAWWRITE-TEST',
+        domain=DOMAIN,
+        data=ENTRY_DATA,
+        unique_id="localthings_RAWWRITE-TEST",
     )
     entry.add_to_hass(hass)
     coord = LocalThingsCoordinator(hass, entry)
@@ -66,63 +73,63 @@ def coordinator(hass: HomeAssistant) -> LocalThingsCoordinator:
 
 
 async def test_raw_write_splits_href_and_posts_exact_body(coordinator) -> None:
-    fake = _FakeRawWriteSession(post_code=0x44, get_rep={'x.field': 'after'})
+    fake = _FakeRawWriteSession(post_code=0x44, get_rep={"x.field": "after"})
     coordinator._session = fake
 
-    body = {'x.com.samsung.da.field': 'value', 'n': 1}
-    code, new_rep = await coordinator.async_raw_write('/course/vs/0', body)
+    body = {"x.com.samsung.da.field": "value", "n": 1}
+    code, new_rep = await coordinator.async_raw_write("/course/vs/0", body)
 
     assert len(fake.post_calls) == 1
     posted_path, posted_bytes = fake.post_calls[0]
-    assert posted_path == ['course', 'vs', '0']
+    assert posted_path == ["course", "vs", "0"]
     assert cbor2.loads(posted_bytes) == body
 
     assert code == 0x44
-    assert new_rep == {'x.field': 'after'}
+    assert new_rep == {"x.field": "after"}
     coordinator.async_request_refresh.assert_awaited_once()
 
 
 async def test_raw_write_reads_href_back_for_ground_truth(coordinator) -> None:
-    fake = _FakeRawWriteSession(post_code=0x45, get_rep={'value': 'confirmed'})
+    fake = _FakeRawWriteSession(post_code=0x45, get_rep={"value": "confirmed"})
     coordinator._session = fake
 
-    code, new_rep = await coordinator.async_raw_write('/washer/vs/0', {'a': 1})
+    code, new_rep = await coordinator.async_raw_write("/washer/vs/0", {"a": 1})
 
-    assert fake.get_calls == [['washer', 'vs', '0']]
+    assert fake.get_calls == [["washer", "vs", "0"]]
     assert code == 0x45
-    assert new_rep == {'value': 'confirmed'}
+    assert new_rep == {"value": "confirmed"}
 
 
 async def test_raw_write_returns_coap_code_from_post_not_get(coordinator) -> None:
     """The returned code reflects the write's own response, even though a
     follow-up GET (which could carry a different code in principle) runs
     right after it."""
-    fake = _FakeRawWriteSession(post_code=0x80, get_rep={'value': 1})
+    fake = _FakeRawWriteSession(post_code=0x80, get_rep={"value": 1})
     coordinator._session = fake
 
-    code, _ = await coordinator.async_raw_write('/test/vs/0', {'a': 1})
+    code, _ = await coordinator.async_raw_write("/test/vs/0", {"a": 1})
 
     assert code == 0x80
 
 
 async def test_raw_write_rejects_empty_dict(coordinator) -> None:
     with pytest.raises(ServiceValidationError):
-        await coordinator.async_raw_write('/washer/vs/0', {})
+        await coordinator.async_raw_write("/washer/vs/0", {})
 
 
 async def test_raw_write_rejects_non_dict_payload(coordinator) -> None:
     with pytest.raises(ServiceValidationError):
-        await coordinator.async_raw_write('/washer/vs/0', ['not', 'a', 'dict'])  # type: ignore[arg-type]
+        await coordinator.async_raw_write("/washer/vs/0", ["not", "a", "dict"])  # type: ignore[arg-type]
 
 
 async def test_raw_write_rejects_empty_href(coordinator) -> None:
     with pytest.raises(ServiceValidationError):
-        await coordinator.async_raw_write('', {'a': 1})
+        await coordinator.async_raw_write("", {"a": 1})
 
 
 async def test_raw_write_rejects_root_href(coordinator) -> None:
     with pytest.raises(ServiceValidationError):
-        await coordinator.async_raw_write('/', {'a': 1})
+        await coordinator.async_raw_write("/", {"a": 1})
 
 
 async def test_raw_write_validation_errors_do_not_touch_the_session(coordinator) -> None:
@@ -131,7 +138,7 @@ async def test_raw_write_validation_errors_do_not_touch_the_session(coordinator)
     assert coordinator._session is None
 
     with pytest.raises(ServiceValidationError):
-        await coordinator.async_raw_write('/washer/vs/0', {})
+        await coordinator.async_raw_write("/washer/vs/0", {})
 
     assert coordinator._session is None
     coordinator.async_request_refresh.assert_not_awaited()

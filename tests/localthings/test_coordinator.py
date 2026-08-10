@@ -1,29 +1,39 @@
 """Tests for the LocalThingsCoordinator."""
+
 from __future__ import annotations
 
+import time
 from datetime import timedelta
 from unittest.mock import AsyncMock, patch
 
 import cbor2
 import pytest
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import issue_registry as ir
 
 from custom_components.localthings.const import (
-    CONF_BYPASS_REMOTE_CONTROL, CONF_HOST, DOMAIN, DTLS_LOCAL_PORT_BASE,
+    CONF_BYPASS_REMOTE_CONTROL,
+    CONF_HOST,
+    DOMAIN,
+    DTLS_LOCAL_PORT_BASE,
     SUMMARY_INTERVAL_S,
 )
 from custom_components.localthings.coordinator import (
-    LocalThingsCoordinator, _is_placeholder_serial, _local_source_port,
+    _RECOVERY_RETRY_S,
+    LocalThingsCoordinator,
+    _local_source_port,
 )
+from custom_components.localthings.observe import MODE_OBSERVE, MODE_POLL, PUSH_HEALTH_WINDOW_S
 from custom_components.localthings.registry.capabilities.common import (
     remote_control_enabled,
     remote_control_required_for_write,
 )
-from custom_components.localthings.observe import MODE_OBSERVE, MODE_POLL, PUSH_HEALTH_WINDOW_S
 
-from .conftest import ENTRY_DATA, MOCK_SERIAL
+from .conftest import ENTRY_DATA, MOCK_MODEL, MOCK_SERIAL, FakeObserveSession
+from .conftest import _load_fridge_resources as _load_fridge
 
 
 async def test_first_refresh_runs_discovery(
@@ -47,15 +57,10 @@ async def test_device_info_populated(
 
     coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
     assert coordinator.device_info is not None
-    assert any(
-        DOMAIN in str(i)
-        for i in coordinator.device_info.get('identifiers', set())
-    )
+    assert any(DOMAIN in str(i) for i in coordinator.device_info.get("identifiers", set()))
 
 
-async def test_summary_interval(
-    hass: HomeAssistant, mock_entry, mock_coordinator_session
-) -> None:
+async def test_summary_interval(hass: HomeAssistant, mock_entry, mock_coordinator_session) -> None:
     """Summary poll interval is always SUMMARY_INTERVAL_S."""
     await hass.config_entries.async_setup(mock_entry.entry_id)
     await hass.async_block_till_done()
@@ -64,19 +69,16 @@ async def test_summary_interval(
     assert coordinator.update_interval == timedelta(seconds=SUMMARY_INTERVAL_S)
 
 
-async def test_update_failed_on_persistent_poll_error(
-    hass: HomeAssistant, mock_entry
-) -> None:
+async def test_update_failed_on_persistent_poll_error(hass: HomeAssistant, mock_entry) -> None:
     """ConfigEntryNotReady raised when poll fails even after reconnect."""
-    from homeassistant.exceptions import ConfigEntryNotReady
 
     with (
-        patch('custom_components.localthings.coordinator.LocalThingsCoordinator._connect_session'),
+        patch("custom_components.localthings.coordinator.LocalThingsCoordinator._connect_session"),
         patch(
-            'custom_components.localthings.coordinator.LocalThingsCoordinator._poll_once',
-            side_effect=RuntimeError('connection lost'),
+            "custom_components.localthings.coordinator.LocalThingsCoordinator._poll_once",
+            side_effect=RuntimeError("connection lost"),
         ),
-        patch('custom_components.localthings.coordinator.LocalThingsCoordinator._close_session'),
+        patch("custom_components.localthings.coordinator.LocalThingsCoordinator._close_session"),
     ):
         result = await hass.config_entries.async_setup(mock_entry.entry_id)
         await hass.async_block_till_done()
@@ -88,6 +90,7 @@ async def test_update_failed_on_persistent_poll_error(
 # ---------------------------------------------------------------------------
 # Coverage-gap detection and the Repairs issue it raises
 # ---------------------------------------------------------------------------
+
 
 async def test_discovery_populates_device_type_with_no_unbound_hrefs(
     hass: HomeAssistant, mock_entry, mock_coordinator_session
@@ -103,8 +106,8 @@ async def test_discovery_populates_device_type_with_no_unbound_hrefs(
     await hass.async_block_till_done()
 
     coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
-    assert coordinator.device_type_name == 'refrigerator'
-    assert coordinator.one_ui_version == '7.0 Refrigerator'
+    assert coordinator.device_type_name == "refrigerator"
+    assert coordinator.one_ui_version == "7.0 Refrigerator"
     assert coordinator._unbound_hrefs == []
 
 
@@ -119,29 +122,25 @@ async def test_coverage_gap_issue_absent_for_fully_covered_real_fixture(
     assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
 
 
-def test_run_discovery_detects_washer_via_model_fallback(
-    hass: HomeAssistant, mock_entry
-) -> None:
+def test_run_discovery_detects_washer_via_model_fallback(hass: HomeAssistant, mock_entry) -> None:
     """Washer hardware reports no oneUiVersion; device type must resolve
     via for_device_by_model instead of falling back to generic CAPABILITIES."""
     resources = {
-        '/information/vs/0': {
-            'x.com.samsung.da.modelNum':
-                'DA_WM_TP1_21_COMMON|20375141|20010002001811424AA30217008A0000',
-            'x.com.samsung.da.description':
-                'DA_WM_TP1_21_COMMON_WW5000C/DC92-03495A_B048',
-            'x.com.samsung.da.serialNum': 'TEST-SERIAL',
+        "/information/vs/0": {
+            "x.com.samsung.da.modelNum": "DA_WM_TP1_21_COMMON|20375141|20010002001811424AA30217008A0000",  # noqa: E501
+            "x.com.samsung.da.description": "DA_WM_TP1_21_COMMON_WW5000C/DC92-03495A_B048",
+            "x.com.samsung.da.serialNum": "TEST-SERIAL",
         },
-        '/otninformation/vs/0': {'otnStatus': 'None'},
-        '/power/vs/0': {'x.com.samsung.da.power': 'On'},
+        "/otninformation/vs/0": {"otnStatus": "None"},
+        "/power/vs/0": {"x.com.samsung.da.power": "On"},
     }
     coordinator = LocalThingsCoordinator(hass, mock_entry)
     coordinator._run_discovery(resources)
-    assert coordinator.device_type_name == 'washer'
+    assert coordinator.device_type_name == "washer"
 
 
 def test_run_discovery_falls_back_to_host_for_placeholder_serial(
-    hass: HomeAssistant, mock_entry
+    hass: HomeAssistant, legacy_entry
 ) -> None:
     """Issue #83: the ARTIK051_DONGLE_REF firmware family reports the
     literal string 'Nothing(SVC)' as serialNum on every unit. Left as-is,
@@ -150,21 +149,20 @@ def test_run_discovery_falls_back_to_host_for_placeholder_serial(
     second one's entities silently collide and get dropped. It must be
     treated the same as an empty serial and fall back to the host."""
     resources = {
-        '/information/vs/0': {
-            'x.com.samsung.da.modelNum':
-                'ARTIK051_DONGLE_REF|00127641|00080020001430300100000000000000',
-            'x.com.samsung.da.description': 'ARTIK_REF_17K',
-            'x.com.samsung.da.serialNum': 'Nothing(SVC)',
+        "/information/vs/0": {
+            "x.com.samsung.da.modelNum": "ARTIK051_DONGLE_REF|00127641|00080020001430300100000000000000",  # noqa: E501
+            "x.com.samsung.da.description": "ARTIK_REF_17K",
+            "x.com.samsung.da.serialNum": "Nothing(SVC)",
         },
-        '/otninformation/vs/0': {},
+        "/otninformation/vs/0": {},
     }
-    coordinator = LocalThingsCoordinator(hass, mock_entry)
+    coordinator = LocalThingsCoordinator(hass, legacy_entry)
     coordinator._run_discovery(resources)
-    assert coordinator.device_serial == mock_entry.data[CONF_HOST]
+    assert coordinator.device_serial == legacy_entry.data[CONF_HOST]
 
 
 def test_run_discovery_falls_back_to_host_for_all_f_placeholder_serial(
-    hass: HomeAssistant, mock_entry
+    hass: HomeAssistant, legacy_entry
 ) -> None:
     """Issue #189: the DA_WM_A51_20_COMMON (ARTIK051) laundry board family
     reports a flash-unset sentinel instead of 'Nothing(SVC)' -- every
@@ -173,32 +171,83 @@ def test_run_discovery_falls_back_to_host_for_all_f_placeholder_serial(
     'FFFFFFFFFFFFFFF', so without this fallback they'd collide on
     device_serial exactly like the #83 case above."""
     resources = {
-        '/information/vs/0': {
-            'x.com.samsung.da.modelNum':
-                'DA_WM_A51_20_COMMON|20221341|30010102001211000103000000000000',
-            'x.com.samsung.da.description':
-                'DA_WM_A51_20_COMMON_DVE50A8800/DC92-02835A_0080',
-            'x.com.samsung.da.serialNum': 'FFFFFFFFFFFFFFF',
+        "/information/vs/0": {
+            "x.com.samsung.da.modelNum": "DA_WM_A51_20_COMMON|20221341|30010102001211000103000000000000",  # noqa: E501
+            "x.com.samsung.da.description": "DA_WM_A51_20_COMMON_DVE50A8800/DC92-02835A_0080",
+            "x.com.samsung.da.serialNum": "FFFFFFFFFFFFFFF",
         },
-        '/otninformation/vs/0': {},
+        "/otninformation/vs/0": {},
+    }
+    coordinator = LocalThingsCoordinator(hass, legacy_entry)
+    coordinator._run_discovery(resources)
+    assert coordinator.device_serial == legacy_entry.data[CONF_HOST]
+
+
+# ---------------------------------------------------------------------------
+# Identity is known before the first poll (issue #236)
+# ---------------------------------------------------------------------------
+
+
+def test_identity_is_resolved_before_any_poll(hass: HomeAssistant, mock_entry) -> None:
+    """The coordinator mints registry keys from the entry's stored identity at
+    construction time.
+
+    `device_serial` is what entity unique_ids and device identifiers are built
+    from, and those are permanent. Seeding it with the host meant anything that
+    registered before the first poll returned -- the connection-mode sensor
+    especially, added unconditionally rather than from `bound` -- was written
+    into the registry keyed on the IP address forever, then orphaned when the
+    real identity showed up moments later.
+    """
+    coordinator = LocalThingsCoordinator(hass, mock_entry)
+
+    assert coordinator.device_serial == MOCK_SERIAL
+    assert coordinator.device_info["identifiers"] == {(DOMAIN, MOCK_SERIAL)}
+    assert coordinator.device_info["model"] == MOCK_MODEL
+    assert coordinator.device_info["name"] == f"Samsung Refrigerator ({MOCK_MODEL})"
+    assert mock_entry.data[CONF_HOST] not in str(coordinator.device_info["identifiers"])
+
+
+def test_identity_survives_a_first_poll_that_never_happens(hass: HomeAssistant, mock_entry) -> None:
+    """A device that is slow or unreachable at startup no longer changes what
+    its entities are called -- there is no placeholder left to correct."""
+    coordinator = LocalThingsCoordinator(hass, mock_entry)
+    before = coordinator.device_info["identifiers"]
+
+    coordinator._run_discovery(_load_fridge())
+
+    assert coordinator.device_info["identifiers"] == before
+
+
+def test_discovery_keeps_the_registered_identity(hass: HomeAssistant, mock_entry) -> None:
+    """A different appliance answering on the same IP does not silently re-key
+    the entry's existing devices and entities out from under the registry."""
+    resources = {
+        "/information/vs/0": {
+            "x.com.samsung.da.modelNum": "DA_WM_TP1_21_COMMON|20375141|20010002001811424AA30217008A0000",  # noqa: E501
+            "x.com.samsung.da.description": "DA_WM_TP1_21_COMMON_WW5000C/DC92-03495A_B048",
+            "x.com.samsung.da.serialNum": "SOME-OTHER-APPLIANCE",
+        },
+        "/otninformation/vs/0": {},
     }
     coordinator = LocalThingsCoordinator(hass, mock_entry)
     coordinator._run_discovery(resources)
-    assert coordinator.device_serial == mock_entry.data[CONF_HOST]
+
+    assert coordinator.device_serial == MOCK_SERIAL
 
 
-def test_is_placeholder_serial_catches_all_same_hex_digit():
-    assert _is_placeholder_serial('FFFFFFFFFFFFFFF') is True
-    assert _is_placeholder_serial('ffffffffffffffff') is True
-    assert _is_placeholder_serial('00000000') is True
+def test_discovery_backfills_a_legacy_entry_identity(hass: HomeAssistant, legacy_entry) -> None:
+    """An entry migrated from before identity was stored learns it on its
+    first poll and keeps it, so the *next* restart registers the device fully
+    named before any entity exists instead of renaming it a second time."""
+    from custom_components.localthings.const import CONF_DEVICE_TYPE, CONF_MODEL, CONF_SERIAL
 
+    coordinator = LocalThingsCoordinator(hass, legacy_entry)
+    coordinator._run_discovery(_load_fridge())
 
-def test_is_placeholder_serial_accepts_real_serials_and_short_runs():
-    assert _is_placeholder_serial('0A1B2C3D4E5F') is False
-    assert _is_placeholder_serial('') is False
-    # Too short to be the flash-unset sentinel -- a real serial could
-    # plausibly repeat one hex digit seven times by chance.
-    assert _is_placeholder_serial('FFFFFFF') is False
+    assert legacy_entry.data[CONF_SERIAL] == MOCK_SERIAL
+    assert legacy_entry.data[CONF_MODEL] == MOCK_MODEL
+    assert legacy_entry.data[CONF_DEVICE_TYPE] == "refrigerator"
 
 
 def test_run_discovery_detects_cooktop_via_resource_signature(
@@ -208,21 +257,19 @@ def test_run_discovery_detects_cooktop_via_resource_signature(
     from tests.conftest import _load_device
 
     coordinator = LocalThingsCoordinator(hass, mock_entry)
-    coordinator._run_discovery(_load_device('cooktop'))
+    coordinator._run_discovery(_load_device("cooktop"))
 
-    assert coordinator.device_type_name == 'gas_cooktop'
+    assert coordinator.device_type_name == "gas_cooktop"
     assert coordinator._unbound_hrefs == []
 
 
-def test_run_discovery_detects_range_hood_via_model(
-    hass: HomeAssistant, mock_entry
-) -> None:
+def test_run_discovery_detects_range_hood_via_model(hass: HomeAssistant, mock_entry) -> None:
     from tests.conftest import _load_device
 
     coordinator = LocalThingsCoordinator(hass, mock_entry)
-    coordinator._run_discovery(_load_device('range_hood'))
+    coordinator._run_discovery(_load_device("range_hood"))
 
-    assert coordinator.device_type_name == 'range_hood'
+    assert coordinator.device_type_name == "range_hood"
     assert coordinator._unbound_hrefs == []
 
 
@@ -231,13 +278,13 @@ def test_update_coverage_gap_issue_creates_issue_for_unknown_type(
 ) -> None:
     coordinator = LocalThingsCoordinator(hass, mock_entry)
 
-    coordinator._update_coverage_gap_issue(True, [], 'Test Appliance')
+    coordinator._update_coverage_gap_issue(True, [], "Test Appliance")
 
     issue_id = f"device_gap_{mock_entry.entry_id}"
     issue = ir.async_get(hass).async_get_issue(DOMAIN, issue_id)
     assert issue is not None
-    assert issue.translation_key == 'device_gap'
-    assert issue.translation_placeholders == {'device_name': 'Test Appliance'}
+    assert issue.translation_key == "device_gap"
+    assert issue.translation_placeholders == {"device_name": "Test Appliance"}
     assert issue.is_fixable is False
 
 
@@ -246,7 +293,7 @@ def test_update_coverage_gap_issue_creates_issue_for_unbound_hrefs(
 ) -> None:
     coordinator = LocalThingsCoordinator(hass, mock_entry)
 
-    coordinator._update_coverage_gap_issue(False, ['/mystery/vs/0'], 'Test Appliance')
+    coordinator._update_coverage_gap_issue(False, ["/mystery/vs/0"], "Test Appliance")
 
     issue_id = f"device_gap_{mock_entry.entry_id}"
     assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
@@ -257,29 +304,28 @@ def test_update_coverage_gap_issue_absent_when_fully_covered(
 ) -> None:
     coordinator = LocalThingsCoordinator(hass, mock_entry)
 
-    coordinator._update_coverage_gap_issue(False, [], 'Test Appliance')
+    coordinator._update_coverage_gap_issue(False, [], "Test Appliance")
 
     issue_id = f"device_gap_{mock_entry.entry_id}"
     assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
 
 
-def test_update_coverage_gap_issue_clears_previous_issue(
-    hass: HomeAssistant, mock_entry
-) -> None:
+def test_update_coverage_gap_issue_clears_previous_issue(hass: HomeAssistant, mock_entry) -> None:
     """A later discovery run with no gap deletes an issue raised earlier."""
     coordinator = LocalThingsCoordinator(hass, mock_entry)
     issue_id = f"device_gap_{mock_entry.entry_id}"
 
-    coordinator._update_coverage_gap_issue(True, [], 'Test Appliance')
+    coordinator._update_coverage_gap_issue(True, [], "Test Appliance")
     assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
 
-    coordinator._update_coverage_gap_issue(False, [], 'Test Appliance')
+    coordinator._update_coverage_gap_issue(False, [], "Test Appliance")
     assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
 
 
 # ---------------------------------------------------------------------------
 # StateCache / ObserveManager wiring
 # ---------------------------------------------------------------------------
+
 
 async def test_last_resources_backed_by_state_cache(
     hass: HomeAssistant, mock_entry, mock_coordinator_session
@@ -295,37 +341,35 @@ async def test_last_resources_backed_by_state_cache(
     assert resources  # fridge fixture is non-empty
 
 
-def test_logger_is_scoped_to_device_host(
-    hass: HomeAssistant, mock_entry
-) -> None:
+def test_logger_is_scoped_to_device_host(hass: HomeAssistant, mock_entry) -> None:
     """Every log line (coordinator's own, DataUpdateCoordinator's internal
     messages, and ObserveManager's) must identify which device it's about —
     a bare module-level logger is shared across every configured device and
     makes multi-device logs ambiguous."""
     coordinator = LocalThingsCoordinator(hass, mock_entry)
 
-    assert coordinator._log.name.endswith(ENTRY_DATA[CONF_HOST])
+    host = ENTRY_DATA[CONF_HOST]
+    assert isinstance(host, str)
+    assert coordinator._log.name.endswith(host)
     assert coordinator.logger is coordinator._log
     assert coordinator._observe.log is coordinator._log
 
 
-def test_cache_changes_coalesce_into_a_single_push(
-    hass: HomeAssistant, mock_entry
-) -> None:
+def test_cache_changes_coalesce_into_a_single_push(hass: HomeAssistant, mock_entry) -> None:
     """A poll/sweep cycle applying many hrefs in a tight loop must not
     schedule one hass.add_job push per href — only one push per burst."""
     coordinator = LocalThingsCoordinator(hass, mock_entry)
 
-    with patch.object(hass, 'add_job') as mock_add_job:
-        coordinator._on_cache_changed(True, 'poll')
-        coordinator._on_cache_changed(True, 'poll')
-        coordinator._on_cache_changed(True, 'poll')
+    with patch.object(hass, "add_job") as mock_add_job:
+        coordinator._on_cache_changed(True, "poll")
+        coordinator._on_cache_changed(True, "poll")
+        coordinator._on_cache_changed(True, "poll")
 
         assert mock_add_job.call_count == 1
 
         coordinator._push_cache_snapshot()
 
-        coordinator._on_cache_changed(True, 'poll')
+        coordinator._on_cache_changed(True, "poll")
 
         assert mock_add_job.call_count == 2
 
@@ -359,10 +403,13 @@ async def test_enters_observe_mode_when_hot_warm_hrefs_notify(
     # synchronously from subscribe() for every href it subscribes to (see
     # FakeObserveSession.notify_on_subscribe in conftest.py), which lands
     # it in that window by construction rather than by timing.
-    fake.notify_on_subscribe = {'notified': True}
+    fake.notify_on_subscribe = {"notified": True}
     entered = await hass.async_add_executor_job(
         coordinator._observe.try_enter_observe_mode,
-        fake, hrefs, 0.02, 0.8,
+        fake,
+        hrefs,
+        0.02,
+        0.8,
     )
 
     assert entered is True
@@ -389,10 +436,13 @@ async def test_reconnect_while_observe_mode_downgrades_to_poll(
 
     # Get the coordinator into observe mode the same way
     # test_enters_observe_mode_when_hot_warm_hrefs_notify does.
-    fake.notify_on_subscribe = {'notified': True}
+    fake.notify_on_subscribe = {"notified": True}
     entered = await hass.async_add_executor_job(
         coordinator._observe.try_enter_observe_mode,
-        fake, hrefs, 0.02, 0.8,
+        fake,
+        hrefs,
+        0.02,
+        0.8,
     )
     assert entered is True
     assert coordinator.observe_mode == MODE_OBSERVE
@@ -402,7 +452,9 @@ async def test_reconnect_while_observe_mode_downgrades_to_poll(
     # still alive (see test_poll_failure_skips_reconnect_when_push_is_healthy)
     # and would not trigger a reconnect at all. This test covers a
     # genuinely dead channel: no recent push, poll fails, reconnect fires.
-    coordinator._observe._last_notify_ts -= PUSH_HEALTH_WINDOW_S + 1
+    last_notify_ts = coordinator._observe._last_notify_ts
+    assert last_notify_ts is not None
+    coordinator._observe._last_notify_ts = last_notify_ts - (PUSH_HEALTH_WINDOW_S + 1)
 
     # Simulate the existing "poll failed, reconnecting" branch: _poll_once
     # fails once (triggering the reconnect/backoff path), then succeeds.
@@ -414,11 +466,11 @@ async def test_reconnect_while_observe_mode_downgrades_to_poll(
     fake.notify_on_subscribe = None
     with (
         patch(
-            'custom_components.localthings.coordinator.LocalThingsCoordinator._poll_once',
-            side_effect=[RuntimeError('connection lost'), fridge_resources],
+            "custom_components.localthings.coordinator.LocalThingsCoordinator._poll_once",
+            side_effect=[RuntimeError("connection lost"), fridge_resources],
         ),
         patch(
-            'custom_components.localthings.coordinator.asyncio.sleep',
+            "custom_components.localthings.coordinator.asyncio.sleep",
             new=AsyncMock(),
         ),
     ):
@@ -426,6 +478,57 @@ async def test_reconnect_while_observe_mode_downgrades_to_poll(
         await hass.async_block_till_done()
 
     assert coordinator._observe.mode == MODE_POLL
+
+
+async def test_total_poll_failure_downgrades_observe_mode_to_poll(
+    hass: HomeAssistant, mock_entry, mock_coordinator_observe_session, fridge_resources
+) -> None:
+    """A device that drops off the network entirely -- both the poll and its
+    reconnect retry fail -- must not leave the connection-mode sensor
+    reporting 'Push' forever (issue #287). Only the *successful* reconnect
+    branch used to touch observe mode (see
+    test_reconnect_while_observe_mode_downgrades_to_poll); this covers the
+    branch where the device stays unreachable."""
+    fake = mock_coordinator_observe_session
+    await hass.config_entries.async_setup(mock_entry.entry_id)
+    await hass.async_block_till_done()
+
+    coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
+    hrefs = coordinator._hot_hrefs + coordinator._warm_hrefs
+
+    fake.notify_on_subscribe = {"notified": True}
+    entered = await hass.async_add_executor_job(
+        coordinator._observe.try_enter_observe_mode,
+        fake,
+        hrefs,
+        0.02,
+        0.8,
+    )
+    assert entered is True
+    assert coordinator.observe_mode == MODE_OBSERVE
+
+    last_notify_ts = coordinator._observe._last_notify_ts
+    assert last_notify_ts is not None
+    coordinator._observe._last_notify_ts = last_notify_ts - (PUSH_HEALTH_WINDOW_S + 1)
+
+    with (
+        patch(
+            "custom_components.localthings.coordinator.LocalThingsCoordinator._poll_once",
+            side_effect=[RuntimeError("connection lost"), RuntimeError("still lost")],
+        ),
+        patch(
+            "custom_components.localthings.coordinator.asyncio.sleep",
+            new=AsyncMock(),
+        ),
+    ):
+        await coordinator.async_request_refresh()
+        await hass.async_block_till_done()
+
+    # The update still "succeeds" with the last-known snapshot (issue #254's
+    # degraded-data path) -- but the connection mode must reflect reality
+    # now, not the stale OBSERVE state from before the outage.
+    assert coordinator.observe_mode == MODE_POLL
+    assert coordinator.last_update_success is True
 
 
 async def test_poll_timeout_skips_reconnect_when_push_is_healthy(
@@ -444,21 +547,24 @@ async def test_poll_timeout_skips_reconnect_when_push_is_healthy(
     coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
     hrefs = coordinator._hot_hrefs + coordinator._warm_hrefs
 
-    fake.notify_on_subscribe = {'notified': True}
+    fake.notify_on_subscribe = {"notified": True}
     entered = await hass.async_add_executor_job(
         coordinator._observe.try_enter_observe_mode,
-        fake, hrefs, 0.02, 0.8,
+        fake,
+        hrefs,
+        0.02,
+        0.8,
     )
     assert entered is True
     assert coordinator.observe_mode == MODE_OBSERVE
 
     with (
         patch(
-            'custom_components.localthings.coordinator.LocalThingsCoordinator._poll_once',
-            side_effect=TimeoutError('GET /device/0 block 11 timeout'),
+            "custom_components.localthings.coordinator.LocalThingsCoordinator._poll_once",
+            side_effect=TimeoutError("GET /device/0 block 11 timeout"),
         ),
         patch(
-            'custom_components.localthings.coordinator.LocalThingsCoordinator._close_session',
+            "custom_components.localthings.coordinator.LocalThingsCoordinator._close_session",
         ) as mock_close,
     ):
         await coordinator.async_request_refresh()
@@ -483,17 +589,22 @@ async def test_poll_timeout_reconnects_after_consecutive_limit_even_with_push(
     coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
     hrefs = coordinator._hot_hrefs + coordinator._warm_hrefs
 
-    fake.notify_on_subscribe = {'notified': True}
+    fake.notify_on_subscribe = {"notified": True}
     entered = await hass.async_add_executor_job(
         coordinator._observe.try_enter_observe_mode,
-        fake, hrefs, 0.02, 0.8,
+        fake,
+        hrefs,
+        0.02,
+        0.8,
     )
     assert entered is True
     assert coordinator.observe_mode == MODE_OBSERVE
 
     # No notify is recent any more, so every timeout below counts toward
     # the consecutive-timeout limit instead of being deferred.
-    coordinator._observe._last_notify_ts -= PUSH_HEALTH_WINDOW_S + 1
+    last_notify_ts = coordinator._observe._last_notify_ts
+    assert last_notify_ts is not None
+    coordinator._observe._last_notify_ts = last_notify_ts - (PUSH_HEALTH_WINDOW_S + 1)
 
     # Call _async_update_data directly rather than via
     # async_request_refresh() — the coordinator's built-in debouncer
@@ -501,8 +612,8 @@ async def test_poll_timeout_reconnects_after_consecutive_limit_even_with_push(
     # otherwise coalesce these rapid-fire calls into far fewer than the
     # consecutive-timeout count this test needs to exercise.
     with patch(
-        'custom_components.localthings.coordinator.LocalThingsCoordinator._poll_once',
-        side_effect=TimeoutError('GET /device/0 block 11 timeout'),
+        "custom_components.localthings.coordinator.LocalThingsCoordinator._poll_once",
+        side_effect=TimeoutError("GET /device/0 block 11 timeout"),
     ):
         for _ in range(coordinator._POLL_TIMEOUT_LIMIT - 1):
             await coordinator._async_update_data()
@@ -515,11 +626,11 @@ async def test_poll_timeout_reconnects_after_consecutive_limit_even_with_push(
     fake.notify_on_subscribe = None
     with (
         patch(
-            'custom_components.localthings.coordinator.LocalThingsCoordinator._poll_once',
-            side_effect=[TimeoutError('GET /device/0 block 11 timeout'), fridge_resources],
+            "custom_components.localthings.coordinator.LocalThingsCoordinator._poll_once",
+            side_effect=[TimeoutError("GET /device/0 block 11 timeout"), fridge_resources],
         ),
         patch(
-            'custom_components.localthings.coordinator.asyncio.sleep',
+            "custom_components.localthings.coordinator.asyncio.sleep",
             new=AsyncMock(),
         ),
     ):
@@ -544,19 +655,24 @@ async def test_poll_timeout_counter_resets_when_push_is_healthy_again(
     coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
     hrefs = coordinator._hot_hrefs + coordinator._warm_hrefs
 
-    fake.notify_on_subscribe = {'notified': True}
+    fake.notify_on_subscribe = {"notified": True}
     entered = await hass.async_add_executor_job(
         coordinator._observe.try_enter_observe_mode,
-        fake, hrefs, 0.02, 0.8,
+        fake,
+        hrefs,
+        0.02,
+        0.8,
     )
     assert entered is True
     assert coordinator.observe_mode == MODE_OBSERVE
 
     # Age the notify out so timeouts accrue toward the limit.
-    coordinator._observe._last_notify_ts -= PUSH_HEALTH_WINDOW_S + 1
+    last_notify_ts = coordinator._observe._last_notify_ts
+    assert last_notify_ts is not None
+    coordinator._observe._last_notify_ts = last_notify_ts - (PUSH_HEALTH_WINDOW_S + 1)
     with patch(
-        'custom_components.localthings.coordinator.LocalThingsCoordinator._poll_once',
-        side_effect=TimeoutError('GET /device/0 block 11 timeout'),
+        "custom_components.localthings.coordinator.LocalThingsCoordinator._poll_once",
+        side_effect=TimeoutError("GET /device/0 block 11 timeout"),
     ):
         for _ in range(coordinator._POLL_TIMEOUT_LIMIT - 1):
             await coordinator._async_update_data()
@@ -564,10 +680,10 @@ async def test_poll_timeout_counter_resets_when_push_is_healthy_again(
 
     # A fresh notify proves push is healthy again — the next timeout must
     # not add to the pre-existing count, and must not reconnect.
-    fake.on_notification(hrefs[0], cbor2.dumps({'notified': True}))
+    fake.on_notification(hrefs[0], cbor2.dumps({"notified": True}))
     with patch(
-        'custom_components.localthings.coordinator.LocalThingsCoordinator._poll_once',
-        side_effect=TimeoutError('GET /device/0 block 11 timeout'),
+        "custom_components.localthings.coordinator.LocalThingsCoordinator._poll_once",
+        side_effect=TimeoutError("GET /device/0 block 11 timeout"),
     ):
         await coordinator._async_update_data()
 
@@ -590,10 +706,13 @@ async def test_reconnect_from_observe_mode_resubscribes_immediately(
     coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
     hrefs = coordinator._hot_hrefs + coordinator._warm_hrefs
 
-    fake.notify_on_subscribe = {'notified': True}
+    fake.notify_on_subscribe = {"notified": True}
     entered = await hass.async_add_executor_job(
         coordinator._observe.try_enter_observe_mode,
-        fake, hrefs, 0.02, 0.8,
+        fake,
+        hrefs,
+        0.02,
+        0.8,
     )
     assert entered is True
     assert coordinator.observe_mode == MODE_OBSERVE
@@ -602,18 +721,20 @@ async def test_reconnect_from_observe_mode_resubscribes_immediately(
     # failure below actually triggers a reconnect (see
     # test_poll_failure_skips_reconnect_when_push_is_healthy for the
     # healthy-push case, which now skips reconnecting entirely).
-    coordinator._observe._last_notify_ts -= PUSH_HEALTH_WINDOW_S + 1
+    last_notify_ts = coordinator._observe._last_notify_ts
+    assert last_notify_ts is not None
+    coordinator._observe._last_notify_ts = last_notify_ts - (PUSH_HEALTH_WINDOW_S + 1)
 
     # If a stale retry timer (rather than an immediate resubscribe) were
     # driving recovery, mode would still be 'poll' right after this single
     # refresh call — the 600s gate wouldn't have elapsed yet.
     with (
         patch(
-            'custom_components.localthings.coordinator.LocalThingsCoordinator._poll_once',
-            side_effect=[RuntimeError('connection lost'), fridge_resources],
+            "custom_components.localthings.coordinator.LocalThingsCoordinator._poll_once",
+            side_effect=[RuntimeError("connection lost"), fridge_resources],
         ),
         patch(
-            'custom_components.localthings.coordinator.asyncio.sleep',
+            "custom_components.localthings.coordinator.asyncio.sleep",
             new=AsyncMock(),
         ),
     ):
@@ -621,6 +742,149 @@ async def test_reconnect_from_observe_mode_resubscribes_immediately(
         await hass.async_block_till_done()
 
     assert coordinator.observe_mode == MODE_OBSERVE
+
+
+async def test_attempt_observe_mode_discards_stale_commit_after_session_swap(
+    hass: HomeAssistant, mock_entry, mock_coordinator_observe_session
+) -> None:
+    """A reconnect (the poll path's own, or a command's retry) can swap
+    self._session while this attempt's grace wait is in flight -- it runs
+    without holding _session_lock precisely so a write isn't blocked behind
+    it (issue #294). Committing observe mode against the now-stale local
+    `sess` reference would claim "Push" on a session that's already gone,
+    with nothing left to notice -- the identity re-check under the lock
+    right before committing must catch this and abandon instead.
+
+    The new session is never-tried, though, not just abandoned: it must
+    flag an immediate resubscribe rather than let _last_observe_attempt_ts
+    (stamped for the now-abandoned attempt) throttle it for up to
+    _RECOVERY_RETRY_S.
+
+    Simulates the swap from inside await_observe_notifies itself rather
+    than via real concurrency: subscribe_hrefs (and its lock) has already
+    returned by the time that call runs, so this lands exactly in the
+    window the identity check exists to cover, deterministically."""
+    await hass.config_entries.async_setup(mock_entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
+    assert coordinator._resubscribe_due is False
+
+    other = FakeObserveSession()
+
+    def _swap_session_mid_wait(subscribed, grace_period_s, success_fraction=None):
+        coordinator._session = other  # ty: ignore[invalid-assignment]
+        return True
+
+    with patch.object(
+        coordinator._observe, "await_observe_notifies", side_effect=_swap_session_mid_wait
+    ):
+        await coordinator._attempt_observe_mode()
+
+    assert coordinator.observe_mode == MODE_POLL
+    assert coordinator._observe.subscribed_hrefs == set()
+    assert coordinator._observe._refresh_thread is None
+    assert coordinator._resubscribe_due is True
+
+
+async def test_maybe_retry_observe_mode_uses_most_recent_attempt_not_just_mode_change(
+    hass: HomeAssistant, mock_entry, mock_coordinator_observe_session
+) -> None:
+    """_set_mode only stamps last_mode_change_ts on an actual transition,
+    so a device that never successfully enters observe mode leaves that
+    timestamp stuck at construction time forever -- a failed attempt keeps
+    calling _set_mode(MODE_POLL) while already in MODE_POLL, a no-op.
+    Gating solely on that timestamp would make the 600s throttle open once
+    and then never close again, re-attempting (and paying the subscribe
+    burst) on every single poll cycle instead of every _RECOVERY_RETRY_S."""
+    fake = mock_coordinator_observe_session
+    await hass.config_entries.async_setup(mock_entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
+    assert coordinator.observe_mode == MODE_POLL  # never notified during setup
+
+    # Simulate exactly the scenario above: mode_change_ts is old (as it
+    # would be forever, for a device that never gets push), but an attempt
+    # really did just run.
+    coordinator._observe.last_mode_change_ts = time.monotonic() - _RECOVERY_RETRY_S - 1
+    coordinator._last_observe_attempt_ts = time.monotonic()
+
+    with patch.object(fake, "subscribe") as mock_subscribe:
+        await coordinator._maybe_retry_observe_mode()
+
+    mock_subscribe.assert_not_called()
+
+
+async def test_maybe_retry_observe_mode_also_respects_a_mode_change_outside_an_attempt(
+    hass: HomeAssistant, mock_entry, mock_coordinator_observe_session
+) -> None:
+    """The mirror of the case above: last_mode_change_ts can be the more
+    recent of the two as well, e.g. right after the poll or command path's
+    own downgrade (neither goes through _attempt_observe_mode, so neither
+    stamps _last_observe_attempt_ts). Dropping last_mode_change_ts from the
+    max() would let a device that was *just* downgraded get re-attempted
+    immediately instead of respecting _RECOVERY_RETRY_S."""
+    fake = mock_coordinator_observe_session
+    await hass.config_entries.async_setup(mock_entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
+    assert coordinator.observe_mode == MODE_POLL
+
+    coordinator._last_observe_attempt_ts = time.monotonic() - _RECOVERY_RETRY_S - 1
+    coordinator._observe.last_mode_change_ts = time.monotonic()
+
+    with patch.object(fake, "subscribe") as mock_subscribe:
+        await coordinator._maybe_retry_observe_mode()
+
+    mock_subscribe.assert_not_called()
+
+
+async def test_attempt_observe_mode_releases_lock_before_the_grace_wait(
+    hass: HomeAssistant, mock_entry, mock_coordinator_observe_session
+) -> None:
+    """The subscribe burst holds _session_lock (it touches the session);
+    the grace wait after it must not, or a command write could stall
+    behind up to _OBSERVE_GRACE_PERIOD_S of an unrelated observe-mode-entry
+    attempt (issue #294). By construction, subscribe_hrefs's own
+    `async with self._session_lock:` has already exited by the time
+    await_observe_notifies is even called -- checked here rather than
+    inferred from timing."""
+    await hass.config_entries.async_setup(mock_entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
+
+    locked_during_wait = {"value": None}
+
+    def _check_lock(subscribed, grace_period_s, success_fraction=None):
+        locked_during_wait["value"] = coordinator._session_lock.locked()
+        return True
+
+    with patch.object(coordinator._observe, "await_observe_notifies", side_effect=_check_lock):
+        await coordinator._attempt_observe_mode()
+
+    assert locked_during_wait["value"] is False
+
+
+async def test_attempt_observe_mode_holds_lock_during_the_subscribe_burst(
+    hass: HomeAssistant, mock_entry, mock_coordinator_observe_session
+) -> None:
+    """The other half of the split above: the subscribe burst does touch
+    the session, so it must hold _session_lock -- that's what actually
+    stops a concurrent close from landing mid-subscribe (issue #294)."""
+    await hass.config_entries.async_setup(mock_entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
+
+    locked_during_subscribe = {"value": None}
+    real_subscribe_hrefs = coordinator._observe.subscribe_hrefs
+
+    def _check_lock(session, hrefs):
+        locked_during_subscribe["value"] = coordinator._session_lock.locked()
+        return real_subscribe_hrefs(session, hrefs)
+
+    with patch.object(coordinator._observe, "subscribe_hrefs", side_effect=_check_lock):
+        await coordinator._attempt_observe_mode()
+
+    assert locked_during_subscribe["value"] is True
 
 
 async def test_sweep_mismatch_never_downgrades_a_live_observe_session(
@@ -639,20 +903,23 @@ async def test_sweep_mismatch_never_downgrades_a_live_observe_session(
     hrefs = coordinator._hot_hrefs + coordinator._warm_hrefs
     assert len(hrefs) >= 2
 
-    fake.notify_on_subscribe = {'notified': True}
+    fake.notify_on_subscribe = {"notified": True}
     entered = await hass.async_add_executor_job(
         coordinator._observe.try_enter_observe_mode,
-        fake, hrefs, 0.02, 0.8,
+        fake,
+        hrefs,
+        0.02,
+        0.8,
     )
     assert entered is True
     assert coordinator.observe_mode == MODE_OBSERVE
 
     # A sweep result disagreeing with the cache on every subscribed href —
     # previously treated as a device-wide miss and downgraded.
-    stale_sweep = {href: {'notified': False} for href in hrefs}
+    stale_sweep = {href: {"notified": False} for href in hrefs}
 
     with patch(
-        'custom_components.localthings.coordinator.LocalThingsCoordinator._poll_once',
+        "custom_components.localthings.coordinator.LocalThingsCoordinator._poll_once",
         return_value=stale_sweep,
     ):
         await coordinator.async_request_refresh()
@@ -661,7 +928,7 @@ async def test_sweep_mismatch_never_downgrades_a_live_observe_session(
     assert coordinator.observe_mode == MODE_OBSERVE
     # The mismatch is diagnostic-only, but the sweep result still won —
     # the cache reflects the latest authoritative state either way.
-    assert coordinator.last_resources[hrefs[0]]['notified'] is False
+    assert coordinator.last_resources[hrefs[0]]["notified"] is False
 
 
 async def test_sweep_mismatch_forces_subpolls_on_a_live_observe_session(
@@ -679,23 +946,28 @@ async def test_sweep_mismatch_forces_subpolls_on_a_live_observe_session(
     hrefs = coordinator._hot_hrefs + coordinator._warm_hrefs
     assert len(hrefs) >= 2
 
-    fake.notify_on_subscribe = {'notified': True}
+    fake.notify_on_subscribe = {"notified": True}
     entered = await hass.async_add_executor_job(
         coordinator._observe.try_enter_observe_mode,
-        fake, hrefs, 0.02, 0.8,
+        fake,
+        hrefs,
+        0.02,
+        0.8,
     )
     assert entered is True
     assert coordinator.observe_mode == MODE_OBSERVE
 
-    stale_sweep = {href: {'notified': False} for href in hrefs}
+    stale_sweep = {href: {"notified": False} for href in hrefs}
 
     with (
         patch(
-            'custom_components.localthings.coordinator.LocalThingsCoordinator._poll_once',
+            "custom_components.localthings.coordinator.LocalThingsCoordinator._poll_once",
             return_value=stale_sweep,
         ),
         patch.object(
-            LocalThingsCoordinator, '_run_subpolls', new_callable=AsyncMock,
+            LocalThingsCoordinator,
+            "_run_subpolls",
+            new_callable=AsyncMock,
         ) as mock_subpolls,
     ):
         await coordinator.async_request_refresh()
@@ -723,22 +995,24 @@ async def test_write_marks_href_pending_before_post(
     await hass.async_block_till_done()
     coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
 
-    def _write_fn(payload, rep, href):
-        return (['some', 'path'], {'value': payload})
+    def _write_fn(payload, rep, href=None):
+        return (["some", "path"], {"value": payload})
 
-    desc = NumberDesc(key='test', field='value', write_fn=_write_fn)
-    bound = BoundEntity(href='/test/vs/0', capability=coordinator.bound[0].capability, desc=desc)
+    desc = NumberDesc(key="test", field="value", write_fn=_write_fn)
+    bound = BoundEntity(href="/test/vs/0", capability=coordinator.bound[0].capability, desc=desc)
 
-    with patch.object(fake, 'subscribe'):
-        fake.post = lambda *a, **k: (0x44, b'')
+    with patch.object(fake, "subscribe"):
+        fake.post = lambda *a, **k: (0x44, b"")
         await coordinator.async_send_command(bound, 5)
 
-    assert coordinator._observe._settle_until.get('/some/path') is not None
-    assert coordinator._observe._settle_until.get('/test/vs/0') is None
+    assert coordinator._observe._settle_until.get("/some/path") is not None
+    assert coordinator._observe._settle_until.get("/test/vs/0") is None
 
 
 async def test_send_command_applies_write_optimistically_before_settling(
-    hass: HomeAssistant, mock_entry, mock_coordinator_observe_session,
+    hass: HomeAssistant,
+    mock_entry,
+    mock_coordinator_observe_session,
 ) -> None:
     """The cache must reflect a write immediately at the write's actual
     target href (write_fn's path_segs) -- not bound_entity.href, which
@@ -758,27 +1032,27 @@ async def test_send_command_applies_write_optimistically_before_settling(
     await hass.async_block_till_done()
     coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
 
-    def _write_fn(payload, rep, href):
-        return (['some', 'path'], {'value': payload})
+    def _write_fn(payload, rep, href=None):
+        return (["some", "path"], {"value": payload})
 
-    desc = NumberDesc(key='test', field='value', write_fn=_write_fn)
-    bound = BoundEntity(href='/test/vs/0', capability=coordinator.bound[0].capability, desc=desc)
+    desc = NumberDesc(key="test", field="value", write_fn=_write_fn)
+    bound = BoundEntity(href="/test/vs/0", capability=coordinator.bound[0].capability, desc=desc)
 
-    with patch.object(fake, 'subscribe'):
-        fake.post = lambda *a, **k: (0x44, b'')
+    with patch.object(fake, "subscribe"):
+        fake.post = lambda *a, **k: (0x44, b"")
         await coordinator.async_send_command(bound, 5)
 
     # The optimistic value is visible right away at the write's real
     # target, not the bound href.
-    assert coordinator._cache.get('/some/path') == {'value': 5}
-    assert coordinator._cache.get('/test/vs/0') != {'value': 5}
+    assert coordinator._cache.get("/some/path") == {"value": 5}
+    assert coordinator._cache.get("/test/vs/0") != {"value": 5}
 
     # A stale update racing in behind the write (e.g. a poll/notify that
     # was already in flight before the PUT) must not clobber it while the
     # settle window is open.
-    applied = coordinator._observe.apply('/some/path', {'value': 0}, source='observe')
+    applied = coordinator._observe.apply("/some/path", {"value": 0}, source="observe")
     assert applied is False
-    assert coordinator._cache.get('/some/path') == {'value': 5}
+    assert coordinator._cache.get("/some/path") == {"value": 5}
 
 
 async def test_climate_power_write_applies_to_its_own_href_not_bound_href(
@@ -799,25 +1073,28 @@ async def test_climate_power_write_applies_to_its_own_href_not_bound_href(
     await hass.async_block_till_done()
     coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
 
+    climate_href = airconditioner.CLIMATE.href
+    assert climate_href is not None
     bound = BoundEntity(
-        href=airconditioner.CLIMATE.href,
+        href=climate_href,
         capability=coordinator.bound[0].capability,
         desc=airconditioner.CLIMATE.entities[0],
     )
 
-    with patch.object(fake, 'subscribe'):
-        fake.post = lambda *a, **k: (0x44, b'')
-        await coordinator.async_send_command(bound, ('power', True))
+    with patch.object(fake, "subscribe"):
+        fake.post = lambda *a, **k: (0x44, b"")
+        await coordinator.async_send_command(bound, ("power", True))
 
-    assert (coordinator._cache.get('/power/vs/0') or {}).get(
-        'x.com.samsung.da.power') == 'On'
-    assert 'x.com.samsung.da.power' not in (
-        coordinator._cache.get(airconditioner.CLIMATE.href) or {})
-    assert coordinator._observe._settle_until.get('/power/vs/0') is not None
+    assert (coordinator._cache.get("/power/vs/0") or {}).get("x.com.samsung.da.power") == "On"
+    assert "x.com.samsung.da.power" not in (coordinator._cache.get(climate_href) or {})
+    assert coordinator._observe._settle_until.get("/power/vs/0") is not None
 
 
 async def test_send_command_survives_stale_confirm_poll(
-    hass: HomeAssistant, mock_entry, mock_coordinator_observe_session, fridge_resources,
+    hass: HomeAssistant,
+    mock_entry,
+    mock_coordinator_observe_session,
+    fridge_resources,
 ) -> None:
     """The settle window must outlast the confirm poll async_send_command
     triggers via async_request_refresh(), not just DEFAULT_SETTLE_S's fixed
@@ -842,41 +1119,229 @@ async def test_send_command_survives_stale_confirm_poll(
     await hass.async_block_till_done()
     coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
 
-    def _write_fn(payload, rep, href):
-        return (['test', 'vs', '0'], {'value': payload})
+    def _write_fn(payload, rep, href=None):
+        return (["test", "vs", "0"], {"value": payload})
 
-    desc = NumberDesc(key='test', field='value', write_fn=_write_fn)
-    bound = BoundEntity(href='/test/vs/0', capability=coordinator.bound[0].capability, desc=desc)
+    desc = NumberDesc(key="test", field="value", write_fn=_write_fn)
+    bound = BoundEntity(href="/test/vs/0", capability=coordinator.bound[0].capability, desc=desc)
 
     def _stale_confirm_poll():
         # Stand-in for the write's own confirming /device/0 poll racing
         # against a stale read for the same href -- the device's internal
         # state hasn't caught up to the write yet, even though it will a
         # little later.
-        coordinator._observe.apply('/test/vs/0', {'value': 0}, source='poll')
+        coordinator._observe.apply("/test/vs/0", {"value": 0}, source="poll")
         return fridge_resources
 
     with (
-        patch.object(fake, 'subscribe'),
-        patch.object(LocalThingsCoordinator, '_poll_once', side_effect=_stale_confirm_poll),
+        patch.object(fake, "subscribe"),
+        patch.object(LocalThingsCoordinator, "_poll_once", side_effect=_stale_confirm_poll),
     ):
-        fake.post = lambda *a, **k: (0x44, b'')
+        fake.post = lambda *a, **k: (0x44, b"")
         await coordinator.async_send_command(bound, 5)
 
     # The optimistic value is visible right away and survived the stale
     # confirm-poll race triggered by the refresh above.
-    assert coordinator._cache.get('/test/vs/0') == {'value': 5}
+    assert coordinator._cache.get("/test/vs/0") == {"value": 5}
 
     # The settle window is still open afterward -- sized to outlast the
     # whole PUT + confirm-poll round trip, not released the moment that
     # round trip happens to finish.
-    applied = coordinator._observe.apply('/test/vs/0', {'value': 0}, source='observe')
+    applied = coordinator._observe.apply("/test/vs/0", {"value": 0}, source="observe")
     assert applied is False
-    assert coordinator._cache.get('/test/vs/0') == {'value': 5}
+    assert coordinator._cache.get("/test/vs/0") == {"value": 5}
+
+
+async def test_send_command_reconnects_and_retries_after_socket_closed(
+    hass: HomeAssistant,
+    mock_entry,
+    mock_coordinator_observe_session,
+) -> None:
+    """A command lost to a session Samsung's firmware closed between polls
+    must not just vanish (issue #294): `_do_put` failing once is now
+    followed by a reconnect and a single retry, mirroring the poll path's
+    own recovery in `_async_update_data`.
+
+    `mock_coordinator_observe_session` patches `_close_session` to a no-op,
+    which would leave `self._session` never actually going `None` -- and
+    with it, `_do_put`'s own `if self._session is None: self._connect_session()`
+    guard never exercised, so a broken reconnect could still pass. Overridden
+    here to actually drop the session, so the retry only succeeds if that
+    guard really rebuilds it."""
+    from custom_components.localthings.registry.discovery import BoundEntity
+    from custom_components.localthings.registry.entities import NumberDesc
+
+    fake = mock_coordinator_observe_session
+    await hass.config_entries.async_setup(mock_entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
+
+    def _write_fn(payload, rep, href=None):
+        return (["test", "vs", "0"], {"value": payload})
+
+    desc = NumberDesc(key="test", field="value", write_fn=_write_fn)
+    bound = BoundEntity(href="/test/vs/0", capability=coordinator.bound[0].capability, desc=desc)
+
+    calls = {"n": 0}
+
+    def _post(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise ConnectionError("socket closed")
+        return (0x44, b"")
+
+    def _drop_session():
+        coordinator._session = None
+
+    reconnects = {"n": 0}
+
+    def _reconnect():
+        reconnects["n"] += 1
+        coordinator._session = fake
+
+    with (
+        patch.object(fake, "subscribe"),
+        patch.object(coordinator, "_close_session", side_effect=_drop_session),
+        patch.object(coordinator, "_connect_session", side_effect=_reconnect),
+        patch(
+            "custom_components.localthings.coordinator.asyncio.sleep",
+            new=AsyncMock(),
+        ),
+    ):
+        fake.post = _post
+        await coordinator.async_send_command(bound, 5)
+
+    assert reconnects["n"] == 1
+
+    assert calls["n"] == 2
+    assert coordinator._cache.get("/test/vs/0") == {"value": 5}
+
+
+async def test_send_command_raises_after_reconnect_retry_also_fails(
+    hass: HomeAssistant,
+    mock_entry,
+    mock_coordinator_observe_session,
+) -> None:
+    """If the command still fails on the reconnected session, the user must
+    see it -- previously this was swallowed into a log line with no
+    feedback at all (issue #294).
+
+    Also covers a sibling bug the fix for that same issue introduced: the
+    session is closed the moment the first attempt fails, so any OBSERVE
+    subscriptions on it are already dead regardless of whether the retry
+    that follows succeeds -- a failed retry must still downgrade mode, or
+    it's left claiming "Push" on a session that no longer exists."""
+    from homeassistant.exceptions import HomeAssistantError
+
+    from custom_components.localthings.registry.discovery import BoundEntity
+    from custom_components.localthings.registry.entities import NumberDesc
+
+    fake = mock_coordinator_observe_session
+    await hass.config_entries.async_setup(mock_entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
+    hrefs = coordinator._hot_hrefs + coordinator._warm_hrefs
+
+    fake.notify_on_subscribe = {"notified": True}
+    entered = await hass.async_add_executor_job(
+        coordinator._observe.try_enter_observe_mode,
+        fake,
+        hrefs,
+        0.02,
+        0.8,
+    )
+    assert entered is True
+    assert coordinator.observe_mode == MODE_OBSERVE
+
+    def _write_fn(payload, rep, href=None):
+        return (["test", "vs", "0"], {"value": payload})
+
+    desc = NumberDesc(key="test", field="value", write_fn=_write_fn)
+    bound = BoundEntity(href="/test/vs/0", capability=coordinator.bound[0].capability, desc=desc)
+
+    def _post(*args, **kwargs):
+        raise ConnectionError("socket closed")
+
+    with (
+        patch(
+            "custom_components.localthings.coordinator.asyncio.sleep",
+            new=AsyncMock(),
+        ),
+        pytest.raises(HomeAssistantError),
+    ):
+        fake.post = _post
+        await coordinator.async_send_command(bound, 5)
+
+    assert coordinator.observe_mode == MODE_POLL
+
+
+async def test_send_command_reconnect_downgrades_observe_mode(
+    hass: HomeAssistant,
+    mock_entry,
+    mock_coordinator_observe_session,
+) -> None:
+    """A command's own successful reconnect hands back a session with zero
+    OBSERVE registrations too, same as the poll path's reconnect -- must
+    downgrade the same way and flag a resubscribe, or observe mode stays
+    claimed against a session the write just replaced underneath it
+    (issue #294)."""
+    from custom_components.localthings.registry.discovery import BoundEntity
+    from custom_components.localthings.registry.entities import NumberDesc
+
+    fake = mock_coordinator_observe_session
+    await hass.config_entries.async_setup(mock_entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
+    hrefs = coordinator._hot_hrefs + coordinator._warm_hrefs
+
+    fake.notify_on_subscribe = {"notified": True}
+    entered = await hass.async_add_executor_job(
+        coordinator._observe.try_enter_observe_mode,
+        fake,
+        hrefs,
+        0.02,
+        0.8,
+    )
+    assert entered is True
+    assert coordinator.observe_mode == MODE_OBSERVE
+
+    def _write_fn(payload, rep, href=None):
+        return (["test", "vs", "0"], {"value": payload})
+
+    desc = NumberDesc(key="test", field="value", write_fn=_write_fn)
+    bound = BoundEntity(href="/test/vs/0", capability=coordinator.bound[0].capability, desc=desc)
+
+    calls = {"n": 0}
+
+    def _post(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise ConnectionError("socket closed")
+        return (0x44, b"")
+
+    with (
+        patch.object(fake, "subscribe") as mock_subscribe,
+        patch(
+            "custom_components.localthings.coordinator.asyncio.sleep",
+            new=AsyncMock(),
+        ),
+    ):
+        fake.post = _post
+        await coordinator.async_send_command(bound, 5)
+
+        # _resubscribe_due is consumed by this same call's own trailing
+        # refresh (async_request_refresh is awaited, not fire-and-forget),
+        # so the visible effect is a resubscribe attempt, not a lingering
+        # flag value to assert on afterward.
+        assert mock_subscribe.called
+
+    assert coordinator.observe_mode == MODE_POLL
 
 
 async def test_second_write_to_same_href_lands_during_first_writes_settle_window(
-    hass: HomeAssistant, mock_entry, mock_coordinator_observe_session,
+    hass: HomeAssistant,
+    mock_entry,
+    mock_coordinator_observe_session,
 ) -> None:
     """Regression for issue #9: /course/vs/0 backs several independent
     washer selects (cycle, detergent quantity, softener quantity, ...)
@@ -896,22 +1361,32 @@ async def test_second_write_to_same_href_lands_during_first_writes_settle_window
     await hass.async_block_till_done()
     coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
 
-    desc_a = NumberDesc(key='cycle', field='cycle',
-                        write_fn=lambda p, rep, href: (['test', 'vs', '0'], {'cycle': p}))
-    desc_b = NumberDesc(key='detergent', field='detergent',
-                        write_fn=lambda p, rep, href: (['test', 'vs', '0'], {'detergent': p}))
-    bound_a = BoundEntity(href='/test/vs/0', capability=coordinator.bound[0].capability, desc=desc_a)
-    bound_b = BoundEntity(href='/test/vs/0', capability=coordinator.bound[0].capability, desc=desc_b)
+    desc_a = NumberDesc(
+        key="cycle",
+        field="cycle",
+        write_fn=lambda p, rep, href=None: (["test", "vs", "0"], {"cycle": p}),
+    )
+    desc_b = NumberDesc(
+        key="detergent",
+        field="detergent",
+        write_fn=lambda p, rep, href=None: (["test", "vs", "0"], {"detergent": p}),
+    )
+    bound_a = BoundEntity(
+        href="/test/vs/0", capability=coordinator.bound[0].capability, desc=desc_a
+    )
+    bound_b = BoundEntity(
+        href="/test/vs/0", capability=coordinator.bound[0].capability, desc=desc_b
+    )
 
-    with patch.object(fake, 'subscribe'):
-        fake.post = lambda *a, **k: (0x44, b'')
-        await coordinator.async_send_command(bound_a, 'Eco')
-        assert coordinator._cache.get('/test/vs/0') == {'cycle': 'Eco'}
+    with patch.object(fake, "subscribe"):
+        fake.post = lambda *a, **k: (0x44, b"")
+        await coordinator.async_send_command(bound_a, "Eco")
+        assert coordinator._cache.get("/test/vs/0") == {"cycle": "Eco"}
 
         # Still well within the first write's settle window.
-        await coordinator.async_send_command(bound_b, 'High')
+        await coordinator.async_send_command(bound_b, "High")
 
-    assert coordinator._cache.get('/test/vs/0') == {'cycle': 'Eco', 'detergent': 'High'}
+    assert coordinator._cache.get("/test/vs/0") == {"cycle": "Eco", "detergent": "High"}
 
 
 class TestRemoteControlEnabled:
@@ -921,25 +1396,25 @@ class TestRemoteControlEnabled:
     write guard alike."""
 
     def test_vs_fallback_href_true_is_enabled(self):
-        resources = {'/remotectrl/vs/0': {'x.com.samsung.da.remoteControlEnabled': 'true'}}
+        resources = {"/remotectrl/vs/0": {"x.com.samsung.da.remoteControlEnabled": "true"}}
         assert remote_control_enabled(resources) is True
 
     def test_vs_fallback_href_false_is_disabled(self):
-        resources = {'/remotectrl/vs/0': {'x.com.samsung.da.remoteControlEnabled': 'false'}}
+        resources = {"/remotectrl/vs/0": {"x.com.samsung.da.remoteControlEnabled": "false"}}
         assert remote_control_enabled(resources) is False
 
     def test_generic_href_true_is_enabled(self):
-        resources = {'/remotectrl/0': {'value': True}}
+        resources = {"/remotectrl/0": {"value": True}}
         assert remote_control_enabled(resources) is True
 
     def test_generic_href_false_is_disabled(self):
-        resources = {'/remotectrl/0': {'value': False}}
+        resources = {"/remotectrl/0": {"value": False}}
         assert remote_control_enabled(resources) is False
 
     def test_generic_href_wins_when_both_present(self):
         resources = {
-            '/remotectrl/0': {'value': True},
-            '/remotectrl/vs/0': {'x.com.samsung.da.remoteControlEnabled': 'false'},
+            "/remotectrl/0": {"value": True},
+            "/remotectrl/vs/0": {"x.com.samsung.da.remoteControlEnabled": "false"},
         }
         assert remote_control_enabled(resources) is True
 
@@ -952,31 +1427,28 @@ class TestRemoteControlRequiredForWrite:
 
     def test_without_flag_always_requires(self):
         resources = {}
-        assert remote_control_required_for_write(resources, '/washer/vs/0') is True
-        assert remote_control_required_for_write(
-            resources, '/operational/state/vs/0') is True
+        assert remote_control_required_for_write(resources, "/washer/vs/0") is True
+        assert remote_control_required_for_write(resources, "/operational/state/vs/0") is True
 
     def test_without_sc_exempts_settings_keeps_operational(self):
         resources = {
-            '/wm/setinfo/vs/0': {
-                'x.com.samsung.da.isModelSettingWithoutSC': 'true',
+            "/wm/setinfo/vs/0": {
+                "x.com.samsung.da.isModelSettingWithoutSC": "true",
             },
         }
-        assert remote_control_required_for_write(resources, '/washer/vs/0') is False
-        assert remote_control_required_for_write(resources, '/course/vs/0') is False
-        assert remote_control_required_for_write(resources, '/buzzersound/vs/0') is False
-        assert remote_control_required_for_write(
-            resources, '/operational/state/vs/0') is True
-        assert remote_control_required_for_write(
-            resources, '/operational/state/0') is True
+        assert remote_control_required_for_write(resources, "/washer/vs/0") is False
+        assert remote_control_required_for_write(resources, "/course/vs/0") is False
+        assert remote_control_required_for_write(resources, "/buzzersound/vs/0") is False
+        assert remote_control_required_for_write(resources, "/operational/state/vs/0") is True
+        assert remote_control_required_for_write(resources, "/operational/state/0") is True
 
     def test_without_sc_false_still_requires(self):
         resources = {
-            '/wm/setinfo/vs/0': {
-                'x.com.samsung.da.isModelSettingWithoutSC': 'false',
+            "/wm/setinfo/vs/0": {
+                "x.com.samsung.da.isModelSettingWithoutSC": "false",
             },
         }
-        assert remote_control_required_for_write(resources, '/washer/vs/0') is True
+        assert remote_control_required_for_write(resources, "/washer/vs/0") is True
 
 
 async def test_send_command_blocked_when_remote_control_disabled(
@@ -993,31 +1465,31 @@ async def test_send_command_blocked_when_remote_control_disabled(
     await hass.async_block_till_done()
     coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
     coordinator._cache.apply_rep(
-        '/remotectrl/vs/0',
-        {'x.com.samsung.da.remoteControlEnabled': 'false'},
-        source='test',
+        "/remotectrl/vs/0",
+        {"x.com.samsung.da.remoteControlEnabled": "false"},
+        source="test",
     )
 
-    def _write_fn(payload, rep, href):
-        return (['some', 'path'], {'value': payload})
+    def _write_fn(payload, rep, href=None):
+        return (["some", "path"], {"value": payload})
 
-    desc = NumberDesc(key='test', field='value', write_fn=_write_fn)
-    bound = BoundEntity(href='/test/vs/0', capability=coordinator.bound[0].capability, desc=desc)
+    desc = NumberDesc(key="test", field="value", write_fn=_write_fn)
+    bound = BoundEntity(href="/test/vs/0", capability=coordinator.bound[0].capability, desc=desc)
 
     posted = False
 
     def _post(*a, **k):
         nonlocal posted
         posted = True
-        return (0x44, b'')
+        return (0x44, b"")
 
-    with patch.object(fake, 'subscribe'):
+    with patch.object(fake, "subscribe"):
         fake.post = _post
         with pytest.raises(ServiceValidationError) as exc_info:
             await coordinator.async_send_command(bound, 5)
 
     assert exc_info.value.translation_domain == DOMAIN
-    assert exc_info.value.translation_key == 'remote_control_disabled'
+    assert exc_info.value.translation_key == "remote_control_disabled"
 
     assert posted is False
 
@@ -1034,22 +1506,22 @@ async def test_send_command_allowed_when_remote_control_enabled(
     await hass.async_block_till_done()
     coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
     coordinator._cache.apply_rep(
-        '/remotectrl/vs/0',
-        {'x.com.samsung.da.remoteControlEnabled': 'true'},
-        source='test',
+        "/remotectrl/vs/0",
+        {"x.com.samsung.da.remoteControlEnabled": "true"},
+        source="test",
     )
 
-    def _write_fn(payload, rep, href):
-        return (['some', 'path'], {'value': payload})
+    def _write_fn(payload, rep, href=None):
+        return (["some", "path"], {"value": payload})
 
-    desc = NumberDesc(key='test', field='value', write_fn=_write_fn)
-    bound = BoundEntity(href='/test/vs/0', capability=coordinator.bound[0].capability, desc=desc)
+    desc = NumberDesc(key="test", field="value", write_fn=_write_fn)
+    bound = BoundEntity(href="/test/vs/0", capability=coordinator.bound[0].capability, desc=desc)
 
-    with patch.object(fake, 'subscribe'):
-        fake.post = lambda *a, **k: (0x44, b'')
+    with patch.object(fake, "subscribe"):
+        fake.post = lambda *a, **k: (0x44, b"")
         await coordinator.async_send_command(bound, 5)
 
-    assert coordinator._cache.get('/some/path') == {'value': 5}
+    assert coordinator._cache.get("/some/path") == {"value": 5}
 
 
 async def test_send_command_remote_control_check_precedes_validate_fn(
@@ -1065,23 +1537,23 @@ async def test_send_command_remote_control_check_precedes_validate_fn(
     await hass.async_block_till_done()
     coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
     coordinator._cache.apply_rep(
-        '/remotectrl/vs/0',
-        {'x.com.samsung.da.remoteControlEnabled': 'false'},
-        source='test',
+        "/remotectrl/vs/0",
+        {"x.com.samsung.da.remoteControlEnabled": "false"},
+        source="test",
     )
 
     def _write_fn(payload, rep, href=None):
-        return (['some', 'path'], {'value': payload})
+        return (["some", "path"], {"value": payload})
 
     def _validate_fn(payload, rep, resources):
         return "always rejected"
 
-    desc = SwitchDesc(key='test', field='value', write_fn=_write_fn, validate_fn=_validate_fn)
-    bound = BoundEntity(href='/test/vs/0', capability=coordinator.bound[0].capability, desc=desc)
+    desc = SwitchDesc(key="test", field="value", write_fn=_write_fn, validate_fn=_validate_fn)
+    bound = BoundEntity(href="/test/vs/0", capability=coordinator.bound[0].capability, desc=desc)
 
     with pytest.raises(ServiceValidationError) as exc_info:
-        await coordinator.async_send_command(bound, 'On')
-    assert exc_info.value.translation_key == 'remote_control_disabled'
+        await coordinator.async_send_command(bound, "On")
+    assert exc_info.value.translation_key == "remote_control_disabled"
 
 
 async def test_send_command_bypasses_remote_control_when_option_enabled(
@@ -1097,7 +1569,9 @@ async def test_send_command_bypasses_remote_control_when_option_enabled(
     from custom_components.localthings.registry.entities import NumberDesc
 
     entry = MockConfigEntry(
-        domain=DOMAIN, data=ENTRY_DATA, unique_id=f'localthings_{MOCK_SERIAL}',
+        domain=DOMAIN,
+        data=ENTRY_DATA,
+        unique_id=f"localthings_{MOCK_SERIAL}",
         options={CONF_BYPASS_REMOTE_CONTROL: True},
     )
     entry.add_to_hass(hass)
@@ -1107,22 +1581,22 @@ async def test_send_command_bypasses_remote_control_when_option_enabled(
     await hass.async_block_till_done()
     coordinator: LocalThingsCoordinator = hass.data[DOMAIN][entry.entry_id]
     coordinator._cache.apply_rep(
-        '/remotectrl/vs/0',
-        {'x.com.samsung.da.remoteControlEnabled': 'false'},
-        source='test',
+        "/remotectrl/vs/0",
+        {"x.com.samsung.da.remoteControlEnabled": "false"},
+        source="test",
     )
 
-    def _write_fn(payload, rep, href):
-        return (['some', 'path'], {'value': payload})
+    def _write_fn(payload, rep, href=None):
+        return (["some", "path"], {"value": payload})
 
-    desc = NumberDesc(key='test', field='value', write_fn=_write_fn)
-    bound = BoundEntity(href='/test/vs/0', capability=coordinator.bound[0].capability, desc=desc)
+    desc = NumberDesc(key="test", field="value", write_fn=_write_fn)
+    bound = BoundEntity(href="/test/vs/0", capability=coordinator.bound[0].capability, desc=desc)
 
-    with patch.object(fake, 'subscribe'):
-        fake.post = lambda *a, **k: (0x44, b'')
+    with patch.object(fake, "subscribe"):
+        fake.post = lambda *a, **k: (0x44, b"")
         await coordinator.async_send_command(bound, 5)
 
-    assert coordinator._cache.get('/some/path') == {'value': 5}
+    assert coordinator._cache.get("/some/path") == {"value": 5}
 
 
 async def test_send_command_settings_allowed_when_without_sc(
@@ -1138,31 +1612,32 @@ async def test_send_command_settings_allowed_when_without_sc(
     await hass.async_block_till_done()
     coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
     coordinator._cache.apply_rep(
-        '/remotectrl/vs/0',
-        {'x.com.samsung.da.remoteControlEnabled': 'false'},
-        source='test',
+        "/remotectrl/vs/0",
+        {"x.com.samsung.da.remoteControlEnabled": "false"},
+        source="test",
     )
     coordinator._cache.apply_rep(
-        '/wm/setinfo/vs/0',
-        {'x.com.samsung.da.isModelSettingWithoutSC': 'true'},
-        source='test',
+        "/wm/setinfo/vs/0",
+        {"x.com.samsung.da.isModelSettingWithoutSC": "true"},
+        source="test",
     )
 
     def _write_fn(payload, rep, href=None):
-        return (['washer', 'vs', '0'], {'x.com.samsung.da.spinLevel': payload})
+        return (["washer", "vs", "0"], {"x.com.samsung.da.spinLevel": payload})
 
-    desc = SelectDesc(key='spin_speed', field='x.com.samsung.da.spinLevel',
-                      write_fn=_write_fn)
+    desc = SelectDesc(key="spin_speed", field="x.com.samsung.da.spinLevel", write_fn=_write_fn)
     bound = BoundEntity(
-        href='/washer/vs/0', capability=coordinator.bound[0].capability, desc=desc,
+        href="/washer/vs/0",
+        capability=coordinator.bound[0].capability,
+        desc=desc,
     )
 
-    with patch.object(fake, 'subscribe'):
-        fake.post = lambda *a, **k: (0x44, b'')
-        await coordinator.async_send_command(bound, '1000')
+    with patch.object(fake, "subscribe"):
+        fake.post = lambda *a, **k: (0x44, b"")
+        await coordinator.async_send_command(bound, "1000")
 
-    assert coordinator._cache.get('/washer/vs/0') == {
-        'x.com.samsung.da.spinLevel': '1000',
+    assert coordinator._cache.get("/washer/vs/0") == {
+        "x.com.samsung.da.spinLevel": "1000",
     }
 
 
@@ -1179,23 +1654,22 @@ async def test_send_command_operational_still_blocked_when_without_sc(
     await hass.async_block_till_done()
     coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
     coordinator._cache.apply_rep(
-        '/remotectrl/vs/0',
-        {'x.com.samsung.da.remoteControlEnabled': 'false'},
-        source='test',
+        "/remotectrl/vs/0",
+        {"x.com.samsung.da.remoteControlEnabled": "false"},
+        source="test",
     )
     coordinator._cache.apply_rep(
-        '/wm/setinfo/vs/0',
-        {'x.com.samsung.da.isModelSettingWithoutSC': 'true'},
-        source='test',
+        "/wm/setinfo/vs/0",
+        {"x.com.samsung.da.isModelSettingWithoutSC": "true"},
+        source="test",
     )
 
     def _write_fn(payload, rep, href=None):
-        return (['operational', 'state', 'vs', '0'],
-                {'x.com.samsung.da.state': payload})
+        return (["operational", "state", "vs", "0"], {"x.com.samsung.da.state": payload})
 
-    desc = ButtonDesc(key='start', payload='Run', write_fn=_write_fn)
+    desc = ButtonDesc(key="start", payload="Run", write_fn=_write_fn)
     bound = BoundEntity(
-        href='/operational/state/vs/0',
+        href="/operational/state/vs/0",
         capability=coordinator.bound[0].capability,
         desc=desc,
     )
@@ -1205,22 +1679,22 @@ async def test_send_command_operational_still_blocked_when_without_sc(
     def _post(*a, **k):
         nonlocal posted
         posted = True
-        return (0x44, b'')
+        return (0x44, b"")
 
-    with patch.object(fake, 'subscribe'):
+    with patch.object(fake, "subscribe"):
         fake.post = _post
         with pytest.raises(ServiceValidationError) as exc_info:
-            await coordinator.async_send_command(bound, 'Run')
+            await coordinator.async_send_command(bound, "Run")
 
     assert exc_info.value.translation_domain == DOMAIN
-    assert exc_info.value.translation_key == 'remote_control_disabled'
+    assert exc_info.value.translation_key == "remote_control_disabled"
     assert posted is False
 
 
 def test_local_source_port_stable_and_in_range() -> None:
     """Same host always maps to the same port (stability is the whole point:
     a reconnect must reuse the 5-tuple), and it stays in the documented window."""
-    for host in ('192.168.1.217', '10.0.0.42', 'fridge.local'):
+    for host in ("192.168.1.217", "10.0.0.42", "fridge.local"):
         port = _local_source_port(host)
         assert port == _local_source_port(host)
         assert DTLS_LOCAL_PORT_BASE <= port <= DTLS_LOCAL_PORT_BASE + 0xFF
@@ -1230,17 +1704,132 @@ def test_local_source_port_unique_per_host_on_a_24() -> None:
     """Distinct last octets -> distinct ports, so two devices on the same HA
     host never share a source port (the lib's socket is unconnected, so a
     shared port would cross-deliver datagrams)."""
-    ports = {_local_source_port(f'192.168.1.{n}') for n in range(1, 255)}
+    ports = {_local_source_port(f"192.168.1.{n}") for n in range(1, 255)}
     assert len(ports) == 254
 
 
 def test_local_source_port_ipv4_uses_last_octet() -> None:
     """The IPv4 fast path is the last octet, not a hash."""
-    assert _local_source_port('192.168.1.217') == DTLS_LOCAL_PORT_BASE + 217
+    assert _local_source_port("192.168.1.217") == DTLS_LOCAL_PORT_BASE + 217
 
 
 def test_local_source_port_non_ipv4_falls_back_to_hash() -> None:
     """A non-IPv4 host still yields a deterministic in-range port."""
-    port = _local_source_port('some-hostname')
-    assert port == _local_source_port('some-hostname')
+    port = _local_source_port("some-hostname")
+    assert port == _local_source_port("some-hostname")
     assert DTLS_LOCAL_PORT_BASE <= port <= DTLS_LOCAL_PORT_BASE + 0xFF
+
+
+# ----------------------------------------------------------------------
+# Issue #254: a pre-discovery poll failure must never look like a
+# successful first refresh. See `_defer_reconnect_for` for the mechanism.
+# ----------------------------------------------------------------------
+
+_HANDSHAKE_TIMEOUT = TimeoutError("DTLS handshake timed out")
+
+
+async def test_first_refresh_timeout_recovers_via_reconnect(
+    hass: HomeAssistant, mock_entry, fridge_resources
+) -> None:
+    """A pre-discovery handshake timeout reconnects instead of deferring."""
+    with (
+        patch("custom_components.localthings.coordinator.LocalThingsCoordinator._connect_session"),
+        patch(
+            "custom_components.localthings.coordinator.LocalThingsCoordinator._poll_once",
+            side_effect=[_HANDSHAKE_TIMEOUT, fridge_resources],
+        ) as mock_poll,
+        patch("custom_components.localthings.coordinator.LocalThingsCoordinator._close_session"),
+    ):
+        await hass.config_entries.async_setup(mock_entry.entry_id)
+        await hass.async_block_till_done()
+
+    # The reconnect inside the first refresh is what makes this recoverable
+    # without HA having to fail and re-run setup at all.
+    assert mock_poll.call_count == 2
+    assert mock_entry.state is ConfigEntryState.LOADED
+    coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
+    assert coordinator.bound, "discovery must have run before platforms are forwarded"
+    # The regression is entity-visible, not just coordinator state: platforms
+    # enumerate `bound` once, so an empty `bound` at forward time leaves the
+    # device with no entities until a manual reload.
+    assert hass.states.async_all(), "device came up with zero entities"
+    # The reconnect handled this failure, so it must not also be charged
+    # against the mid-session timeout budget.
+    assert coordinator._consecutive_poll_timeouts == 0
+
+
+async def test_first_refresh_persistent_timeout_fails_setup(
+    hass: HomeAssistant, mock_entry
+) -> None:
+    """When the reconnect times out too, the first refresh must fail so HA
+    retries on its backoff -- not load an entity-less entry. The session it
+    left open is closed on the way out (`_poll_once` keeps it up on a
+    `TimeoutError`, and the source port is fixed per device)."""
+    with (
+        patch("custom_components.localthings.coordinator.LocalThingsCoordinator._connect_session"),
+        patch(
+            "custom_components.localthings.coordinator.LocalThingsCoordinator._poll_once",
+            side_effect=_HANDSHAKE_TIMEOUT,
+        ),
+        patch("custom_components.localthings.coordinator.LocalThingsCoordinator._close_session"),
+        # Asserted on `async_close` rather than `_close_session`: the
+        # reconnect path calls the latter on its own, so it is already true
+        # whether or not setup cleans up after itself.
+        patch.object(
+            LocalThingsCoordinator,
+            "async_close",
+            autospec=True,
+        ) as mock_async_close,
+    ):
+        await hass.config_entries.async_setup(mock_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert mock_entry.state is ConfigEntryState.SETUP_RETRY
+    assert not hass.states.async_all()
+    mock_async_close.assert_awaited_once()
+
+
+async def test_post_discovery_timeout_is_still_deferred(
+    hass: HomeAssistant, mock_entry, mock_coordinator_session
+) -> None:
+    """The gate is scoped to the pre-discovery case only: once discovery has
+    run, a lone poll timeout must still be absorbed without a reconnect (the
+    slow-blockwise-transfer behavior `_POLL_TIMEOUT_LIMIT` exists for)."""
+    await hass.config_entries.async_setup(mock_entry.entry_id)
+    await hass.async_block_till_done()
+
+    coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
+    assert coordinator._discovered
+
+    with (
+        patch(
+            "custom_components.localthings.coordinator.LocalThingsCoordinator._poll_once",
+            side_effect=TimeoutError("GET /device/0 block 11 timeout"),
+        ),
+        patch(
+            "custom_components.localthings.coordinator.LocalThingsCoordinator._close_session",
+        ) as mock_close,
+    ):
+        await coordinator.async_request_refresh()
+        await hass.async_block_till_done()
+
+    mock_close.assert_not_called()
+    assert coordinator._consecutive_poll_timeouts == 1
+    assert coordinator.last_update_success
+
+
+async def test_close_notify_sent_on_homeassistant_stop(
+    hass: HomeAssistant, mock_entry, mock_coordinator_session
+) -> None:
+    """A plain Core restart must close the DTLS session: HA does not unload
+    entries on restart, so `async_unload_entry` never runs and the
+    association would be left orphaned on the appliance."""
+    await hass.config_entries.async_setup(mock_entry.entry_id)
+    await hass.async_block_till_done()
+
+    coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
+    with patch.object(coordinator, "async_close", new=AsyncMock()) as mock_close:
+        hass.bus.async_fire(EVENT_HOMEASSISTANT_STOP)
+        await hass.async_block_till_done()
+
+    mock_close.assert_awaited_once()

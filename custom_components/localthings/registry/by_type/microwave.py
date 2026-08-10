@@ -16,22 +16,25 @@ has no sibling `/power/0` or `/power/vs/0` resource; fan.py's
 LocalThingsRangeHoodFan falls back to treating fan speed 0 as off in that
 case (see its `_speed_zero_is_off` check).
 """
+
 from ..capabilities import common, ignored, microwave, oven, range_hood
 from ._base import DeviceRegistry, _build
 
 REGISTRY = DeviceRegistry(
-    name='microwave',
-    capabilities=_build([
-        *ignored.IGNORED,
-        *common.UNIVERSAL,
-        *common.POWER,
-        microwave.MICROWAVE_CAVITY,
-        microwave.MICROWAVE_SETPOINT,
-        microwave.MICROWAVE_MODE,
-        oven.OVEN_OPERATIONAL_STATE,
-        oven.OVEN_DOOR,
-        oven.OVEN_CONNECTED,
-        oven.OVEN_RECIPE_COOK,
-        range_hood.HOOD_FAN,
-    ]),
+    name="microwave",
+    capabilities=_build(
+        [
+            *ignored.IGNORED,
+            *common.UNIVERSAL,
+            *common.POWER,
+            microwave.MICROWAVE_CAVITY,
+            microwave.MICROWAVE_SETPOINT,
+            microwave.MICROWAVE_MODE,
+            oven.OVEN_OPERATIONAL_STATE,
+            oven.OVEN_DOOR,
+            oven.OVEN_CONNECTED,
+            oven.OVEN_RECIPE_COOK,
+            range_hood.HOOD_FAN,
+        ]
+    ),
 )

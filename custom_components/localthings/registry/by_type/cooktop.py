@@ -12,15 +12,22 @@ key is unchanged: it's relied on by the legacy ARTIK051 'CT' modelNum token
 from ..capabilities import common, cooktop, ignored
 from ._base import DeviceRegistry, _build
 
-
 REGISTRY = DeviceRegistry(
-    name='gas_cooktop',
-    capabilities=_build([
-        *ignored.IGNORED,
-        cooktop.COOKTOP_POWER,
-        cooktop.COOKTOP_MODE,
-        cooktop.COOKTOP_CONNECTED,
-        cooktop.PAIRED_HOOD_STATUS,
-        common.FIRMWARE_UPDATE,
-    ]),
+    name="gas_cooktop",
+    capabilities=_build(
+        [
+            *ignored.IGNORED,
+            cooktop.COOKTOP_POWER,
+            cooktop.COOKTOP_MODE,
+            cooktop.COOKTOP_CONNECTED,
+            cooktop.PAIRED_HOOD_STATUS,
+            common.FIRMWARE_UPDATE,
+            # issue #314: /alarms/vs/0 and /kidslock/vs/0 are the same
+            # generic shapes common.UNIVERSAL already models elsewhere --
+            # picked individually rather than pulling in all of UNIVERSAL,
+            # matching this registry's existing hand-picked-common style.
+            common.ALARMS,
+            common.KIDS_LOCK_VS_FALLBACK,
+        ]
+    ),
 )

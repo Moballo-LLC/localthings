@@ -19,34 +19,35 @@ Resource hrefs seen across laundry dumps:
 Door-LED keys use NO `x.com.samsung.da.` prefix -- `setBrightness` /
 `setNightLight` -- preserved exactly as they appear in the OCF resource rep.
 """
+
+from datetime import UTC, datetime
 from datetime import time as dt_time
-import string
 
 from ...catalog import has_entity_translation
 from ..capability import Capability
 from ..entities import NumberDesc, SelectDesc, SensorDesc, SwitchDesc, TimeDesc
 
-_LED_LEVELS = ('Low', 'High')
-_SOUND_MODES = ('voice', 'tone', 'mute')
+_LED_LEVELS = ("Low", "High")
+_SOUND_MODES = ("voice", "tone", "mute")
 
 
 def _led_brightness_write(p, rep, href=None):
     if p not in _LED_LEVELS:
         return None
-    return ['doorled', 'light', 'vs', '0'], {'setBrightness': p}
+    return ["doorled", "light", "vs", "0"], {"setBrightness": p}
 
 
 def _led_night_write(p, rep, href=None):
-    if p not in ('On', 'Off'):
+    if p not in ("On", "Off"):
         return None
-    return ['doorled', 'light', 'vs', '0'], {'setNightLight': p}
+    return ["doorled", "light", "vs", "0"], {"setNightLight": p}
 
 
 def _parse_hm(v):
     if not v:
         return None
     try:
-        h, m = v.split(':')
+        h, m = v.split(":")
         return dt_time(int(h), int(m))
     except Exception:
         return None
@@ -55,66 +56,95 @@ def _parse_hm(v):
 def _sound_mode_write(p, rep, href=None):
     if p not in _SOUND_MODES:
         return None
-    return ['settings', 'sound', 'mode', 'vs', '0'], {'mode': p}
+    return ["settings", "sound", "mode", "vs", "0"], {"mode": p}
 
 
 DOOR_LED = Capability(
-    href='/doorled/light/vs/0',
+    href="/doorled/light/vs/0",
     entities=(
-        SelectDesc(key='led_brightness', field='setBrightness',
-                   icon='mdi:brightness-6',
-                   entity_category='config',
-                   options=_LED_LEVELS, write_fn=_led_brightness_write),
-        SwitchDesc(key='led_night_light', field='setNightLight',
-                   icon='mdi:weather-night',
-                   entity_category='config',
-                   value_fn=lambda v: v == 'On',
-                   write_fn=_led_night_write),
-        SelectDesc(key='led_night_brightness', field='setNightLightBrightness',
-                   icon='mdi:brightness-4',
-                   entity_category='config',
-                   options=_LED_LEVELS,
-                   write_fn=lambda p, rep, href=None: (
-                       ['doorled', 'light', 'vs', '0'],
-                       {'setNightLightBrightness': p})),
-        TimeDesc(key='led_night_start', field='setNightLightTimeStart',
-                 icon='mdi:clock-start',
-                 entity_category='config',
-                 value_fn=_parse_hm,
-                 write_fn=lambda p, rep, href=None: (
-                     ['doorled', 'light', 'vs', '0'],
-                     {'setNightLightTimeStart': f'{p.hour:02d}:{p.minute:02d}'})),
-        TimeDesc(key='led_night_end', field='setNightLightTimeEnd',
-                 icon='mdi:clock-end',
-                 entity_category='config',
-                 value_fn=_parse_hm,
-                 write_fn=lambda p, rep, href=None: (
-                     ['doorled', 'light', 'vs', '0'],
-                     {'setNightLightTimeEnd': f'{p.hour:02d}:{p.minute:02d}'})),
+        SelectDesc(
+            key="led_brightness",
+            field="setBrightness",
+            icon="mdi:brightness-6",
+            entity_category="config",
+            options=_LED_LEVELS,
+            write_fn=_led_brightness_write,
+        ),
+        SwitchDesc(
+            key="led_night_light",
+            field="setNightLight",
+            icon="mdi:weather-night",
+            entity_category="config",
+            value_fn=lambda v: v == "On",
+            write_fn=_led_night_write,
+        ),
+        SelectDesc(
+            key="led_night_brightness",
+            field="setNightLightBrightness",
+            icon="mdi:brightness-4",
+            entity_category="config",
+            options=_LED_LEVELS,
+            write_fn=lambda p, rep, href=None: (
+                ["doorled", "light", "vs", "0"],
+                {"setNightLightBrightness": p},
+            ),
+        ),
+        TimeDesc(
+            key="led_night_start",
+            field="setNightLightTimeStart",
+            icon="mdi:clock-start",
+            entity_category="config",
+            value_fn=_parse_hm,
+            write_fn=lambda p, rep, href=None: (
+                ["doorled", "light", "vs", "0"],
+                {"setNightLightTimeStart": f"{p.hour:02d}:{p.minute:02d}"},
+            ),
+        ),
+        TimeDesc(
+            key="led_night_end",
+            field="setNightLightTimeEnd",
+            icon="mdi:clock-end",
+            entity_category="config",
+            value_fn=_parse_hm,
+            write_fn=lambda p, rep, href=None: (
+                ["doorled", "light", "vs", "0"],
+                {"setNightLightTimeEnd": f"{p.hour:02d}:{p.minute:02d}"},
+            ),
+        ),
     ),
 )
 
 SOUND_MODE = Capability(
-    href='/settings/sound/mode/vs/0',
+    href="/settings/sound/mode/vs/0",
     entities=(
-        SelectDesc(key='sound_mode', field='mode',
-                   icon='mdi:volume-high',
-                   entity_category='config',
-                   options=_SOUND_MODES, write_fn=_sound_mode_write),
+        SelectDesc(
+            key="sound_mode",
+            field="mode",
+            icon="mdi:volume-high",
+            entity_category="config",
+            options=_SOUND_MODES,
+            write_fn=_sound_mode_write,
+        ),
     ),
 )
 
 SOUND_VOLUME = Capability(
-    href='/settings/sound/volume/vs/0',
+    href="/settings/sound/volume/vs/0",
     entities=(
-        NumberDesc(key='sound_volume', field='level',
-                   icon='mdi:volume-medium',
-                   entity_category='config',
-                   native_min=0, native_max=15, step=5,
-                   value_fn=lambda v: int(v) if v is not None else None,
-                   write_fn=lambda p, rep, href=None: (
-                       ['settings', 'sound', 'volume', 'vs', '0'],
-                       {'level': str(int(p))})),
+        NumberDesc(
+            key="sound_volume",
+            field="level",
+            icon="mdi:volume-medium",
+            entity_category="config",
+            native_min=0,
+            native_max=15,
+            step=5,
+            value_fn=lambda v: int(v) if v is not None else None,
+            write_fn=lambda p, rep, href=None: (
+                ["settings", "sound", "volume", "vs", "0"],
+                {"level": str(int(p))},
+            ),
+        ),
     ),
 )
 
@@ -126,120 +156,136 @@ SOUND_VOLUME = Capability(
 # ---------------------------------------------------------------------------
 
 BUZZER_SOUND = Capability(
-    href='/buzzersound/vs/0',
+    href="/buzzersound/vs/0",
     entities=(
-        SelectDesc(key='buzzer_sound', field='setBuzzerSound',
-                   icon='mdi:volume-high',
-                   entity_category='config',
-                   options_field='supportedBuzzerSound',
-                   write_fn=lambda p, rep, href=None: (
-                       ['buzzersound', 'vs', '0'], {'setBuzzerSound': p})),
-        SelectDesc(key='finish_sound', field='setFinishSound',
-                   icon='mdi:bell-ring',
-                   entity_category='config',
-                   exists_fn=lambda rep, resources: 'supportedFinishSound' in rep,
-                   options_field='supportedFinishSound',
-                   write_fn=lambda p, rep, href=None: (
-                       ['buzzersound', 'vs', '0'], {'setFinishSound': p})),
+        SelectDesc(
+            key="buzzer_sound",
+            field="setBuzzerSound",
+            icon="mdi:volume-high",
+            entity_category="config",
+            options_field="supportedBuzzerSound",
+            write_fn=lambda p, rep, href=None: (["buzzersound", "vs", "0"], {"setBuzzerSound": p}),
+        ),
+        SelectDesc(
+            key="finish_sound",
+            field="setFinishSound",
+            icon="mdi:bell-ring",
+            entity_category="config",
+            exists_fn=lambda rep, resources: "supportedFinishSound" in rep,
+            options_field="supportedFinishSound",
+            write_fn=lambda p, rep, href=None: (["buzzersound", "vs", "0"], {"setFinishSound": p}),
+        ),
     ),
 )
 
-# ---------------------------------------------------------------------------
 # Cycle selection over /course/vs/0.
 #
 # The selected course and every other user-tunable option ride in the
-# x.com.samsung.da.options array on /course/vs/0 as `<Prefix>_<value>` tokens.
-# Confirmed on real hardware (issue #54): a write only needs to carry the one
-# changed token -- `{'x.com.samsung.da.options': ['SoftenerLevelCtrl_2']}` --
-# the device matches by prefix, evicts the stale token, and merges the result
-# into the array itself. No read-modify-write of the whole array needed (see
-# option_write). The set of *selectable* courses is not hardcoded -- it's read
-# live from
-# x.com.samsung.da.editCourseList on /wm/editcourse/vs/0 (cycle_options), so we
-# never show a course a given model doesn't have or hide one it does. Course
-# codes are uppercase hex; display names live in translations under
-# entity.select.<translation_key>.state.<id lowercased> so they can be
-# localized -- every device-enum select in this integration works this way.
-# washer.py's course comment has the byte-level evidence for why the options[]
-# MostUsed_* entry is *not* a trustworthy second source.
+# x.com.samsung.da.options array as `<Prefix>_<value>` tokens. Confirmed on
+# real hardware (issue #54): a write only needs to carry the one changed
+# token -- the device matches by prefix, evicts the stale token, and merges
+# the result itself (see option_write). The set of selectable courses is
+# read live from editCourseList on /wm/editcourse/vs/0 (cycle_options), not
+# hardcoded. Course codes are uppercase hex; display names live in
+# translations under entity.select.<translation_key>.state.<id lowercased>.
 #
 # Some boards populate /wm/editcourse/vs/0 without ever filling in
-# editCourseList itself (issue #1) -- cycle_options() falls back to deriving
-# the same list from /course/vs/0's own supportedOptions in that case; see
-# _course_codes_from_supported_options for the byte-level evidence.
+# editCourseList itself (issue #1) -- cycle_options() falls back to
+# deriving the list from /course/vs/0's own supportedOptions in that case;
+# see _course_codes_from_supported_options.
 #
-# Shared verbatim by washer, dishwasher, and dryer -- all DA_WM_-family boards
-# expose the same /course/vs/0 options contract.
-# ---------------------------------------------------------------------------
+# Shared verbatim by washer, dishwasher, and dryer -- all DA_WM_-family
+# boards expose the same /course/vs/0 options contract.
 
 
 def hex_pairs(codes):
     """'1C1D21...' -> ['1C', '1D', '21', ...]."""
-    return [codes[i:i + 2] for i in range(0, len(codes) - 1, 2)]
+    return [codes[i : i + 2] for i in range(0, len(codes) - 1, 2)]
 
 
 def parse_edit_course_list(raw):
     """'EditCourseList_1C1D21...' -> ['1C', '1D', '21', ...]."""
-    if not isinstance(raw, str) or '_' not in raw:
+    if not isinstance(raw, str) or "_" not in raw:
         return []
-    return hex_pairs(raw.split('_', 1)[1])
+    return hex_pairs(raw.split("_", 1)[1])
 
 
 def cycle_options(resources):
-    rep = resources.get('/wm/editcourse/vs/0') or {}
-    codes = parse_edit_course_list(rep.get('x.com.samsung.da.editCourseList'))
+    rep = resources.get("/wm/editcourse/vs/0") or {}
+    codes = parse_edit_course_list(rep.get("x.com.samsung.da.editCourseList"))
     if codes:
         return codes
-    return _course_codes_from_supported_options(resources.get('/course/vs/0') or {})
+    return _course_codes_from_supported_options(resources.get("/course/vs/0") or {})
 
 
 def option_value(options, prefix):
     """Find `<prefix>_<value>` in the options array and return <value>."""
-    for o in (options or []):
-        if isinstance(o, str) and o.startswith(prefix + '_'):
-            return o.split('_', 1)[1]
+    for o in options or []:
+        if isinstance(o, str) and o.startswith(prefix + "_"):
+            return o.split("_", 1)[1]
     return None
+
+
+# Drum Clean+ maintenance tracking, from the same options[] array as the
+# selected course -- shared by washer.py (issue #9) and dryer.py (issue
+# #258), identical DrumCleanProposal_/WashingTimes_/DrumCleanLog_ tokens.
+# DrumCleanProposal_<N> is the cycle interval between recommended cleans;
+# WashingTimes_<N> is the count since the last one -- their difference is
+# the "N cycles until due" figure the app shows (verified: 40 - 3 == 37,
+# matching a live app screenshot).
+def drum_clean_cycles_remaining(rep):
+    opts = rep.get("x.com.samsung.da.options") or []
+    proposal = option_value(opts, "DrumCleanProposal")
+    washed = option_value(opts, "WashingTimes")
+    if proposal is None or washed is None:
+        return None
+    try:
+        return max(int(proposal) - int(washed), 0)
+    except ValueError:
+        return None
+
+
+# DrumCleanLog_ is the clean-history field: a washer reports one bare ISO
+# datetime (the last clean); a dryer (issue #258) instead reports a
+# '|'-joined history of every past clean in increasing order. Splitting on
+# '|' and taking the last element handles both shapes identically. No
+# timezone accompanies either shape, so it's treated as UTC.
+def drum_clean_last_cleaned(rep):
+    raw = option_value(rep.get("x.com.samsung.da.options"), "DrumCleanLog")
+    if not raw:
+        return None
+    last = raw.rsplit("|", 1)[-1]
+    try:
+        return datetime.fromisoformat(last).replace(tzinfo=UTC)
+    except ValueError:
+        return None
 
 
 def _course_codes_from_supported_options(course_rep):
     """Fallback for an empty/missing editCourseList: derive the selectable
-    course list from /course/vs/0's own x.com.samsung.da.supportedOptions
-    instead (issue #1: some DA_WM_TP1/TP2-class boards populate the
-    /wm/editcourse/vs/0 href but never fill in editCourseList itself).
+    course list from /course/vs/0's own supportedOptions instead (issue #1:
+    some boards populate /wm/editcourse/vs/0 but never fill in
+    editCourseList itself).
 
     supportedOptions is a 1-hex-nibble header followed by one fixed-width
     record per selectable course, self-indexed rather than positional --
-    the first byte of every record is that course's own hex code, just in
-    the firmware's own internal order, not editCourseList's. Confirmed
-    against six independent real-world washer/dryer/dishwasher dumps: every
-    one divides evenly into `header + N * K bytes` with fully unique first
-    bytes across all N records, at the record's true byte width. (What the
-    rest of each record encodes is still unconfirmed -- this only uses the
-    course-code byte.)
+    the first byte of every record is that course's own hex code.
+    Confirmed against six independent real-world dumps: every one divides
+    evenly into `header + N * K bytes` with fully unique first bytes across
+    all N records, at the record's true byte width.
 
-    Two guards, deliberately conservative rather than guessing further: the
-    derived codes must (a) all be distinct -- a real course table, not
-    noise -- and (b) include whatever course is currently selected
-    (x.com.samsung.da.options' Course_<code> token), which must always be a
-    member of its own device's valid list. If no split satisfies both, this
-    returns [] rather than guess.
+    Two conservative guards rather than guessing further: the derived codes
+    must all be distinct, and must include whatever course is currently
+    selected. If no split satisfies both, this returns [].
 
-    Among splits that satisfy both, the *smallest* passing K wins, rather
-    than requiring a single unambiguous one -- more than one K reliably
-    does pass on real data (e.g. the shipped dishwasher fixture: true
-    K=7 passes, but so do 10, 14, and 35, none of which are multiples of
-    7 -- position 0 always lands on the same real course code regardless
-    of K, which is enough on its own to satisfy the current-course guard
-    for several unrelated splits). Smallest-K-wins is a heuristic, not a
-    proof: it matches the confirmed answer on every one of six independent
-    real-world dumps this was checked against, but a coincidentally
-    unique, current-course-inclusive *smaller* K is not mathematically
-    impossible on some future device, and would be picked silently. Not
-    guarded against further here, since course tables are typically large
-    enough (double digits) that colliding by chance on both checks is
-    unlikely, and no device seen so far actually needs it.
+    Among splits that satisfy both, the smallest passing K wins -- more
+    than one K reliably passes on real data, and smallest-K-wins matches
+    the confirmed answer on all six dumps checked, though it's a heuristic
+    rather than a proof. Not guarded further: course tables are typically
+    large enough that colliding by chance on both checks is unlikely, and
+    no device seen so far needs it.
     """
-    raw = course_rep.get('x.com.samsung.da.supportedOptions')
+    raw = course_rep.get("x.com.samsung.da.supportedOptions")
     hexstr = raw[0] if isinstance(raw, list) and raw else raw
     if not isinstance(hexstr, str) or len(hexstr) < 3:
         return []
@@ -247,14 +293,14 @@ def _course_codes_from_supported_options(course_rep):
     if len(body) % 2:
         return []
     total_bytes = len(body) // 2
-    current = option_value(course_rep.get('x.com.samsung.da.options'), 'Course')
+    current = option_value(course_rep.get("x.com.samsung.da.options"), "Course")
     for k in range(1, total_bytes + 1):
         if total_bytes % k:
             continue
         n = total_bytes // k
         if n < 2:
             continue
-        firsts = [body[i * k * 2:i * k * 2 + 2] for i in range(n)]
+        firsts = [body[i * k * 2 : i * k * 2 + 2] for i in range(n)]
         if len(set(firsts)) != n:
             continue
         if current is not None and current not in firsts:
@@ -265,19 +311,19 @@ def _course_codes_from_supported_options(course_rep):
 
 def option_write(prefix, new_value):
     """A one-token x.com.samsung.da.options write -- see the module comment
-    above cycle_options for why this doesn't read/rewrite the whole array."""
-    return [f'{prefix}_{new_value}']
+    above for why this doesn't read/rewrite the whole array."""
+    return [f"{prefix}_{new_value}"]
 
 
 def cycle_write(p, rep, href=None):
-    if not rep.get('x.com.samsung.da.options'):
+    if not rep.get("x.com.samsung.da.options"):
         return None
-    return ['course', 'vs', '0'], {
-        'x.com.samsung.da.options': option_write('Course', p),
+    return ["course", "vs", "0"], {
+        "x.com.samsung.da.options": option_write("Course", p),
     }
 
 
-def personal_course_labels(resources, href='/wm/personalcourse/vs/0'):
+def personal_course_labels(resources, href="/wm/personalcourse/vs/0"):
     """Return device-provided personal course names keyed by course code.
 
     Populated entries use a small TLV payload. The leading field is
@@ -288,10 +334,10 @@ def personal_course_labels(resources, href='/wm/personalcourse/vs/0'):
     """
     rep = resources.get(href) or {}
     labels = {}
-    for entry in rep.get('x.com.samsung.da.courses') or []:
-        if not isinstance(entry, str) or '_' not in entry:
+    for entry in rep.get("x.com.samsung.da.courses") or []:
+        if not isinstance(entry, str) or "_" not in entry:
             continue
-        code, encoded = entry.split('_', 1)
+        code, encoded = entry.split("_", 1)
         try:
             payload = bytes.fromhex(encoded)
         except ValueError:
@@ -302,7 +348,7 @@ def personal_course_labels(resources, href='/wm/personalcourse/vs/0'):
         if name_length == 0 or len(payload) < 2 + name_length:
             continue
         try:
-            name = payload[2:2 + name_length].decode('utf-8')
+            name = payload[2 : 2 + name_length].decode("utf-8")
         except UnicodeDecodeError:
             continue
         if name.strip() and name.isprintable():
@@ -311,120 +357,117 @@ def personal_course_labels(resources, href='/wm/personalcourse/vs/0'):
 
 
 def washer_cycle_fallback(value, resources):
-    """Label an untranslated washer course without guessing its meaning."""
+    """Label a personal washer course from its device-provided name.
+
+    No fallback for an unrecognized standard code -- an invented English
+    label would defeat translation (PR #251 review); the raw code displays
+    instead, same as before this function existed.
+    """
     if not isinstance(value, str):
         return None
-    if label := personal_course_labels(resources).get(value.upper()):
-        return label
-    if len(value) == 2 and all(char in string.hexdigits for char in value):
-        return f'Unknown (0x{value.upper()})'
-    return None
+    return personal_course_labels(resources).get(value.upper())
 
 
 def _table_id(resources, table_href):
     rep = resources.get(table_href) or {}
-    return rep.get('x.com.samsung.da.st.courseTable')
+    return rep.get("x.com.samsung.da.st.courseTable")
 
 
 def cycle_select(*, translation_key, icon, table_href=None, display_fn=None):
     """A 'Cycle' select over /course/vs/0, labelled from `translation_key`.
 
-    The option list, current value, and write path are all shared across
-    washer/dryer/dishwasher; only the translation is family- (and, for
-    washer/dryer, board-) specific.
+    The option list, current value, and write path are shared across
+    washer/dryer/dishwasher; only the translation is family/board-specific.
 
-    table_href (washer/dryer only -- see washer.py/dryer.py's call sites)
-    suffixes translation_key with the device's own course-table id, read
-    from /st/washercourse/vs/0 or /st/dryercourse/vs/0's
-    x.com.samsung.da.st.courseTable (e.g. 'washer_cycle' + 'Table_02' ->
-    'washer_cycle_table_02'). An absent or unrecognized table id gets the
-    name-only ``cycle`` translation key. The raw course code remains writable;
-    its display uses display_fn when supplied, otherwise it remains raw.
+    table_href (washer/dryer only) suffixes translation_key with the
+    device's own course-table id, read from /st/washercourse/vs/0 or
+    /st/dryercourse/vs/0's courseTable (e.g. 'washer_cycle' + 'Table_02' ->
+    'washer_cycle_table_02'). This matters because course codes are NOT
+    guaranteed consistent across board generations sharing the same
+    /course/vs/0 contract: washer_cycle_table_02 was confirmed against
+    Table_02 devices, but FlexWash's older board reports Table_00, where
+    the same hex code could mean a different course. An absent or
+    unrecognized table id falls back to the name-only ``cycle`` key
+    instead of borrowing a label from another board generation --
+    translating a new table is a translations-only change.
 
-    display_fn is an optional family-specific fallback for untranslated raw
-    values. select.py applies it after catalog lookup to both state and options.
-
-    This matters because course codes are NOT guaranteed consistent across
-    board generations sharing the same /course/vs/0 contract: every code in
-    washer_cycle_table_02 was confirmed against Table_02-reporting devices
-    (DA_WM_TP1/TP2 boards); FlexWash's older DA_WM_A51 board reports
-    Table_00 instead, so the same hex code could mean a different course
-    there for all we've verified. So a table-specific key is used only when
-    the shipped catalog actually has one; any other table (Table_00 today,
-    whatever ships next) falls back to the name-only ``cycle`` key, which
-    does not borrow a label from another board generation. Translating a new
-    table is therefore a translations-only change -- add the
-    ``<family>_cycle_<table>`` entry and this resolver picks it up.
+    The raw course code remains writable regardless; its display uses
+    display_fn when supplied, otherwise it remains raw. display_fn is an
+    optional family-specific fallback for untranslated raw values --
+    select.py applies it after catalog lookup to both state and options.
 
     Left at its default for dishwasher, which has no equivalent table-id
-    resource in any dump seen and no evidence its course codes vary by
-    table the way washer/dryer's do -- there's nothing to build a
-    table-specific key from.
+    resource and no evidence its codes vary by table the way washer/
+    dryer's do.
     """
     key = translation_key
     if table_href is not None:
+
         def key(resources):
             table = _table_id(resources, table_href)
             if not isinstance(table, str) or not table:
-                return 'cycle'
-            candidate = f'{translation_key}_{table.lower()}'
-            return candidate if has_entity_translation('select', candidate) else 'cycle'
+                return "cycle"
+            candidate = f"{translation_key}_{table.lower()}"
+            return candidate if has_entity_translation("select", candidate) else "cycle"
 
     return SelectDesc(
-        key='cycle', icon=icon, translation_key=key,
+        key="cycle",
+        icon=icon,
+        translation_key=key,
         options=cycle_options,
         exists_fn=lambda rep, resources: bool(cycle_options(resources)),
-        rep_fn=lambda rep: option_value(rep.get('x.com.samsung.da.options'), 'Course'),
+        rep_fn=lambda rep: option_value(rep.get("x.com.samsung.da.options"), "Course"),
         display_fn=display_fn,
         write_fn=cycle_write,
     )
 
 
-# ---------------------------------------------------------------------------
 # Plain boolean toggles over /course/vs/0's options[] array: a
-# '<prefix>_On'/'<prefix>_Off' token, read-modify-written the same way as
-# the 'Course' token above. Shared by washer (bubble soak, pre-wash,
-# intensive -- issue #22) and dishwasher (storm wash, auto release dry) --
-# both families ride this exact contract, just with different prefixes and
-# different presence/validation needs on top.
-# ---------------------------------------------------------------------------
+# '<prefix>_On'/'<prefix>_Off' token, merged the same way as the 'Course'
+# token above. Shared by washer (bubble soak, pre-wash, intensive -- issue
+# #22) and dishwasher (storm wash, auto release dry), just with different
+# prefixes and presence/validation needs on top.
 
 
 def bool_option_write(prefix):
     def write(p, rep, href=None):
-        if p not in ('On', 'Off'):
+        if p not in ("On", "Off"):
             return None
-        if not rep.get('x.com.samsung.da.options'):
+        if not rep.get("x.com.samsung.da.options"):
             return None
-        return ['course', 'vs', '0'], {
-            'x.com.samsung.da.options': option_write(prefix, p),
+        return ["course", "vs", "0"], {
+            "x.com.samsung.da.options": option_write(prefix, p),
         }
+
     return write
 
 
 def bool_option_value(prefix):
-    return lambda rep: option_value(rep.get('x.com.samsung.da.options'), prefix) == 'On'
+    return lambda rep: option_value(rep.get("x.com.samsung.da.options"), prefix) == "On"
 
 
 def bool_option_exists(prefix):
-    return lambda rep, resources: option_value(
-        rep.get('x.com.samsung.da.options'), prefix) is not None
+    return lambda rep, resources: (
+        option_value(rep.get("x.com.samsung.da.options"), prefix) is not None
+    )
 
 
-def bool_option_switch(key, icon, prefix, *, entity_category=None,
-                       gate_on_presence=False, validate_fn=None):
+def bool_option_switch(
+    key, icon, prefix, *, entity_category=None, gate_on_presence=False, validate_fn=None
+):
     """A SwitchDesc over a '<prefix>_On'/'<prefix>_Off' options[] token.
 
     gate_on_presence self-gates the entity off on models that never report
-    the token at all (washer's bubble soak/pre-wash/intensive); leave False
-    for a toggle every device in the family reports (dishwasher's storm
-    wash). validate_fn is passed straight through to SwitchDesc for callers
-    that need to reject a write against live device state (e.g. washer's
-    per-course availability check) -- this factory has no opinion on it and
-    building one, if needed, is the caller's job.
+    the token (washer's bubble soak/pre-wash/intensive); leave False for a
+    toggle every device in the family reports (dishwasher's storm wash).
+    validate_fn passes straight through to SwitchDesc for callers that need
+    to reject a write against live state -- this factory has no opinion on
+    it.
     """
     return SwitchDesc(
-        key=key, icon=icon, entity_category=entity_category,
+        key=key,
+        icon=icon,
+        entity_category=entity_category,
         exists_fn=bool_option_exists(prefix) if gate_on_presence else None,
         rep_fn=bool_option_value(prefix),
         write_fn=bool_option_write(prefix),
@@ -432,21 +475,20 @@ def bool_option_switch(key, icon, prefix, *, entity_category=None,
     )
 
 
-# ---------------------------------------------------------------------------
 # /wm/jobbeginingstatus/vs/0 -- the "why did the cycle not start" reason
-# (e.g. door open, no water). The vendor field is x.com.samsung.da.currentStatus
-# on every laundry dump that populates it (washer + DA_WM_TP1 dryer). An
-# earlier dryer descriptor read x.com.samsung.da.jobBeginingStatus, but no dump
-# ever carried that field, so the dryer sensor was always blank -- fixed by
-# sharing this one reader.
-# ---------------------------------------------------------------------------
+# (e.g. door open, no water), x.com.samsung.da.currentStatus on every dump
+# that populates it. An earlier dryer descriptor read
+# x.com.samsung.da.jobBeginingStatus instead, which no dump ever carried,
+# so the dryer sensor was always blank -- fixed by sharing this one reader.
 
 JOB_BEGINNING_STATUS = Capability(
-    href='/wm/jobbeginingstatus/vs/0',
-    poll_tier='warm',
+    href="/wm/jobbeginingstatus/vs/0",
+    poll_tier="warm",
     entities=(
-        SensorDesc(key='job_beginning_status',
-                   field='x.com.samsung.da.currentStatus',
-                   entity_category='diagnostic'),
+        SensorDesc(
+            key="job_beginning_status",
+            field="x.com.samsung.da.currentStatus",
+            entity_category="diagnostic",
+        ),
     ),
 )

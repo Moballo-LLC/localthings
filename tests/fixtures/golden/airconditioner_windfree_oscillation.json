@@ -6,6 +6,8 @@
     "air_filter_usage_hours",
     "alarm_code",
     "auto_clean",
+    "auto_clean_progress",
+    "auto_clean_running",
     "beep",
     "climate",
     "current_temperature_c",

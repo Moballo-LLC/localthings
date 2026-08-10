@@ -1,0 +1,240 @@
+{
+  "meta": {
+    "note": "Samsung NV9000D induction cooktop (NV9000D-/KO2). Scrubbed real /device/0 dump captured for compatibility regression coverage. This firmware starts directly with /connectionconfig/vs/0 instead of a device-level collection representation.",
+    "model": "TP1X_DA-KS-COOKTOP-01011",
+    "product": "NV9000D-/KO2"
+  },
+  "device0": [
+    {
+      "href": "/connectionconfig/vs/0",
+      "rep": {
+        "autoReconnectionMinVersion": "1.0",
+        "autoReconnection": "true",
+        "autoReconnectionProtocolType": [
+          "helper_hotspot",
+          "ble_ocf"
+        ],
+        "supportedWiFiAuthType": [
+          "OPEN",
+          "WEP",
+          "WPA-PSK",
+          "WPA2-PSK",
+          "SAE"
+        ],
+        "supportedWiFiCryptoType": [
+          "TKIP",
+          "AES",
+          "WEP-64",
+          "WEP-128"
+        ],
+        "supportedWiFiFreq": [
+          "2.4G"
+        ],
+        "calmConnectionCare": {
+          "version": "1.0",
+          "role": [
+            "things"
+          ]
+        }
+      }
+    },
+    {
+      "href": "/otninformation/vs/0",
+      "rep": {
+        "x.com.samsung.da.target": "",
+        "x.com.samsung.da.newVersionAvailable": "false",
+        "x.com.samsung.da.newVersionNo": "00000000",
+        "x.com.samsung.da.currentVersionInfo": "00000000",
+        "flashingProgress": "",
+        "otnTarget": "main",
+        "otnStatus": "None",
+        "otnCompleteDate": "noHistory",
+        "otnList": [
+          {
+            "type": "WIFI",
+            "modelId": "AKS-WW-TP1-21-COOKTOP-2",
+            "versions": [
+              "40260330"
+            ],
+            "visVersion": "260330"
+          },
+          {
+            "type": "Micom",
+            "modelId": "051140474341FFFFFFFF",
+            "versions": [
+              "26032400",
+              "FFFFFFFF"
+            ],
+            "visVersion": "260324"
+          }
+        ]
+      }
+    },
+    {
+      "href": "/alarms/vs/0",
+      "rep": {
+        "rt": [
+          "x.com.samsung.da.alarms"
+        ],
+        "if": [
+          "oic.if.baseline",
+          "oic.if.s"
+        ],
+        "x.com.samsung.da.items": [
+          {
+            "x.com.samsung.da.id": "0",
+            "x.com.samsung.da.description": "Alarm",
+            "x.com.samsung.da.alarmType": "Device",
+            "x.com.samsung.da.code": "CT_E_OFF",
+            "x.com.samsung.da.triggeredTime": "**REDACTED**"
+          }
+        ]
+      }
+    },
+    {
+      "href": "/cooktop/spec/vs/0",
+      "rep": {
+        "deviceType": "cooktop",
+        "micomModelId": "NV9000D-/KO2",
+        "supportedFeatureList": [
+          ""
+        ],
+        "numberOfBurners": 3,
+        "supportedBurnerList": [
+          0,
+          1,
+          2
+        ],
+        "supportedPowerLevelList": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "boost",
+          "0"
+        ]
+      }
+    },
+    {
+      "href": "/cooktop/status/vs/0",
+      "rep": {
+        "sequenceNumber": 485,
+        "power": "off",
+        "childLock": "off",
+        "operationState": "ready",
+        "additionalStateList": [
+          ""
+        ],
+        "burnerList": [
+          {
+            "burnerNumber": 0,
+            "mode": "normal",
+            "operationState": "ready",
+            "powerLevel": "0",
+            "hotSurfaceState": "normal",
+            "panDetection": true,
+            "timer": {
+              "operationState": "ready",
+              "cookingTime": 0,
+              "remainingTime": 0
+            }
+          },
+          {
+            "burnerNumber": 1,
+            "mode": "normal",
+            "operationState": "ready",
+            "powerLevel": "0",
+            "hotSurfaceState": "normal",
+            "panDetection": true,
+            "timer": {
+              "operationState": "ready",
+              "cookingTime": 0,
+              "remainingTime": 0
+            }
+          },
+          {
+            "burnerNumber": 2,
+            "mode": "normal",
+            "operationState": "ready",
+            "powerLevel": "0",
+            "hotSurfaceState": "normal",
+            "panDetection": true,
+            "timer": {
+              "operationState": "ready",
+              "cookingTime": 0,
+              "remainingTime": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "href": "/information/vs/0",
+      "rep": {
+        "x.com.samsung.da.modelNum": "TP1X_DA-KS-COOKTOP-01011|40474341|50000203001811000A00000000000000",
+        "x.com.samsung.da.description": "NV9000D-/KO2",
+        "x.com.samsung.da.serialNum": "**REDACTED**",
+        "x.com.samsung.da.otnDUID": "**REDACTED**",
+        "x.com.samsung.da.items": [
+          {
+            "x.com.samsung.da.id": "0",
+            "x.com.samsung.da.description": "Version",
+            "x.com.samsung.da.type": "Software",
+            "x.com.samsung.da.number": "26033000",
+            "x.com.samsung.da.newVersionAvailable": "0"
+          },
+          {
+            "x.com.samsung.da.id": "1",
+            "x.com.samsung.da.description": "Version",
+            "x.com.samsung.da.type": "Firmware",
+            "x.com.samsung.da.number": "04743A26032400",
+            "x.com.samsung.da.newVersionAvailable": "0"
+          }
+        ],
+        "x.com.samsung.da.diagProtocolType": "BLE_OCF",
+        "x.com.samsung.da.diagMinVersion": "3.0",
+        "x.com.samsung.da.diagLogType": [
+          "errCode",
+          "dump"
+        ],
+        "x.com.samsung.da.diagDumpType": "file",
+        "x.com.samsung.da.diagEndPoint": "SSM",
+        "x.com.samsung.da.diagMnid": "0AJT",
+        "x.com.samsung.da.diagSetupid": "KC2",
+        "x.com.samsung.da.diagTsId": "DA01"
+      }
+    },
+    {
+      "href": "/timezone/vs/0",
+      "rep": {
+        "timezoneid": "Asia/Seoul",
+        "offset": "+09:00",
+        "DST": "OFF"
+      }
+    },
+    {
+      "href": "/cooktop/settings/status/vs/0",
+      "rep": {
+        "sequenceNumber": 104,
+        "safetyAlert": {
+          "state": "on",
+          "settingTime": 3600
+        }
+      }
+    },
+    {
+      "href": "/energy/consumption/vs/0",
+      "rep": {
+        "x.com.samsung.da.instantaneousPower": "-500",
+        "x.com.samsung.da.instantaneousPowerUnit": "W",
+        "x.com.samsung.da.cumulativePower": "218600",
+        "x.com.samsung.da.cumulativeUnit": "Wh"
+      }
+    }
+  ]
+}

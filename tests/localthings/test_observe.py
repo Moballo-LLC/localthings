@@ -1,16 +1,17 @@
 """Tests for ObserveManager: write-settle guard and mode defaults."""
+
 from __future__ import annotations
 
 import threading
 import time
 
 import cbor2
-import pytest
-
 from smartthings_local.ocf.state_cache import StateCache
 
 from custom_components.localthings.observe import (
-    ObserveManager, MODE_POLL, _rep_diff,
+    MODE_POLL,
+    ObserveManager,
+    _rep_diff,
 )
 
 
@@ -30,8 +31,8 @@ def test_starts_in_poll_mode():
 
 def test_apply_writes_through_when_not_settling():
     mgr = _manager()
-    assert mgr.apply('/oven/vs/0', {'a': 1}, source='poll') is True
-    assert mgr.cache.get('/oven/vs/0') == {'a': 1}
+    assert mgr.apply("/oven/vs/0", {"a": 1}, source="poll") is True
+    assert mgr.cache.get("/oven/vs/0") == {"a": 1}
 
 
 def test_apply_merges_partial_update_onto_prior_rep():
@@ -43,28 +44,29 @@ def test_apply_merges_partial_update_onto_prior_rep():
     which is exactly what made the flex-zone select disappear."""
     mgr = _manager()
     full = {
-        'x.com.samsung.da.modes': ['CVN_CONVERTIBLE_ZONE', 'CV_FDR_MEAT'],
-        'x.com.samsung.da.supportedOptions': ['CV_FDR_WINE', 'CV_FDR_MEAT'],
+        "x.com.samsung.da.modes": ["CVN_CONVERTIBLE_ZONE", "CV_FDR_MEAT"],
+        "x.com.samsung.da.supportedOptions": ["CV_FDR_WINE", "CV_FDR_MEAT"],
     }
-    mgr.apply('/mode/vs/0', full, source='poll')
+    mgr.apply("/mode/vs/0", full, source="poll")
 
-    partial = {'x.com.samsung.da.modes': ['CVN_CONVERTIBLE_ZONE', 'WATERFILTER_ENABLE']}
-    mgr.apply('/mode/vs/0', partial, source='observe')
+    partial = {"x.com.samsung.da.modes": ["CVN_CONVERTIBLE_ZONE", "WATERFILTER_ENABLE"]}
+    mgr.apply("/mode/vs/0", partial, source="observe")
 
-    cached = mgr.cache.get('/mode/vs/0')
-    assert cached['x.com.samsung.da.modes'] == ['CVN_CONVERTIBLE_ZONE', 'WATERFILTER_ENABLE']
-    assert cached['x.com.samsung.da.supportedOptions'] == ['CV_FDR_WINE', 'CV_FDR_MEAT']
+    cached = mgr.cache.get("/mode/vs/0")
+    assert cached is not None
+    assert cached["x.com.samsung.da.modes"] == ["CVN_CONVERTIBLE_ZONE", "WATERFILTER_ENABLE"]
+    assert cached["x.com.samsung.da.supportedOptions"] == ["CV_FDR_WINE", "CV_FDR_MEAT"]
 
 
 def test_apply_drops_update_during_settle_window():
     mgr = _manager()
-    mgr.cache.apply_rep('/oven/vs/0', {'a': 1}, source='seed')
-    mgr.mark_write_pending('/oven/vs/0', settle_s=1.0)
+    mgr.cache.apply_rep("/oven/vs/0", {"a": 1}, source="seed")
+    mgr.mark_write_pending("/oven/vs/0", settle_s=1.0)
 
-    result = mgr.apply('/oven/vs/0', {'a': 2}, source='poll')
+    result = mgr.apply("/oven/vs/0", {"a": 2}, source="poll")
 
     assert result is False
-    assert mgr.cache.get('/oven/vs/0') == {'a': 1}
+    assert mgr.cache.get("/oven/vs/0") == {"a": 1}
 
 
 def test_apply_optimistic_bypasses_an_in_progress_settle_window():
@@ -77,29 +79,29 @@ def test_apply_optimistic_bypasses_an_in_progress_settle_window():
     dropped by a guard that exists to protect optimistic writes, not
     suppress them."""
     mgr = _manager()
-    mgr.cache.apply_rep('/course/vs/0', {'Course': '1C', 'Detergent': '1'}, source='seed')
-    mgr.mark_write_pending('/course/vs/0', settle_s=30.0)
+    mgr.cache.apply_rep("/course/vs/0", {"Course": "1C", "Detergent": "1"}, source="seed")
+    mgr.mark_write_pending("/course/vs/0", settle_s=30.0)
 
-    result = mgr.apply('/course/vs/0', {'Detergent': '2'}, source='optimistic')
+    result = mgr.apply("/course/vs/0", {"Detergent": "2"}, source="optimistic")
 
     assert result is True
-    assert mgr.cache.get('/course/vs/0') == {'Course': '1C', 'Detergent': '2'}
+    assert mgr.cache.get("/course/vs/0") == {"Course": "1C", "Detergent": "2"}
 
     # A poll/sweep/observe update racing in right behind it is still
     # gated -- the second write's own guard (re-armed by mark_write_pending,
     # not exercised directly here) is what protects it going forward.
-    assert mgr.apply('/course/vs/0', {'Detergent': '1'}, source='poll') is False
+    assert mgr.apply("/course/vs/0", {"Detergent": "1"}, source="poll") is False
 
 
 def test_apply_accepts_update_after_settle_window_elapses():
     mgr = _manager()
-    mgr.mark_write_pending('/oven/vs/0', settle_s=0.05)
+    mgr.mark_write_pending("/oven/vs/0", settle_s=0.05)
     time.sleep(0.1)
 
-    result = mgr.apply('/oven/vs/0', {'a': 2}, source='poll')
+    result = mgr.apply("/oven/vs/0", {"a": 2}, source="poll")
 
     assert result is True
-    assert mgr.cache.get('/oven/vs/0') == {'a': 2}
+    assert mgr.cache.get("/oven/vs/0") == {"a": 2}
 
 
 class _FakeSession:
@@ -110,28 +112,29 @@ class _FakeSession:
     `mgr.on_notification(href, payload)` itself to simulate delivery,
     since real notify delivery is async/threaded in production.
     """
+
     def __init__(self):
         self.subscribed: list[str] = []
         self.fail_hrefs: set[str] = set()
 
     def subscribe(self, path_segs):
-        href = '/' + '/'.join(path_segs)
+        href = "/" + "/".join(path_segs)
         if href in self.fail_hrefs:
             raise ConnectionError("subscribe failed")
         self.subscribed.append(href)
-        return b'\x01'
+        return b"\x01"
 
 
 def test_try_enter_observe_mode_succeeds_when_all_hrefs_notify():
     mgr = _manager()
     session = _FakeSession()
-    hrefs = ['/oven/vs/0', '/power/vs/0']
+    hrefs = ["/oven/vs/0", "/power/vs/0"]
 
     def _notify_during_grace_period():
         # Simulate notifications arriving during the grace period
         time.sleep(0.005)  # Let the sleep start, then notify partway through
         for href in hrefs:
-            mgr.on_notification(href, cbor2.dumps({'x': 1}))
+            mgr.on_notification(href, cbor2.dumps({"x": 1}))
 
     # Start background thread to deliver notifications during grace period
     notifier = threading.Thread(target=_notify_during_grace_period, daemon=True)
@@ -142,7 +145,7 @@ def test_try_enter_observe_mode_succeeds_when_all_hrefs_notify():
         notifier.join()
 
         assert entered is True
-        assert mgr.mode == 'observe'
+        assert mgr.mode == "observe"
         assert mgr.subscribed_hrefs == set(hrefs)
     finally:
         mgr.close()
@@ -151,57 +154,60 @@ def test_try_enter_observe_mode_succeeds_when_all_hrefs_notify():
 def test_try_enter_observe_mode_falls_back_when_no_notifies_arrive():
     mgr = _manager()
     session = _FakeSession()
-    hrefs = ['/oven/vs/0', '/power/vs/0']
+    hrefs = ["/oven/vs/0", "/power/vs/0"]
 
     entered = mgr.try_enter_observe_mode(session, hrefs, grace_period_s=0.01)
 
     assert entered is False
-    assert mgr.mode == 'poll'
+    assert mgr.mode == "poll"
     assert mgr.subscribed_hrefs == set()
 
 
 def test_try_enter_observe_mode_falls_back_when_subscribe_fails_for_all():
     mgr = _manager()
     session = _FakeSession()
-    session.fail_hrefs = {'/oven/vs/0', '/power/vs/0'}
-    hrefs = ['/oven/vs/0', '/power/vs/0']
+    session.fail_hrefs = {"/oven/vs/0", "/power/vs/0"}
+    hrefs = ["/oven/vs/0", "/power/vs/0"]
 
     entered = mgr.try_enter_observe_mode(session, hrefs, grace_period_s=0.01)
 
     assert entered is False
-    assert mgr.mode == 'poll'
+    assert mgr.mode == "poll"
 
 
 def test_try_enter_observe_mode_meets_success_fraction_with_partial_notifies():
     mgr = _manager()
     session = _FakeSession()
-    hrefs = ['/a/vs/0', '/b/vs/0', '/c/vs/0', '/d/vs/0']
+    hrefs = ["/a/vs/0", "/b/vs/0", "/c/vs/0", "/d/vs/0"]
 
     def _notify_partial():
         # Simulate partial notifications arriving during grace period
         time.sleep(0.005)
         for href in hrefs[:3]:  # 3/4 = 0.75
-            mgr.on_notification(href, cbor2.dumps({'x': 1}))
+            mgr.on_notification(href, cbor2.dumps({"x": 1}))
 
     notifier = threading.Thread(target=_notify_partial, daemon=True)
     notifier.start()
 
     try:
         entered = mgr.try_enter_observe_mode(
-            session, hrefs, grace_period_s=0.02, success_fraction=0.7,
+            session,
+            hrefs,
+            grace_period_s=0.02,
+            success_fraction=0.7,
         )
         notifier.join()
 
         assert entered is True
-        assert mgr.mode == 'observe'
+        assert mgr.mode == "observe"
     finally:
         mgr.close()
 
 
 def test_on_notification_ignores_malformed_cbor():
     mgr = _manager()
-    mgr.on_notification('/oven/vs/0', b'\xff\xff\xff not cbor')
-    assert mgr.cache.get('/oven/vs/0') is None
+    mgr.on_notification("/oven/vs/0", b"\xff\xff\xff not cbor")
+    assert mgr.cache.get("/oven/vs/0") is None
 
 
 def test_recently_notified_false_before_any_notify():
@@ -211,13 +217,13 @@ def test_recently_notified_false_before_any_notify():
 
 def test_recently_notified_true_just_after_a_notify():
     mgr = _manager()
-    mgr.on_notification('/oven/vs/0', cbor2.dumps({'a': 1}))
+    mgr.on_notification("/oven/vs/0", cbor2.dumps({"a": 1}))
     assert mgr.recently_notified() is True
 
 
 def test_recently_notified_false_after_window_elapses():
     mgr = _manager()
-    mgr.on_notification('/oven/vs/0', cbor2.dumps({'a': 1}))
+    mgr.on_notification("/oven/vs/0", cbor2.dumps({"a": 1}))
     assert mgr.recently_notified(window_s=0.01) is True
     time.sleep(0.02)
     assert mgr.recently_notified(window_s=0.01) is False
@@ -229,21 +235,21 @@ def test_try_enter_observe_mode_clears_stale_notifications_on_retry():
     usage when poll-only mode periodically retries entering observe mode."""
     mgr = _manager()
     session = _FakeSession()
-    hrefs = ['/a/vs/0', '/b/vs/0']
+    hrefs = ["/a/vs/0", "/b/vs/0"]
 
     try:
         # First call: all hrefs notify -> succeeds and enters observe mode
         def _notify_all_first():
             time.sleep(0.005)
             for href in hrefs:
-                mgr.on_notification(href, cbor2.dumps({'x': 1}))
+                mgr.on_notification(href, cbor2.dumps({"x": 1}))
 
         notifier1 = threading.Thread(target=_notify_all_first, daemon=True)
         notifier1.start()
         entered = mgr.try_enter_observe_mode(session, hrefs, grace_period_s=0.02)
         notifier1.join()
         assert entered is True
-        assert mgr.mode == 'observe'
+        assert mgr.mode == "observe"
 
         # Second call: retry with same hrefs, but only one notifies.
         # Without the fix (missing self._notified.clear()), the old notifications
@@ -253,7 +259,7 @@ def test_try_enter_observe_mode_clears_stale_notifications_on_retry():
 
         def _notify_partial_second():
             time.sleep(0.005)
-            mgr.on_notification(hrefs[0], cbor2.dumps({'x': 2}))  # only one notifies
+            mgr.on_notification(hrefs[0], cbor2.dumps({"x": 2}))  # only one notifies
 
         notifier2 = threading.Thread(target=_notify_partial_second, daemon=True)
         notifier2.start()
@@ -261,7 +267,7 @@ def test_try_enter_observe_mode_clears_stale_notifications_on_retry():
         notifier2.join()
 
         assert entered is False
-        assert mgr.mode == 'poll'
+        assert mgr.mode == "poll"
         assert mgr.subscribed_hrefs == set()
     finally:
         mgr.close()
@@ -269,9 +275,9 @@ def test_try_enter_observe_mode_clears_stale_notifications_on_retry():
 
 def test_log_sweep_discrepancies_noop_when_not_in_observe_mode(caplog):
     mgr = _manager()
-    with caplog.at_level('DEBUG'):
-        mgr.log_sweep_discrepancies({'/oven/vs/0': {'a': 2}})
-    assert 'observe missed a change' not in caplog.text
+    with caplog.at_level("DEBUG"):
+        mgr.log_sweep_discrepancies({"/oven/vs/0": {"a": 2}})
+    assert "observe missed a change" not in caplog.text
 
 
 def test_log_sweep_discrepancies_never_changes_mode():
@@ -282,12 +288,12 @@ def test_log_sweep_discrepancies_never_changes_mode():
     away working push coverage on every other subscribed href."""
     mgr = _manager()
     session = _FakeSession()
-    hrefs = ['/oven/vs/0', '/power/vs/0']
+    hrefs = ["/oven/vs/0", "/power/vs/0"]
 
     def _notify_during_grace_period():
         time.sleep(0.005)
         for href in hrefs:
-            mgr.on_notification(href, cbor2.dumps({'a': 1}))
+            mgr.on_notification(href, cbor2.dumps({"a": 1}))
 
     notifier = threading.Thread(target=_notify_during_grace_period, daemon=True)
     notifier.start()
@@ -295,12 +301,12 @@ def test_log_sweep_discrepancies_never_changes_mode():
     try:
         mgr.try_enter_observe_mode(session, hrefs, grace_period_s=0.02)
         notifier.join()
-        assert mgr.mode == 'observe'
+        assert mgr.mode == "observe"
 
         # Sweep sees values the cache never got via notify on BOTH hrefs.
-        mgr.log_sweep_discrepancies({hrefs[0]: {'a': 2}, hrefs[1]: {'a': 2}})
+        mgr.log_sweep_discrepancies({hrefs[0]: {"a": 2}, hrefs[1]: {"a": 2}})
 
-        assert mgr.mode == 'observe'
+        assert mgr.mode == "observe"
     finally:
         mgr.close()
 
@@ -310,9 +316,9 @@ def test_rep_diff_reports_only_shared_fields_that_differ():
     sweep vs. individual GET/notify returning different fields for the
     same href) must not be reported — only shared fields with different
     values."""
-    diff = _rep_diff({'a': 1, 'b': 2, 'c': 3}, {'a': 1, 'b': 5, 'd': 9})
+    diff = _rep_diff({"a": 1, "b": 2, "c": 3}, {"a": 1, "b": 5, "d": 9})
 
-    assert diff == {'b': (2, 5)}
+    assert diff == {"b": (2, 5)}
 
 
 def test_log_sweep_discrepancies_ignores_shape_only_differences(caplog):
@@ -321,11 +327,11 @@ def test_log_sweep_discrepancies_ignores_shape_only_differences(caplog):
     must not be logged as a discrepancy."""
     mgr = _manager()
     session = _FakeSession()
-    href = '/oven/vs/0'
+    href = "/oven/vs/0"
 
     def _notify_during_grace_period():
         time.sleep(0.005)
-        mgr.on_notification(href, cbor2.dumps({'a': 1, 'rt': ['x'], 'if': ['y']}))
+        mgr.on_notification(href, cbor2.dumps({"a": 1, "rt": ["x"], "if": ["y"]}))
 
     notifier = threading.Thread(target=_notify_during_grace_period, daemon=True)
     notifier.start()
@@ -333,16 +339,16 @@ def test_log_sweep_discrepancies_ignores_shape_only_differences(caplog):
     try:
         mgr.try_enter_observe_mode(session, [href], grace_period_s=0.02)
         notifier.join()
-        assert mgr.mode == 'observe'
+        assert mgr.mode == "observe"
 
         # Sweep rep has the same 'a' value but lacks rt/if and adds 'href' —
         # a shape difference (batch interface), not a missed content change.
-        with caplog.at_level('DEBUG'):
-            mgr.log_sweep_discrepancies({href: {'a': 1, 'href': href}})
+        with caplog.at_level("DEBUG"):
+            mgr.log_sweep_discrepancies({href: {"a": 1, "href": href}})
     finally:
         mgr.close()
 
-    assert 'observe missed a change' not in caplog.text
+    assert "observe missed a change" not in caplog.text
 
 
 def test_log_sweep_discrepancies_includes_the_diff(caplog):
@@ -350,12 +356,12 @@ def test_log_sweep_discrepancies_includes_the_diff(caplog):
     did."""
     mgr = _manager()
     session = _FakeSession()
-    hrefs = ['/oven/vs/0', '/power/vs/0']
+    hrefs = ["/oven/vs/0", "/power/vs/0"]
 
     def _notify_during_grace_period():
         time.sleep(0.005)
         for href in hrefs:
-            mgr.on_notification(href, cbor2.dumps({'a': 1, 'b': 2}))
+            mgr.on_notification(href, cbor2.dumps({"a": 1, "b": 2}))
 
     notifier = threading.Thread(target=_notify_during_grace_period, daemon=True)
     notifier.start()
@@ -363,15 +369,13 @@ def test_log_sweep_discrepancies_includes_the_diff(caplog):
     try:
         mgr.try_enter_observe_mode(session, hrefs, grace_period_s=0.02)
         notifier.join()
-        assert mgr.mode == 'observe'
+        assert mgr.mode == "observe"
 
-        with caplog.at_level('DEBUG'):
-            mgr.log_sweep_discrepancies(
-                {hrefs[0]: {'a': 1, 'b': 5}, hrefs[1]: {'a': 1, 'b': 9}}
-            )
+        with caplog.at_level("DEBUG"):
+            mgr.log_sweep_discrepancies({hrefs[0]: {"a": 1, "b": 5}, hrefs[1]: {"a": 1, "b": 9}})
 
         assert "{'b': (2, 5)}" in caplog.text
-        assert mgr.mode == 'observe'
+        assert mgr.mode == "observe"
     finally:
         mgr.close()
 
@@ -379,25 +383,25 @@ def test_log_sweep_discrepancies_includes_the_diff(caplog):
 def test_log_sweep_discrepancies_ignores_href_during_settle_window(caplog):
     mgr = _manager()
     session = _FakeSession()
-    href = '/oven/vs/0'
-    mgr.on_notification(href, cbor2.dumps({'a': 1}))
+    href = "/oven/vs/0"
+    mgr.on_notification(href, cbor2.dumps({"a": 1}))
     mgr.try_enter_observe_mode(session, [href], grace_period_s=0.01)
     mgr.mark_write_pending(href, settle_s=5.0)
 
-    with caplog.at_level('DEBUG'):
-        mgr.log_sweep_discrepancies({href: {'a': 2}})
+    with caplog.at_level("DEBUG"):
+        mgr.log_sweep_discrepancies({href: {"a": 2}})
 
-    assert 'observe missed a change' not in caplog.text
+    assert "observe missed a change" not in caplog.text
 
 
 def test_downgrade_to_poll_moves_subscribed_to_fallback():
     mgr = _manager()
     session = _FakeSession()
-    href = '/oven/vs/0'
+    href = "/oven/vs/0"
 
     def _notify_during_grace_period():
         time.sleep(0.005)
-        mgr.on_notification(href, cbor2.dumps({'a': 1}))
+        mgr.on_notification(href, cbor2.dumps({"a": 1}))
 
     notifier = threading.Thread(target=_notify_during_grace_period, daemon=True)
     notifier.start()
@@ -407,14 +411,14 @@ def test_downgrade_to_poll_moves_subscribed_to_fallback():
 
     mgr.downgrade_to_poll()
 
-    assert mgr.mode == 'poll'
+    assert mgr.mode == "poll"
     assert mgr.subscribed_hrefs == set()
     assert mgr.fallback_hrefs == {href}
 
 
 def test_start_refresh_task_spawns_a_daemon_thread():
     mgr = _manager()
-    mgr.subscribed_hrefs = {'/oven/vs/0'}
+    mgr.subscribed_hrefs = {"/oven/vs/0"}
     session = _FakeSession()
 
     mgr.start_refresh_task(session)
@@ -428,10 +432,11 @@ def test_start_refresh_task_spawns_a_daemon_thread():
 
 def test_close_stops_the_refresh_thread():
     mgr = _manager()
-    mgr.subscribed_hrefs = {'/oven/vs/0'}
+    mgr.subscribed_hrefs = {"/oven/vs/0"}
     session = _FakeSession()
     mgr.start_refresh_task(session)
     thread = mgr._refresh_thread
+    assert thread is not None
 
     mgr.close()
     thread.join(timeout=2.0)
@@ -442,10 +447,11 @@ def test_close_stops_the_refresh_thread():
 
 def test_downgrade_to_poll_stops_refresh_task():
     mgr = _manager()
-    mgr.subscribed_hrefs = {'/oven/vs/0'}
+    mgr.subscribed_hrefs = {"/oven/vs/0"}
     session = _FakeSession()
     mgr.start_refresh_task(session)
     thread = mgr._refresh_thread
+    assert thread is not None
 
     mgr.downgrade_to_poll()
     thread.join(timeout=2.0)
@@ -462,14 +468,14 @@ def test_try_enter_observe_mode_exits_early_when_fraction_reached():
     first-refresh / observe-retry fetch paid that dead time."""
     mgr = _manager()
     session = _FakeSession()
-    hrefs = ['/a/vs/0', '/b/vs/0']
+    hrefs = ["/a/vs/0", "/b/vs/0"]
 
     def _notify_after_subscribe():
         # Let try_enter clear _notified + subscribe first (matches the existing
         # test pattern's 0.005 lead), then notify well before the 2s ceiling.
         time.sleep(0.01)
         for href in hrefs:
-            mgr.on_notification(href, cbor2.dumps({'x': 1}))
+            mgr.on_notification(href, cbor2.dumps({"x": 1}))
 
     notifier = threading.Thread(target=_notify_after_subscribe, daemon=True)
     notifier.start()
@@ -481,7 +487,7 @@ def test_try_enter_observe_mode_exits_early_when_fraction_reached():
         notifier.join()
 
         assert entered is True
-        assert mgr.mode == 'observe'
+        assert mgr.mode == "observe"
         # Early exit: returns near the notify (~0.01s), not the 2.0s ceiling.
         # The old fixed sleep would make this >= 2.0.
         assert elapsed < 0.5
@@ -496,11 +502,11 @@ def test_try_enter_observe_mode_waits_full_ceiling_when_fraction_not_reached():
     against an over-eager predicate that enters observe on too few notifies."""
     mgr = _manager()
     session = _FakeSession()
-    hrefs = ['/a/vs/0', '/b/vs/0', '/c/vs/0', '/d/vs/0']  # 4 hrefs
+    hrefs = ["/a/vs/0", "/b/vs/0", "/c/vs/0", "/d/vs/0"]  # 4 hrefs
 
     def _notify_one():
         time.sleep(0.01)
-        mgr.on_notification(hrefs[0], cbor2.dumps({'x': 1}))  # 1/4 = 0.25
+        mgr.on_notification(hrefs[0], cbor2.dumps({"x": 1}))  # 1/4 = 0.25
 
     notifier = threading.Thread(target=_notify_one, daemon=True)
     notifier.start()
@@ -508,13 +514,16 @@ def test_try_enter_observe_mode_waits_full_ceiling_when_fraction_not_reached():
     try:
         t0 = time.monotonic()
         entered = mgr.try_enter_observe_mode(
-            session, hrefs, grace_period_s=0.2, success_fraction=0.8,
+            session,
+            hrefs,
+            grace_period_s=0.2,
+            success_fraction=0.8,
         )
         elapsed = time.monotonic() - t0
         notifier.join()
 
         assert entered is False
-        assert mgr.mode == 'poll'
+        assert mgr.mode == "poll"
         assert mgr.subscribed_hrefs == set()
         # Waited the full 0.2s ceiling (1/4 = 0.25 < 0.8); did not early-exit.
         assert elapsed >= 0.18

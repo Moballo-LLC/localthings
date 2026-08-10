@@ -399,6 +399,24 @@ no `[%key:...%]` resolution (that's Core build tooling). Every other language
 must mirror `en.json` key for key — also enforced by
 `tests/test_translations.py`.
 
+**Don't write a test that just re-asserts a translation string.** Adding
+labels is a data change, not a logic change, and `tests/test_translations.py`
+already holds the invariants that matter for data (every descriptor has a
+catalog entry, every language mirrors English key-for-key, no unresolved
+`[%key:...%]`). A test that loads the catalog and asserts
+`catalog["select"]["foo"]["state"]["16"] == "Cotton"` right after you just
+wrote that exact line into `en.json` doesn't exercise any code path — it
+re-states the JSON file in Python, passes by construction, and only ever
+fails when someone *correctly* edits the label later (a wording fix, a
+translator's improvement). It's not a regression test, because there's no
+`select.py`/`adapter.py` logic between "the JSON says X" and "the test reads
+X" for it to catch drift in. If a code/label mapping is worth locking in,
+test it through the code that actually consumes it instead — a write
+contract (`desc.write_fn(...)` returns the right raw code), a read contract
+(`flatten()` produces the right raw value from a fixture rep), or a routing
+decision — never a bare literal-string comparison against the catalog you
+just edited.
+
 ## 8. Coverage discipline: bound or ignored
 
 Every href in the dump must resolve, or the repair fires. If a resource isn't

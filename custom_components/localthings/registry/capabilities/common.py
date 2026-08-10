@@ -10,12 +10,17 @@ against live device dumps:
   /water/consumption/vs/0   -> x.com.samsung.da.cumulativeWater
   /filter/waterfilter/vs/0  -> x.com.samsung.da.filterUsage / filterStatus
 """
-from datetime import datetime, timezone
+
+from datetime import UTC, datetime
 
 from ..batch import is_stub_rep
 from ..capability import Capability
 from ..entities import (
-    BinarySensorDesc, ButtonDesc, SelectDesc, SensorDesc, SwitchDesc,
+    BinarySensorDesc,
+    ButtonDesc,
+    SelectDesc,
+    SensorDesc,
+    SwitchDesc,
 )
 
 
@@ -44,44 +49,60 @@ def wh_to_kwh(v):
 
 
 def parse_iso_utc(raw):
-    """ISO datetime defaulting to UTC when the string carries no timezone
-    of its own (this integration's convention for other bare ISO datetime
-    fields -- see washer.py's drum-clean-log comment). A few boards do
-    ship a 'Z'/offset suffix (fromisoformat parses that natively since
-    Python 3.11) -- only fill in UTC when parsing left the result naive,
-    rather than unconditionally overwriting whatever offset was parsed."""
+    """ISO datetime defaulting to UTC when the string carries no timezone of
+    its own. A few boards ship a 'Z'/offset suffix already (fromisoformat
+    parses that natively since Python 3.11) -- only fill in UTC when parsing
+    left the result naive."""
     if not raw:
         return None
     try:
         dt = datetime.fromisoformat(raw)
     except ValueError:
         return None
-    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
+
+
+def epoch_to_utc(value):
+    """Unix epoch seconds -> aware UTC datetime, for boards that report a
+    bare epoch rather than the ISO string parse_iso_utc handles."""
+    try:
+        return datetime.fromtimestamp(float(value), tz=UTC)
+    except (TypeError, ValueError, OSError):
+        return None
 
 
 def filter_usage_percent(rep):
-    """Filter usage as a percentage of rated capacity. Several families
-    (AC, air purifier) report `filterUsage` as a raw count in
-    `filterCapacityUnit` (Hours, e.g. 100 of a 500 capacity), so a plain
-    value with a '%' unit would be wrong -- normalize to used/capacity.
-    Returns None when capacity is missing/zero."""
-    used = _num(rep.get('x.com.samsung.da.filterUsage'))
-    cap = _num(rep.get('x.com.samsung.da.filterCapacity'))
-    if used is None or not cap:
+    """Filter usage as a percentage. `filterUsage` is already 0-100 on every
+    family confirmed so far, including ARTIK051_PRAC (issue #330): its own
+    fixture and three live heads all show `filterStatus == 'wash'` at
+    `filterUsage == '100'` regardless of `filterCapacity` (60/224/500 across
+    other families' fixtures), which only holds if `filterUsage` is already
+    a percent -- dividing by capacity again would read that filter as fresh
+    at 20%."""
+    return int_or_none(rep.get("x.com.samsung.da.filterUsage"))
+
+
+def filter_usage_hours(rep):
+    """Elapsed filter hours, derived from the percentage and capacity rather
+    than read off `filterUsage` directly -- `filterUsage` is a percent, not
+    an hour count (issue #330). Returns None when capacity is missing/zero."""
+    pct = filter_usage_percent(rep)
+    cap = _num(rep.get("x.com.samsung.da.filterCapacity"))
+    if pct is None or not cap:
         return None
-    return round(used / cap * 100)
+    return round(pct / 100 * cap, 1)
 
 
-def normalize_temp_unit(raw, default='°F'):
+def normalize_temp_unit(raw, default="°F"):
     """'C'/'Celsius' -> '°C', 'F'/'Fahrenheit' -> '°F'. Falls back to
     `default` for any other/missing value. Shared by fridge.py and oven.py,
-    both of which read a per-device unit off a `/temperature*` resource
-    instead of assuming one (see fridge.py's module docstring, issue #7)."""
-    raw = (raw or '').strip().upper()
-    if raw.startswith('C'):
-        return '°C'
-    if raw.startswith('F'):
-        return '°F'
+    which both read a per-device unit off a `/temperature*` resource
+    instead of assuming one (issue #7)."""
+    raw = (raw or "").strip().upper()
+    if raw.startswith("C"):
+        return "°C"
+    if raw.startswith("F"):
+        return "°F"
     return default
 
 
@@ -91,36 +112,28 @@ def _ml_to_l(v):
 
 
 def _active_alarm_codes(items):
-    """Join active alarm codes; skip retained rows Samsung leaves as Deleted,
-    and any code ending in '_OFF'.
+    """Join active alarm codes; skip retained rows Samsung leaves as
+    Deleted, and any code ending in '_OFF'.
 
     Laundry boards keep a Deleted ErrorCode row in /alarms/vs/0 after the
-    condition clears (see WD7000B diagnostics). Surface only live alarms so
-    HA doesn't stick on a stale ErrorCode.
-
-    Samsung pre-populates this array with one row per alarm *type* the board
-    supports, each carrying its own '<Name>_OFF' placeholder code when that
-    alarm isn't firing -- confirmed across independent device families
-    (ErrorCode_OFF, FilterAlarm_OFF, OV_E_OFF, CT_E_OFF, WaterTankFull_OFF,
-    AC_V_0002_OFF all appear in fixtures with no corresponding active
-    condition). An alarm that's actually firing instead reports a plain,
-    unsuffixed code (FilterAlarm, DoorA_Opened, SNSF_Reached) -- issue #166's
-    AC dump has both a FilterAlarm_OFF placeholder and shows what a live
-    filter alert looks like: code 'FilterAlarm' (no suffix), state
-    'Created'. Range-hood previously special-cased only the literal
-    'ErrorCode_OFF' string in its own stricter helper; this generalizes
-    the same rule to the whole '_OFF' suffix convention.
+    condition clears. Samsung also pre-populates this array with one row
+    per alarm *type* the board supports, each carrying its own
+    '<Name>_OFF' placeholder when that alarm isn't firing -- confirmed
+    across independent families. A firing alarm instead reports a plain,
+    unsuffixed code (FilterAlarm, DoorA_Opened, ...); issue #166 shows both
+    in one dump. Generalizes what range hood used to special-case as just
+    the literal 'ErrorCode_OFF' string.
     """
     if not items or not isinstance(items, list):
-        return 'none'
+        return "none"
     codes = [
-        i.get('x.com.samsung.da.code')
+        i.get("x.com.samsung.da.code")
         for i in items
-        if i.get('x.com.samsung.da.code')
-        and str(i.get('x.com.samsung.da.state', '')).lower() != 'deleted'
-        and not str(i.get('x.com.samsung.da.code', '')).lower().endswith('_off')
+        if i.get("x.com.samsung.da.code")
+        and str(i.get("x.com.samsung.da.state", "")).lower() != "deleted"
+        and not str(i.get("x.com.samsung.da.code", "")).lower().endswith("_off")
     ]
-    return ', '.join(codes) if codes else 'none'
+    return ", ".join(codes) if codes else "none"
 
 
 def merge_options_field(cached, new_tokens):
@@ -128,21 +141,19 @@ def merge_options_field(cached, new_tokens):
     x.com.samsung.da.options[]-style array the same way the device itself
     merges them: match by prefix, replace if present, append if not.
 
-    Confirmed on real hardware (issue #54) that a write only needs to carry
-    the changed token(s), not the whole array -- see laundry.option_write /
-    oven._option_write for the write side. This is the read side of that
-    same fact: coordinator.async_send_command uses it to keep the
-    optimistic cache entry for the written href complete (every sibling
-    option still present) during the write-settle window, since the wire
-    body it applies straight to the cache no longer carries them."""
+    Confirmed on hardware (issue #54) that a write only needs to carry the
+    changed token(s), not the whole array -- see laundry.option_write /
+    oven._option_write for the write side. coordinator.async_send_command
+    uses this read-side counterpart to keep the optimistic cache entry
+    complete during the write-settle window."""
     merged = list(cached or [])
     for token in new_tokens or ():
-        if not isinstance(token, str) or '_' not in token:
+        if not isinstance(token, str) or "_" not in token:
             continue
-        prefix = token.split('_', 1)[0]
+        prefix = token.split("_", 1)[0]
         replaced = False
         for i, o in enumerate(merged):
-            if isinstance(o, str) and o.startswith(prefix + '_'):
+            if isinstance(o, str) and o.startswith(prefix + "_"):
                 merged[i] = token
                 replaced = True
         if not replaced:
@@ -152,25 +163,22 @@ def merge_options_field(cached, new_tokens):
 
 def merge_items_field(cached, new_items):
     """Merge a partial x.com.samsung.da.items[]-style write (matched by
-    x.com.samsung.da.id) into a cached items array -- the read-side
-    counterpart of merge_options_field above, for the items[] shape instead
-    of the packed options[] shape.
+    x.com.samsung.da.id) into a cached items array -- the items[]
+    counterpart of merge_options_field above.
 
-    Confirmed on hardware that a write only needs to carry the array item
-    with the changed id plus the field(s) being changed; the device merges
-    the rest itself (same fact as the options[] case, different array --
-    see airconditioner._climate_write's vendor temperature write). Fields
+    Confirmed on hardware that a write only needs to carry the item with
+    the changed id plus the field(s) being changed (see
+    airconditioner._climate_write's vendor temperature write). Fields
     within the matched item are merged, not replaced outright, so a
     setpoint-only write doesn't wipe current/minimum/maximum/unit from the
-    optimistic cache entry for the settle window. An id with no match in
-    `cached` is appended."""
+    optimistic cache entry. An id with no match in `cached` is appended."""
     merged = [dict(i) if isinstance(i, dict) else i for i in (cached or [])]
     for new_item in new_items or ():
         if not isinstance(new_item, dict):
             continue
-        item_id = new_item.get('x.com.samsung.da.id')
+        item_id = new_item.get("x.com.samsung.da.id")
         for i, existing in enumerate(merged):
-            if isinstance(existing, dict) and existing.get('x.com.samsung.da.id') == item_id:
+            if isinstance(existing, dict) and existing.get("x.com.samsung.da.id") == item_id:
                 merged[i] = {**existing, **new_item}
                 break
         else:
@@ -179,41 +187,36 @@ def merge_items_field(cached, new_items):
 
 
 # /wm/setinfo/vs/0 -- laundry-family firmware capability flags. Present on
-# washers, dryers, and dishwashers; absent on fridge/oven/AC. Static for the
-# life of a given board, so reading them from the /device/0 seed (no dedicated
-# poll_tier) is enough.
-_SETINFO_HREF = '/wm/setinfo/vs/0'
-_POWER_ON_OFF_FIELD = 'x.com.samsung.da.isModelSettingPowerOnOff'
-_WITHOUT_SC_FIELD = 'x.com.samsung.da.isModelSettingWithoutSC'
+# washers, dryers, and dishwashers; absent on fridge/oven/AC. Static for
+# the life of a board, so reading it from the /device/0 seed is enough.
+_SETINFO_HREF = "/wm/setinfo/vs/0"
+_POWER_ON_OFF_FIELD = "x.com.samsung.da.isModelSettingPowerOnOff"
+_WITHOUT_SC_FIELD = "x.com.samsung.da.isModelSettingWithoutSC"
 
 
 def model_allows_power_on_off(resources: dict) -> bool:
-    """True unless firmware explicitly declares remote power on/off unsupported.
-
-    `/wm/setinfo/vs/0`.`isModelSettingPowerOnOff` is `"false"` on many laundry
-    boards (washers/dryers): `/power/0` and `/power/vs/0` still report state,
-    but CoAP writes are ignored. Absent setinfo (non-laundry families) keeps
-    the writable switch -- current behavior.
-    """
+    """True unless firmware explicitly declares remote power on/off
+    unsupported. isModelSettingPowerOnOff is "false" on many laundry
+    boards: /power/0 and /power/vs/0 still report state, but CoAP writes
+    are ignored. Absent setinfo (non-laundry families) keeps the writable
+    switch."""
     setinfo = resources.get(_SETINFO_HREF)
     if setinfo is None:
         return True
     flag = setinfo.get(_POWER_ON_OFF_FIELD)
     if flag is None:
         return True
-    return str(flag).lower() != 'false'
+    return str(flag).lower() != "false"
 
 
 def model_setting_without_sc(resources: dict) -> bool:
-    """True when firmware declares settings writable without Smart Control.
-
-    `/wm/setinfo/vs/0`.`isModelSettingWithoutSC` is `"true"` on washers/dryers
-    that accept temperature/spin/cycle-option writes while remote control is
-    off. Cycle start/pause/stop still need Smart Control on those boards --
-    the flag name is settings-specific, not a blanket remote-control bypass.
-    """
+    """True when firmware declares settings writable without Smart
+    Control. isModelSettingWithoutSC is "true" on washers/dryers that
+    accept temperature/spin/cycle-option writes while remote control is
+    off; cycle start/pause/stop still need Smart Control on those
+    boards."""
     setinfo = resources.get(_SETINFO_HREF) or {}
-    return str(setinfo.get(_WITHOUT_SC_FIELD, '')).lower() == 'true'
+    return str(setinfo.get(_WITHOUT_SC_FIELD, "")).lower() == "true"
 
 
 def _power_switch_exists(rep, resources):
@@ -226,17 +229,16 @@ def _power_sensor_exists(rep, resources):
 
 def sensor_item_value(items, sensor_type, index=0):
     """Pull one reading out of a `/sensors/vs/0`-style items[] list -- each
-    item is `{type, value: [...]}`; `index` picks which slot of a possibly
-    multi-value reading to read (index 0 is the raw measurement on every
-    family seen so far). Shared by range_hood.AIR_QUALITY,
-    air_purifier.AIR_QUALITY, and air_monitor.SENSORS, which all read the
-    same resource shape against the same {type, sensor_type} keys."""
+    item is `{type, value: [...]}`; `index` picks which slot to read
+    (index 0 is the raw measurement on every family seen so far). Shared
+    by range_hood.AIR_QUALITY, air_purifier.AIR_QUALITY, and
+    air_monitor.SENSORS, which all read the same resource shape."""
     for item in items or ():
         if not isinstance(item, dict):
             continue
-        if item.get('x.com.samsung.da.type') != sensor_type:
+        if item.get("x.com.samsung.da.type") != sensor_type:
             continue
-        values = item.get('x.com.samsung.da.value') or ()
+        values = item.get("x.com.samsung.da.value") or []
         if index < len(values):
             try:
                 return int(values[index])
@@ -245,117 +247,113 @@ def sensor_item_value(items, sensor_type, index=0):
     return None
 
 
-# OCF-native / vendor '-vs' fallback pairs for power, kids-lock, remote control.
-#
-# These three controls exist as both a standard OCF resource (/power/0,
-# oic.r.switch.binary, plain boolean 'value') and a Samsung vendor resource
-# (/power/vs/0, x.com.samsung.da.power) -- Samsung advertises both as its
-# firmware migrates onto the OCF standard model. Prefer the OCF-standard href
-# when the device exposes it; the '-vs' href (a string-encoded duplicate for
-# these three) binds only when the generic href is absent, via match_fn. Older
-# firmware has only the '-vs' resource, so the pair is behaviour-identical to a
-# lone '-vs' cap there. See the adding-device-support skill's "OCF-standard vs
-# vendor" section for why this is preferred-non-vs-with-fallback, not a blanket
-# choice. Every device registry lists both caps of each pair.
+# OCF-native / vendor '-vs' fallback pairs for power, kids-lock, remote
+# control: each exists as both a standard OCF resource (/power/0,
+# oic.r.switch.binary, plain boolean 'value') and a Samsung vendor
+# resource (/power/vs/0, x.com.samsung.da.power), since Samsung advertises
+# both while its firmware migrates onto the OCF standard model. Prefer the
+# OCF-standard href when present; the '-vs' href binds only when it's
+# absent, via match_fn. Older firmware has only the '-vs' resource. See
+# the adding-device-support skill's "OCF-standard vs vendor" section.
+# Every device registry lists both caps of each pair.
 
 POWER_GENERIC = Capability(
-    href='/power/0',
-    # Neither href of this pair carried a poll_tier before (issue #56's
-    # follow-up), so power state only ever refreshed on the once-per-30s
-    # summary poll instead of the subscribe/subpoll cadence 'warm' and 'hot'
-    # hrefs get -- the same "signal drives real-time state, but sat in the
-    # slow default tier" gap as REMOTE_CONTROL_GENERIC/VS_FALLBACK above.
-    poll_tier='warm',
+    href="/power/0",
+    poll_tier="warm",
     entities=(
         # Writable when firmware allows remote power; otherwise a read-only
         # binary_sensor with the same key keeps HA state without a dead switch.
-        SwitchDesc(key='power_switch', field='value',
-                   value_fn=lambda v: bool(v),
-                   exists_fn=_power_switch_exists,
-                   write_fn=lambda p, rep, href=None: (
-                       ['power', '0'], {'value': p == 'On'})),
-        BinarySensorDesc(key='power_switch', field='value',
-                         device_class='power',
-                         value_fn=lambda v: bool(v),
-                         exists_fn=_power_sensor_exists),
+        SwitchDesc(
+            key="power_switch",
+            field="value",
+            value_fn=lambda v: bool(v),
+            exists_fn=_power_switch_exists,
+            write_fn=lambda p, rep, href=None: (["power", "0"], {"value": p == "On"}),
+        ),
+        BinarySensorDesc(
+            key="power_switch",
+            field="value",
+            device_class="power",
+            value_fn=lambda v: bool(v),
+            exists_fn=_power_sensor_exists,
+        ),
     ),
 )
 
 POWER_VS_FALLBACK = Capability(
-    href='/power/vs/0',
-    match_fn=lambda rep, resources: '/power/0' not in resources,
-    poll_tier='warm',
+    href="/power/vs/0",
+    match_fn=lambda rep, resources: "/power/0" not in resources,
+    poll_tier="warm",
     entities=(
-        SwitchDesc(key='power_switch', field='x.com.samsung.da.power',
-                   value_fn=lambda v: v == 'On',
-                   exists_fn=_power_switch_exists,
-                   write_fn=lambda p, rep, href=None: (
-                       ['power', 'vs', '0'],
-                       {'x.com.samsung.da.power': 'On' if p == 'On' else 'Off'})),
-        BinarySensorDesc(key='power_switch', field='x.com.samsung.da.power',
-                         device_class='power',
-                         value_fn=lambda v: v == 'On',
-                         exists_fn=_power_sensor_exists),
+        SwitchDesc(
+            key="power_switch",
+            field="x.com.samsung.da.power",
+            value_fn=lambda v: v == "On",
+            exists_fn=_power_switch_exists,
+            write_fn=lambda p, rep, href=None: (
+                ["power", "vs", "0"],
+                {"x.com.samsung.da.power": "On" if p == "On" else "Off"},
+            ),
+        ),
+        BinarySensorDesc(
+            key="power_switch",
+            field="x.com.samsung.da.power",
+            device_class="power",
+            value_fn=lambda v: v == "On",
+            exists_fn=_power_sensor_exists,
+        ),
     ),
 )
 
 KIDS_LOCK_GENERIC = Capability(
-    href='/kidslock/0',
+    href="/kidslock/0",
     entities=(
-        # Read-only like KIDS_LOCK_VS_FALLBACK (issues #181/#183) -- not a
-        # SwitchDesc. SwitchDesc's `device_class='lock'` was never honored
-        # by HA (its switch platform only accepts 'outlet'/'switch'),
-        # leaving a plain switch whose 'On' state meant different things
-        # on different boards. As a BinarySensorDesc with `device_class='lock'`,
-        # both kids-lock surfaces read with the same polarity: 'On' means
-        # open/unlocked, per HA's lock device_class. The inversion in
-        # value_fn here (and in the fallback below) keeps the on-the-wire
-        # truth (value=False on /kidslock/0, kidsLock='Ready' on /kidslock/vs/0
-        # both mean kids lock NOT active) consistent with that polarity.
-        BinarySensorDesc(key='child_lock', field='value',
-                         device_class='lock',
-                         value_fn=lambda v: not bool(v)),
+        # Read-only like KIDS_LOCK_VS_FALLBACK (issues #181/#183): HA's
+        # switch platform never honored SwitchDesc's device_class='lock'
+        # ('outlet'/'switch' only), leaving a plain switch whose 'On' meant
+        # different things on different boards. As a BinarySensorDesc with
+        # device_class='lock', both surfaces read with the same polarity
+        # ('On' = open/unlocked, per HA convention); value_fn here inverts
+        # the wire value to match (value=False on /kidslock/0 means kids
+        # lock is NOT active).
+        BinarySensorDesc(
+            key="child_lock", field="value", device_class="lock", value_fn=lambda v: not bool(v)
+        ),
     ),
 )
 
 KIDS_LOCK_VS_FALLBACK = Capability(
-    href='/kidslock/vs/0',
-    match_fn=lambda rep, resources: '/kidslock/0' not in resources,
+    href="/kidslock/vs/0",
+    match_fn=lambda rep, resources: "/kidslock/0" not in resources,
     entities=(
-        # Read-only, not a SwitchDesc (issues #181/#183): the write side of
-        # this capability wrote 'Enable', a value no dump in the fixture
-        # corpus has ever reported back -- every one reports either 'Ready'
-        # or 'Run', so it was never a confirmed contract. #181's reporter
-        # confirmed this directly: writing the *correct* value ('Run')
-        # still 4.05s, and the SmartThings app itself has no control for
-        # it either -- the resource is genuinely read-only on this
-        # hardware, not just wrong-valued. Polarity matches
-        # KIDS_LOCK_GENERIC above -- 'On' means open/unlocked, so
-        # kidsLock='Ready' (kids lock NOT active) renders as 'On'.
-        BinarySensorDesc(key='child_lock', field='x.com.samsung.da.kidsLock',
-                         device_class='lock',
-                         value_fn=lambda v: v == 'Ready'),
+        # Read-only, not a SwitchDesc (issues #181/#183): the old write
+        # side wrote 'Enable', a value no dump ever reports back (every one
+        # is 'Ready' or 'Run'), and #181's reporter confirmed writing the
+        # correct value ('Run') still 4.05s -- genuinely read-only on this
+        # hardware. Polarity matches KIDS_LOCK_GENERIC ('On' = unlocked).
+        BinarySensorDesc(
+            key="child_lock",
+            field="x.com.samsung.da.kidsLock",
+            device_class="lock",
+            value_fn=lambda v: v == "Ready",
+        ),
     ),
 )
 
 
 def remote_control_enabled(resources: dict) -> bool:
     """Single source of truth for the /remotectrl on/off signal, mirroring
-    REMOTE_CONTROL_GENERIC/_VS_FALLBACK's href/field pair and precedence
-    below. Used both to render the read-only Smart Control binary_sensor
-    (via those two descriptors) and, from coordinator.async_send_command,
-    to block writes outright when remote control is off. Both hrefs are
-    poll_tier='warm' below so that gate reads recent state (subscribed
-    when observe is live, subpolled every ~6s otherwise) rather than a
-    once-per-30s cold summary poll. True (assume enabled) when neither
-    href is present -- most device types don't report this capability
-    at all."""
-    generic = resources.get('/remotectrl/0')
+    REMOTE_CONTROL_GENERIC/_VS_FALLBACK's href/field precedence. Used both
+    to render the read-only Smart Control binary_sensor and, from
+    coordinator.async_send_command, to block writes when remote control is
+    off. True (assume enabled) when neither href is present -- most device
+    types don't report this capability at all."""
+    generic = resources.get("/remotectrl/0")
     if generic is not None:
-        return bool(generic.get('value'))
-    fallback = resources.get('/remotectrl/vs/0')
+        return bool(generic.get("value"))
+    fallback = resources.get("/remotectrl/vs/0")
     if fallback is not None:
-        return str(fallback.get('x.com.samsung.da.remoteControlEnabled')).lower() == 'true'
+        return str(fallback.get("x.com.samsung.da.remoteControlEnabled")).lower() == "true"
     return True
 
 
@@ -369,281 +367,325 @@ def remote_control_required_for_write(resources: dict, bound_href: str) -> bool:
     """
     if not model_setting_without_sc(resources):
         return True
-    href = bound_href or ''
-    return href.startswith('/operational/state')
+    href = bound_href or ""
+    return href.startswith("/operational/state")
 
 
 REMOTE_CONTROL_GENERIC = Capability(
-    href='/remotectrl/0',
-    poll_tier='warm',
+    href="/remotectrl/0",
+    poll_tier="warm",
     entities=(
-        BinarySensorDesc(key='remote_control', field='value',
-                         device_class='connectivity',
-                         value_fn=lambda v: bool(v)),
+        BinarySensorDesc(
+            key="remote_control",
+            field="value",
+            device_class="connectivity",
+            value_fn=lambda v: bool(v),
+        ),
     ),
 )
 
 REMOTE_CONTROL_VS_FALLBACK = Capability(
-    href='/remotectrl/vs/0',
-    match_fn=lambda rep, resources: '/remotectrl/0' not in resources,
-    poll_tier='warm',
+    href="/remotectrl/vs/0",
+    match_fn=lambda rep, resources: "/remotectrl/0" not in resources,
+    poll_tier="warm",
     entities=(
-        BinarySensorDesc(key='remote_control',
-                         field='x.com.samsung.da.remoteControlEnabled',
-                         device_class='connectivity',
-                         value_fn=lambda v: str(v).lower() == 'true'),
+        BinarySensorDesc(
+            key="remote_control",
+            field="x.com.samsung.da.remoteControlEnabled",
+            device_class="connectivity",
+            value_fn=lambda v: str(v).lower() == "true",
+        ),
     ),
 )
 
 ALARMS = Capability(
-    href='/alarms/vs/0',
-    poll_tier='hot',
+    href="/alarms/vs/0",
+    poll_tier="hot",
     entities=(
-        SensorDesc(key='alarm_code', field='x.com.samsung.da.items',
-                   icon='mdi:alert',
-                   entity_category='diagnostic', value_fn=_active_alarm_codes),
+        SensorDesc(
+            key="alarm_code",
+            field="x.com.samsung.da.items",
+            icon="mdi:alert",
+            entity_category="diagnostic",
+            value_fn=_active_alarm_codes,
+        ),
     ),
 )
 
-# instantaneousPower is a dead field on DA_WM_-class laundry dumps (washers and
-# the issue #14 dryer) and on dishwashers too: the literal sentinel '-500',
-# unchanged across off/idle/running. clamp_power floors it to a misleading
-# "0 W" that reads as a real idle measurement. Gate power_watts out when the
-# sentinel is seen -- but only then, so a device reporting a real value (e.g. a
-# fridge's 93 W) still shows it (issue #6). cumulativePower is absent on at
-# least one washer model; the exists_fn makes that explicit rather than relying
-# on the generic field-presence gate.
-_DEAD_INSTANTANEOUS_POWER = '-500'
+# instantaneousPower is a dead field on DA_WM_-class laundry dumps and
+# dishwashers: the literal sentinel '-500', unchanged across off/idle/
+# running. clamp_power would floor it to a misleading "0 W". Gate
+# power_watts out when the sentinel is seen, but only then, so a device
+# reporting a real value (e.g. a fridge's 93 W) still shows it (issue #6).
+_DEAD_INSTANTANEOUS_POWER = "-500"
 
 ENERGY_METER = Capability(
-    href='/energy/consumption/vs/0',
+    href="/energy/consumption/vs/0",
     entities=(
-        # `is_stub_rep(rep)` keeps the stub carve-out (see entity._is_included):
-        # an explicit exists_fn otherwise bypasses it, which would drop the
-        # entity when /device/0 returns a not-yet-fetched stub. A genuinely
-        # empty {} rep is NOT a stub -- it's the device's confirmed (if empty)
-        # answer, so it falls through to the normal field/sentinel checks like
-        # any populated rep. On a populated rep, hide power only for the dead
-        # sentinel or an absent field.
-        SensorDesc(key='power_watts', field='x.com.samsung.da.instantaneousPower',
-                   device_class='power', state_class='measurement',
-                   unit='W', value_fn=clamp_power,
-                   exists_fn=lambda rep, resources: is_stub_rep(rep) or (
-                       rep.get('x.com.samsung.da.instantaneousPower')
-                       not in (None, _DEAD_INSTANTANEOUS_POWER))),
-        SensorDesc(key='energy_kwh', field='x.com.samsung.da.cumulativePower',
-                   device_class='energy',
-                   state_class='total_increasing', unit='kWh', value_fn=wh_to_kwh,
-                   exists_fn=lambda rep, resources: (
-                       is_stub_rep(rep) or 'x.com.samsung.da.cumulativePower' in rep)),
+        # is_stub_rep(rep) keeps the stub carve-out (see
+        # entity._is_included): an explicit exists_fn otherwise bypasses
+        # it and would drop the entity when /device/0 returns a
+        # not-yet-fetched stub. A genuinely empty {} rep is NOT a stub, so
+        # it still falls through to the normal field/sentinel checks.
+        SensorDesc(
+            key="power_watts",
+            field="x.com.samsung.da.instantaneousPower",
+            device_class="power",
+            state_class="measurement",
+            unit="W",
+            value_fn=clamp_power,
+            exists_fn=lambda rep, resources: (
+                is_stub_rep(rep)
+                or (
+                    rep.get("x.com.samsung.da.instantaneousPower")
+                    not in (None, _DEAD_INSTANTANEOUS_POWER)
+                )
+            ),
+        ),
+        SensorDesc(
+            key="energy_kwh",
+            field="x.com.samsung.da.cumulativePower",
+            device_class="energy",
+            state_class="total_increasing",
+            unit="kWh",
+            value_fn=wh_to_kwh,
+            exists_fn=lambda rep, resources: (
+                is_stub_rep(rep) or "x.com.samsung.da.cumulativePower" in rep
+            ),
+        ),
         # cumulativeConsumption is a second, independently-varying running
-        # total alongside cumulativePower -- some fridges (issue #26) report
-        # both. Self-gates off where only cumulativePower is present. The
-        # `is_stub_rep(rep) or` keeps the same stub carve-out as power_watts/
-        # energy_kwh above -- without it, an exists_fn permanently drops the
-        # entity if setup happens to land on a not-yet-fetched stub.
-        SensorDesc(key='power_energy_kwh', field='x.com.samsung.da.cumulativeConsumption',
-                   device_class='energy',
-                   state_class='total_increasing', unit='kWh', value_fn=wh_to_kwh,
-                   exists_fn=lambda rep, resources: (
-                       is_stub_rep(rep) or 'x.com.samsung.da.cumulativeConsumption' in rep)),
+        # total some fridges (issue #26) report alongside cumulativePower.
+        SensorDesc(
+            key="power_energy_kwh",
+            field="x.com.samsung.da.cumulativeConsumption",
+            device_class="energy",
+            state_class="total_increasing",
+            unit="kWh",
+            value_fn=wh_to_kwh,
+            exists_fn=lambda rep, resources: (
+                is_stub_rep(rep) or "x.com.samsung.da.cumulativeConsumption" in rep
+            ),
+        ),
         # AI Energy Mode's lifetime savings estimate vs. an unoptimized
-        # baseline -- present on some models (e.g. TP1X_REF_21K, issue #21/
-        # #27) and absent on others (issue #20/#26), unlike cumulativePower.
-        SensorDesc(key='energy_saved_kwh', field='x.com.samsung.da.cumulativeSavedPower',
-                   device_class='energy',
-                   state_class='total_increasing', unit='kWh', value_fn=wh_to_kwh,
-                   exists_fn=lambda rep, resources: (
-                       is_stub_rep(rep) or 'x.com.samsung.da.cumulativeSavedPower' in rep)),
-        # Monthly billing-cycle totals -- the completed prior month and the
-        # in-progress current month. Not ever-increasing (each resets at
-        # month boundary), so no state_class.
-        SensorDesc(key='energy_last_month_kwh', field='x.com.samsung.da.monthlyConsumption',
-                   device_class='energy',
-                   unit='kWh', value_fn=wh_to_kwh,
-                   exists_fn=lambda rep, resources: (
-                       is_stub_rep(rep) or 'x.com.samsung.da.monthlyConsumption' in rep)),
-        SensorDesc(key='energy_this_month_kwh', field='x.com.samsung.da.thismonthlyConsumption',
-                   device_class='energy',
-                   unit='kWh', value_fn=wh_to_kwh,
-                   exists_fn=lambda rep, resources: (
-                       is_stub_rep(rep) or 'x.com.samsung.da.thismonthlyConsumption' in rep)),
+        # baseline -- present on some models (issue #21/#27), absent on
+        # others (issue #20/#26).
+        SensorDesc(
+            key="energy_saved_kwh",
+            field="x.com.samsung.da.cumulativeSavedPower",
+            device_class="energy",
+            state_class="total_increasing",
+            unit="kWh",
+            value_fn=wh_to_kwh,
+            exists_fn=lambda rep, resources: (
+                is_stub_rep(rep) or "x.com.samsung.da.cumulativeSavedPower" in rep
+            ),
+        ),
+        # Monthly billing-cycle totals -- completed prior month and
+        # in-progress current month. Not ever-increasing, so no state_class.
+        SensorDesc(
+            key="energy_last_month_kwh",
+            field="x.com.samsung.da.monthlyConsumption",
+            device_class="energy",
+            unit="kWh",
+            value_fn=wh_to_kwh,
+            exists_fn=lambda rep, resources: (
+                is_stub_rep(rep) or "x.com.samsung.da.monthlyConsumption" in rep
+            ),
+        ),
+        SensorDesc(
+            key="energy_this_month_kwh",
+            field="x.com.samsung.da.thismonthlyConsumption",
+            device_class="energy",
+            unit="kWh",
+            value_fn=wh_to_kwh,
+            exists_fn=lambda rep, resources: (
+                is_stub_rep(rep) or "x.com.samsung.da.thismonthlyConsumption" in rep
+            ),
+        ),
     ),
 )
 
 WATER_METER = Capability(
-    href='/water/consumption/vs/0',
+    href="/water/consumption/vs/0",
     entities=(
-        SensorDesc(key='water_liters', field='x.com.samsung.da.cumulativeWater',
-                   device_class='water',
-                   state_class='total_increasing', unit='L', icon='mdi:water',
-                   value_fn=_ml_to_l),
+        SensorDesc(
+            key="water_liters",
+            field="x.com.samsung.da.cumulativeWater",
+            device_class="water",
+            state_class="total_increasing",
+            unit="L",
+            icon="mdi:water",
+            value_fn=_ml_to_l,
+        ),
     ),
 )
 
 WATER_FILTER = Capability(
-    href='/filter/waterfilter/vs/0',
-    match_fn=lambda rep, _: rep.get('x.com.samsung.da.filterStatus', '').lower() != 'notused',
+    href="/filter/waterfilter/vs/0",
+    match_fn=lambda rep, _: rep.get("x.com.samsung.da.filterStatus", "").lower() != "notused",
     entities=(
-        SensorDesc(key='filter_usage', field='x.com.samsung.da.filterUsage',
-                   unit='%', state_class='measurement',
-                   icon='mdi:filter'),
-        SensorDesc(key='filter_status', field='x.com.samsung.da.filterStatus',
-                   icon='mdi:filter-check',
-                   device_class='enum', options=('normal', 'wash', 'replace'),
-                   value_fn=lambda value: (
-                       value.lower() if isinstance(value, str) else value
-                   )),
+        SensorDesc(
+            key="filter_usage",
+            field="x.com.samsung.da.filterUsage",
+            unit="%",
+            state_class="measurement",
+            icon="mdi:filter",
+        ),
+        SensorDesc(
+            key="filter_status",
+            field="x.com.samsung.da.filterStatus",
+            icon="mdi:filter-check",
+            device_class="enum",
+            options=("normal", "wash", "replace"),
+            value_fn=lambda value: value.lower() if isinstance(value, str) else value,
+        ),
     ),
 )
 
-# AI energy-saving level -- '0' is off, and supportedAiLevel lists the
-# additional level(s) the device offers ('1' meaning just "on" on most
-# hardware, but multi-level boards have been reported). Verified cross-family:
-# fridge (issue #21) and washer (issue #40) both expose this href.
-#
-# supportedAiLevel is a single-entry list on most captured hardware, where a
-# select would offer only one real choice against an implicit "off" -- shown
-# as a switch instead. '0' itself is never in supportedAiLevel but has been
-# observed live as the off value of aiLevel, so the select synthesizes it
-# back in as an explicit option rather than leaving no way to turn off.
-#
-# No translation_key: aiLevel's values are plain digit strings, and
-# select.py's _display() already renders an untranslated numeric string
-# as-is -- there's nothing a catalog entry adds that's worth maintaining
-# against an unknown, growing number of future levels.
+# AI energy-saving level -- '0' is off, supportedAiLevel lists the
+# additional level(s) offered ('1' meaning just "on" on most hardware,
+# multi-level on some). Verified cross-family: fridge (issue #21) and
+# washer (issue #40). Most hardware's supportedAiLevel is a single-entry
+# list, so a select there would offer only one real choice against an
+# implicit "off" -- shown as a switch instead; '0' is never in
+# supportedAiLevel but is the observed off value, so the select
+# synthesizes it back in as an explicit option. No translation_key:
+# aiLevel's values are plain digit strings, and select.py already renders
+# an untranslated numeric string as-is.
 
 
 def _ai_energy_supported_levels(rep):
-    """supportedAiLevel as a list -- a stray scalar (e.g. a string) must not
-    be len()-checked as if it were a list."""
-    sl = rep.get('supportedAiLevel')
+    """supportedAiLevel as a list -- a stray scalar must not be
+    len()-checked as if it were one."""
+    sl = rep.get("supportedAiLevel")
     return list(sl) if isinstance(sl, (list, tuple)) else []
 
 
 def _ai_energy_level_options(resources):
-    rep = resources.get('/energy/ailevel/vs/0') or {}
-    return ['0', *_ai_energy_supported_levels(rep)]
+    rep = resources.get("/energy/ailevel/vs/0") or {}
+    return ["0", *_ai_energy_supported_levels(rep)]
 
 
 def _ai_energy_level_write(p, rep, href=None):
-    return ['energy', 'ailevel', 'vs', '0'], {'aiLevel': p}
+    return ["energy", "ailevel", "vs", "0"], {"aiLevel": p}
 
 
 def _ai_energy_level_switch_write(p, rep, href=None):
     levels = _ai_energy_supported_levels(rep)
-    on_level = levels[0] if levels else '1'
-    return ['energy', 'ailevel', 'vs', '0'], {'aiLevel': on_level if p == 'On' else '0'}
+    on_level = levels[0] if levels else "1"
+    return ["energy", "ailevel", "vs", "0"], {"aiLevel": on_level if p == "On" else "0"}
 
 
 AI_ENERGY_LEVEL = Capability(
-    href='/energy/ailevel/vs/0',
-    poll_tier='cold',
+    href="/energy/ailevel/vs/0",
+    poll_tier="cold",
     entities=(
         # No is_stub_rep carve-out on either side, unlike most exists_fn
-        # gates in this file -- entity creation only ever runs once, against
-        # whichever snapshot happens to be current the moment platforms are
-        # set up (see entity._is_included / __init__.py's
-        # async_config_entry_first_refresh-before-forward-entry-setups
-        # ordering), while flatten() re-evaluates exists_fn every poll
-        # against live data. Both descriptors share key='ai_energy_level',
-        # so if a stub carve-out let one of them win at setup time while the
-        # other wins once real data lands, flatten() would feed the
-        # instantiated entity a value shaped for the other platform (e.g. a
-        # bool into a Select). Requiring real, populated data on both sides
-        # keeps the entity-creation decision and the live-value decision in
-        # permanent agreement -- the cost is this entity doesn't appear
-        # until a reload if the device's very first poll stubs this
-        # cold-tier href, the same reload already required to fix which
-        # platform got picked in that case.
-        SwitchDesc(key='ai_energy_level', field='aiLevel',
-                   icon='mdi:leaf',
-                   entity_category='config',
-                   value_fn=lambda v: v != '0',
-                   exists_fn=lambda rep, resources: (
-                       len(_ai_energy_supported_levels(rep)) == 1),
-                   write_fn=_ai_energy_level_switch_write),
-        SelectDesc(key='ai_energy_level', field='aiLevel',
-                   icon='mdi:leaf',
-                   entity_category='config',
-                   options=_ai_energy_level_options,
-                   exists_fn=lambda rep, resources: (
-                       len(_ai_energy_supported_levels(rep)) > 1),
-                   write_fn=_ai_energy_level_write),
+        # gates in this file: entity creation runs once against whichever
+        # snapshot is current at platform setup, while flatten() re-checks
+        # exists_fn every poll against live data. Both descriptors share
+        # key='ai_energy_level' -- a stub carve-out could let one win at
+        # setup and the other win once real data lands, feeding the
+        # instantiated entity a value shaped for the other platform.
+        # Requiring populated data on both sides keeps the two decisions in
+        # permanent agreement, at the cost of the entity not appearing
+        # until a reload if the first poll stubs this cold-tier href.
+        SwitchDesc(
+            key="ai_energy_level",
+            field="aiLevel",
+            icon="mdi:leaf",
+            entity_category="config",
+            value_fn=lambda v: v != "0",
+            exists_fn=lambda rep, resources: len(_ai_energy_supported_levels(rep)) == 1,
+            write_fn=_ai_energy_level_switch_write,
+        ),
+        SelectDesc(
+            key="ai_energy_level",
+            field="aiLevel",
+            icon="mdi:leaf",
+            entity_category="config",
+            options=_ai_energy_level_options,
+            exists_fn=lambda rep, resources: len(_ai_energy_supported_levels(rep)) > 1,
+            write_fn=_ai_energy_level_write,
+        ),
     ),
 )
 
 FIRMWARE_UPDATE = Capability(
-    href='/otninformation/vs/0',
-    poll_tier='cold',
+    href="/otninformation/vs/0",
+    poll_tier="cold",
     entities=(
         BinarySensorDesc(
-            key='firmware_update',
-            field='x.com.samsung.da.newVersionAvailable',
-            device_class='update',
-            entity_category='diagnostic',
-            value_fn=lambda v: str(v).lower() == 'true' if v is not None else None,
+            key="firmware_update",
+            field="x.com.samsung.da.newVersionAvailable",
+            device_class="update",
+            entity_category="diagnostic",
+            value_fn=lambda v: str(v).lower() == "true" if v is not None else None,
         ),
     ),
 )
 
 SELF_CHECK = Capability(
-    href='/selfcheck/vs/0',
-    poll_tier='cold',
+    href="/selfcheck/vs/0",
+    poll_tier="cold",
     entities=(
-        SensorDesc(key='selfcheck_status', field='x.com.samsung.da.status',
-                   icon='mdi:stethoscope',
-                   entity_category='diagnostic'),
-        SensorDesc(key='selfcheck_result', field='x.com.samsung.da.result',
-                   icon='mdi:clipboard-check-outline',
-                   entity_category='diagnostic'),
+        SensorDesc(
+            key="selfcheck_status",
+            field="x.com.samsung.da.status",
+            icon="mdi:stethoscope",
+            entity_category="diagnostic",
+        ),
+        SensorDesc(
+            key="selfcheck_result",
+            field="x.com.samsung.da.result",
+            icon="mdi:clipboard-check-outline",
+            entity_category="diagnostic",
+        ),
         # List of error codes from the last self-check; joined for display.
         # Not every fridge reports the field, hence the exists_fn.
-        SensorDesc(key='selfcheck_error', field='x.com.samsung.da.error',
-                   icon='mdi:alert-circle-outline',
-                   entity_category='diagnostic',
-                   exists_fn=lambda rep, resources: (
-                       is_stub_rep(rep) or 'x.com.samsung.da.error' in rep),
-                   value_fn=lambda v: (', '.join(v) if v else None) if isinstance(v, list) else v),
-        ButtonDesc(key='selfcheck_start', field='', payload='Start',
-                   icon='mdi:play-circle-outline',
-                   entity_category='diagnostic',
-                   write_fn=lambda p, rep, href=None: (
-                       ['selfcheck', 'vs', '0'], {'x.com.samsung.da.status': p})),
+        SensorDesc(
+            key="selfcheck_error",
+            field="x.com.samsung.da.error",
+            icon="mdi:alert-circle-outline",
+            entity_category="diagnostic",
+            exists_fn=lambda rep, resources: is_stub_rep(rep) or "x.com.samsung.da.error" in rep,
+            value_fn=lambda v: (", ".join(v) if v else None) if isinstance(v, list) else v,
+        ),
+        ButtonDesc(
+            key="selfcheck_start",
+            field="",
+            payload="Start",
+            icon="mdi:play-circle-outline",
+            entity_category="diagnostic",
+            write_fn=lambda p, rep, href=None: (
+                ["selfcheck", "vs", "0"],
+                {"x.com.samsung.da.status": p},
+            ),
+        ),
     ),
 )
 
-# ---------------------------------------------------------------------------
 # Cross-family bundles, unpacked into every by_type registry's _build([...])
-# call the same way ignored.IGNORED is (*common.UNIVERSAL / *common.POWER).
-# discover() only binds a capability whose href is actually present in a
-# given device's resource dump, so listing one here for a family that
-# doesn't expose the href is a no-op, not a phantom entity -- see the
-# adding-device-support skill's coverage-discipline section.
+# call the same way ignored.IGNORED is. discover() only binds a capability
+# whose href is actually present in a given device's dump, so listing one
+# here for a family that doesn't expose the href is a no-op, not a phantom
+# entity -- see the adding-device-support skill's coverage-discipline
+# section.
 #
-# UNIVERSAL holds every capability with no known family that both (a) has
-# the href and (b) needs to model it some other way -- broadening one of
-# these to a new family is a safe, harmless guess (issue #40's AI energy
-# level: 2 of 6 families confirmed, blanket-added everywhere else).
+# UNIVERSAL holds every capability with no known family that both has the
+# href and needs to model it some other way.
 #
-# POWER is kept separate -- airconditioner is the one family that opts out
-# of it entirely. Canonical reason (see by_type/airconditioner.py and its
-# test for pointers back here, not restatements): AC's climate entity
-# already owns /power/0 and /power/vs/0 via bare, no-entity Capability
-# objects (airconditioner.COVERAGE), and a second, real POWER_GENERIC/
-# POWER_VS_FALLBACK cap on the same href would make _build() raise (a href
-# with >1 cap must have every cap discriminated by rt_filter/match_fn, and
-# the bare COVERAGE cap has neither). Kids-lock/remote-control don't have
-# this conflict -- no AC dump has ever reported those hrefs -- so they stay
-# in UNIVERSAL.
+# POWER is kept separate: airconditioner opts out of it entirely, since
+# its climate entity already owns /power/0 and /power/vs/0 via bare
+# no-entity Capability objects (airconditioner.COVERAGE), and a second
+# real cap on the same href would make _build() raise (see
+# by_type/airconditioner.py). Kids-lock/remote-control have no such
+# conflict, so they stay in UNIVERSAL.
 #
-# Airconditioner also partially opts out of UNIVERSAL itself, not just
-# POWER: issue #193 needs ENERGY_METER's cumulativePower scale to differ by
-# board generation, so by_type/airconditioner.py excludes just that one
-# member (`*[c for c in common.UNIVERSAL if c is not common.ENERGY_METER]`)
-# and substitutes airconditioner.ENERGY_METER_GENERIC/ENERGY_METER_LEGACY in
-# its place -- every other registry still unpacks UNIVERSAL wholesale.
-# ---------------------------------------------------------------------------
+# Airconditioner also partially opts out of UNIVERSAL itself: issue #193
+# needs ENERGY_METER's cumulativePower scale to differ by board
+# generation, so by_type/airconditioner.py excludes just that one member
+# and substitutes its own ENERGY_METER_GENERIC/ENERGY_METER_LEGACY.
 
 UNIVERSAL = (
     ALARMS,

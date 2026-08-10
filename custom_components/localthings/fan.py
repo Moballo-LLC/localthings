@@ -4,15 +4,14 @@ Four FanDesc-bound hrefs exist, dispatched by href in async_setup_entry
 below since each needs different HA fan semantics: the range hood's fan
 speed and the older ARTIK051_TVTL air-purifier family's Auto/Sleep/Low/
 Medium/High (issue #56) are both an ordered set of numeric levels
-(SET_SPEED) -- the latter confirmed monotonic in capabilities/
-air_purifier.py's module docstring, with no named-mode list to preserve
-since this board never self-reports one. The TP1X air-purifier family's
-modes (Smart/Max/Mid/WindFree/Sleep, issue #130) and the A-VTWW-TP2-21
-family's /wind/strength/vs/0 modes (issue #151) are both named behaviors
-with no linear order (PRESET_MODE) -- LocalThingsAirPurifierFan handles
-both hrefs, the only difference being whether the label comes straight
-from supportedModes or from a parallel modesName array (see
-_label_for_code)."""
+(SET_SPEED), confirmed monotonic in capabilities/air_purifier.py's module
+docstring, with no named-mode list since this board never self-reports one.
+The TP1X air-purifier family's modes (Smart/Max/Mid/WindFree/Sleep, issue
+#130) and the A-VTWW-TP2-21 family's /wind/strength/vs/0 modes (issue #151)
+are both named behaviors with no linear order (PRESET_MODE) --
+LocalThingsAirPurifierFan handles both hrefs, the only difference being
+whether the label comes from supportedModes or a parallel modesName array
+(see _label_for_code)."""
 
 from __future__ import annotations
 
@@ -32,22 +31,24 @@ from .coordinator import LocalThingsCoordinator
 from .entity import LocalThingsEntity, _is_included
 from .registry.capabilities.air_purifier import HREF_AIRFLOW
 from .registry.capabilities.air_purifier import HREF_MODE as AIR_PURIFIER_FAN_HREF
-from .registry.capabilities.air_purifier import HREF_WIND_STRENGTH as AIR_PURIFIER_WIND_STRENGTH_HREF
+from .registry.capabilities.air_purifier import (
+    HREF_WIND_STRENGTH as AIR_PURIFIER_WIND_STRENGTH_HREF,
+)
 from .registry.entities import FanDesc
 
 _LOGGER = logging.getLogger(__name__)
 
-POWER_HREF = '/power/0'
-POWER_VS_HREF = '/power/vs/0'
-_FAN_SPEED_FIELD = 'x.com.samsung.da.hood.fanSpeed'
-_SUPPORTED_FAN_SPEED_FIELD = 'x.com.samsung.da.hood.supportedFanSpeed'
-_MIN_FAN_SPEED_FIELD = 'x.com.samsung.da.hood.settableMinFanSpeed'
-_MAX_FAN_SPEED_FIELD = 'x.com.samsung.da.hood.settableMaxFanSpeed'
-_OFF_SPEED_CODE = '0'
+POWER_HREF = "/power/0"
+POWER_VS_HREF = "/power/vs/0"
+_FAN_SPEED_FIELD = "x.com.samsung.da.hood.fanSpeed"
+_SUPPORTED_FAN_SPEED_FIELD = "x.com.samsung.da.hood.supportedFanSpeed"
+_MIN_FAN_SPEED_FIELD = "x.com.samsung.da.hood.settableMinFanSpeed"
+_MAX_FAN_SPEED_FIELD = "x.com.samsung.da.hood.settableMaxFanSpeed"
+_OFF_SPEED_CODE = "0"
 
-_MODES_FIELD = 'x.com.samsung.da.modes'
-_SUPPORTED_MODES_FIELD = 'x.com.samsung.da.supportedModes'
-_MODES_NAME_FIELD = 'x.com.samsung.da.modesName'
+_MODES_FIELD = "x.com.samsung.da.modes"
+_SUPPORTED_MODES_FIELD = "x.com.samsung.da.supportedModes"
+_MODES_NAME_FIELD = "x.com.samsung.da.modesName"
 
 
 async def async_setup_entry(
@@ -74,19 +75,14 @@ class LocalThingsRangeHoodFan(LocalThingsEntity, FanEntity):
 
     Some boards that reuse this capability (built-in microwave vent fans,
     issues #137/#142) report no sibling `/power/0` or `/power/vs/0`
-    resource at all -- fan speed 0 is itself the off state there, with no
-    separate power toggle to write. `_speed_zero_is_off` detects that
-    shape from the hood resource's own settableMinFanSpeed/
-    supportedFanSpeed fields and switches every method below to drive
-    off/on purely through the fanSpeed field, including '0' in the
-    ordered speed codes as the off step instead of assuming every
-    advertised code is an active speed.
+    resource at all -- fan speed 0 is itself the off state there.
+    `_speed_zero_is_off` detects that shape and switches every method
+    below to drive off/on purely through the fanSpeed field.
 
-    This is deliberately not the same question as `_has_separate_power`,
-    which only proves *some* power resource exists on the device --  on a
-    combi appliance (e.g. an over-the-range microwave) that resource can
-    belong to the cavity, not the vent fan, and toggling it from here
-    would turn off the whole appliance instead of just the fan.
+    Deliberately not the same question as `_has_separate_power`, which
+    only proves some power resource exists on the device -- on a combi
+    appliance that resource can belong to the cavity, not the vent fan,
+    and toggling it from here would turn off the whole appliance.
     """
 
     _enable_turn_on_off_backwards_compatibility = False
@@ -110,13 +106,12 @@ class LocalThingsRangeHoodFan(LocalThingsEntity, FanEntity):
 
     def _speed_zero_is_off(self) -> bool:
         """Whether fan speed '0' is itself this hood's off step, with no
-        separate power resource to toggle. The board says so directly:
-        settableMinFanSpeed '0', or '0' inside supportedFanSpeed. The
-        standalone hood's codes start at 14 and it carries a real /power
-        resource instead, so this is False there."""
+        separate power resource to toggle -- settableMinFanSpeed '0', or
+        '0' inside supportedFanSpeed. False for the standalone hood, whose
+        codes start at 14 and which carries a real /power resource."""
         rep = self._rep(self._bound.href)
         return (
-            str(rep.get(_MIN_FAN_SPEED_FIELD, '')) == _OFF_SPEED_CODE
+            str(rep.get(_MIN_FAN_SPEED_FIELD, "")) == _OFF_SPEED_CODE
             or _OFF_SPEED_CODE in self._all_speed_codes()
         )
 
@@ -138,31 +133,27 @@ class LocalThingsRangeHoodFan(LocalThingsEntity, FanEntity):
     def _active_speed_codes(self) -> list[str]:
         codes = self._all_speed_codes()
         if self._speed_zero_is_off():
-            # No separate power resource: '0' is the off step, not a speed.
             return [code for code in codes if code != _OFF_SPEED_CODE]
-        # Power is carried by the separate /power resource.  fanSpeed
-        # retains the selected setting while power is off (as the
-        # lamp's `current` field does), so every advertised code is an
-        # active ordered speed.
+        # Power is carried by the separate /power resource; fanSpeed
+        # retains the selected setting while power is off, so every
+        # advertised code is an active ordered speed.
         return codes
 
     def _power_payload(self, enabled: bool) -> tuple[str, bool, str]:
         """Target whichever power resource this hood actually exposes."""
         resources = self._resources
         target = POWER_HREF if POWER_HREF in resources else POWER_VS_HREF
-        return 'power', enabled, target
+        return "power", enabled, target
 
     @property
     def is_on(self) -> bool:
         if self._speed_zero_is_off():
-            current = str(self._rep(self._bound.href).get(_FAN_SPEED_FIELD, '0'))
-            return current not in ('', _OFF_SPEED_CODE)
+            current = str(self._rep(self._bound.href).get(_FAN_SPEED_FIELD, "0"))
+            return current not in ("", _OFF_SPEED_CODE)
         rep = self._rep(POWER_HREF)
-        if 'value' in rep:
-            return bool(rep.get('value'))
-        return str(
-            self._rep(POWER_VS_HREF).get('x.com.samsung.da.power', '')
-        ).lower() == 'on'
+        if "value" in rep:
+            return bool(rep.get("value"))
+        return str(self._rep(POWER_VS_HREF).get("x.com.samsung.da.power", "")).lower() == "on"
 
     @property
     def speed_count(self) -> int:
@@ -173,13 +164,15 @@ class LocalThingsRangeHoodFan(LocalThingsEntity, FanEntity):
         if not self.is_on:
             return 0
         codes = self._active_speed_codes()
-        current = str(self._rep(self._bound.href).get(_FAN_SPEED_FIELD, ''))
+        current = str(self._rep(self._bound.href).get(_FAN_SPEED_FIELD, ""))
         if not codes or current not in codes:
             return None
         return ordered_list_item_to_percentage(codes, current)
 
     async def async_turn_on(
-        self, percentage: int | None = None, preset_mode: str | None = None,
+        self,
+        percentage: int | None = None,
+        preset_mode: str | None = None,
         **kwargs,
     ) -> None:
         if self._speed_zero_is_off():
@@ -192,20 +185,22 @@ class LocalThingsRangeHoodFan(LocalThingsEntity, FanEntity):
                 return
             codes = self._active_speed_codes()
             if codes:
-                await self.coordinator.async_send_command(self._bound, ('speed', codes[0]))
+                await self.coordinator.async_send_command(self._bound, ("speed", codes[0]))
             return
         await self.coordinator.async_send_command(
-            self._bound, self._power_payload(True),
+            self._bound,
+            self._power_payload(True),
         )
         if percentage is not None:
             await self.async_set_percentage(percentage)
 
     async def async_turn_off(self, **kwargs) -> None:
         if self._speed_zero_is_off():
-            await self.coordinator.async_send_command(self._bound, ('speed', _OFF_SPEED_CODE))
+            await self.coordinator.async_send_command(self._bound, ("speed", _OFF_SPEED_CODE))
             return
         await self.coordinator.async_send_command(
-            self._bound, self._power_payload(False),
+            self._bound,
+            self._power_payload(False),
         )
 
     async def async_set_percentage(self, percentage: int) -> None:
@@ -217,10 +212,11 @@ class LocalThingsRangeHoodFan(LocalThingsEntity, FanEntity):
             return
         if not self._speed_zero_is_off() and not self.is_on:
             await self.coordinator.async_send_command(
-                self._bound, self._power_payload(True),
+                self._bound,
+                self._power_payload(True),
             )
         code = percentage_to_ordered_list_item(codes, percentage)
-        await self.coordinator.async_send_command(self._bound, ('speed', code))
+        await self.coordinator.async_send_command(self._bound, ("speed", code))
 
 
 class LocalThingsAirPurifierFan(LocalThingsEntity, FanEntity):
@@ -230,9 +226,7 @@ class LocalThingsAirPurifierFan(LocalThingsEntity, FanEntity):
 
     _enable_turn_on_off_backwards_compatibility = False
     _attr_supported_features = (
-        FanEntityFeature.PRESET_MODE
-        | FanEntityFeature.TURN_ON
-        | FanEntityFeature.TURN_OFF
+        FanEntityFeature.PRESET_MODE | FanEntityFeature.TURN_ON | FanEntityFeature.TURN_OFF
     )
 
     def __init__(self, coordinator: LocalThingsCoordinator, bound) -> None:
@@ -253,27 +247,24 @@ class LocalThingsAirPurifierFan(LocalThingsEntity, FanEntity):
         correctly."""
         resources = self._resources
         target = POWER_VS_HREF if POWER_VS_HREF in resources else POWER_HREF
-        return 'power', enabled, target
+        return "power", enabled, target
 
     @property
     def is_on(self) -> bool:
-        power = self._rep(POWER_VS_HREF).get('x.com.samsung.da.power')
+        power = self._rep(POWER_VS_HREF).get("x.com.samsung.da.power")
         if power is not None:
-            return str(power).lower() == 'on'
-        return bool(self._rep(POWER_HREF).get('value'))
+            return str(power).lower() == "on"
+        return bool(self._rep(POWER_HREF).get("value"))
 
     def _label_for_code(self, code) -> str:
         """Lowercased HA preset label for a device mode code.
 
-        The TP1X_DA-AC-AIR board (issue #130) reports its named modes
-        directly as supportedModes ('Smart'/'Max'/...), so the code IS the
-        label. The A-VTWW-TP2-21 board (issue #151) instead reports numeric
-        wind-strength codes ('87'/'89'/...) with a separate modesName array
-        (parallel-indexed with supportedModes) giving the actual names --
-        same shape as climate.py's _wind_strength_label, and coincidentally
-        the same word set (Smart/Max/WindFree/Sleep), so both board
-        generations land on identical HA preset values without needing
-        their own translation catalog entry."""
+        The TP1X_DA-AC-AIR board (issue #130) reports named modes directly
+        as supportedModes, so the code IS the label. The A-VTWW-TP2-21
+        board (issue #151) instead reports numeric wind-strength codes with
+        a separate modesName array giving the real names -- same shape as
+        climate.py's _wind_strength_label, and coincidentally the same word
+        set, so both generations land on identical HA preset values."""
         rep = self._mode_rep()
         supported = list(rep.get(_SUPPORTED_MODES_FIELD, ()))
         names = rep.get(_MODES_NAME_FIELD)
@@ -284,8 +275,7 @@ class LocalThingsAirPurifierFan(LocalThingsEntity, FanEntity):
     @property
     def preset_modes(self) -> list[str]:
         return [
-            self._label_for_code(code)
-            for code in self._mode_rep().get(_SUPPORTED_MODES_FIELD, ())
+            self._label_for_code(code) for code in self._mode_rep().get(_SUPPORTED_MODES_FIELD, ())
         ]
 
     @property
@@ -295,7 +285,9 @@ class LocalThingsAirPurifierFan(LocalThingsEntity, FanEntity):
         return self._label_for_code(code) if code is not None else None
 
     async def async_turn_on(
-        self, percentage: int | None = None, preset_mode: str | None = None,
+        self,
+        percentage: int | None = None,
+        preset_mode: str | None = None,
         **kwargs,
     ) -> None:
         await self.coordinator.async_send_command(self._bound, self._power_payload(True))
@@ -311,22 +303,21 @@ class LocalThingsAirPurifierFan(LocalThingsEntity, FanEntity):
         # modesName-labelled board), not the lowercased HA value.
         for code in self._mode_rep().get(_SUPPORTED_MODES_FIELD, ()):
             if self._label_for_code(code) == preset_mode:
-                await self.coordinator.async_send_command(self._bound, ('mode', code))
+                await self.coordinator.async_send_command(self._bound, ("mode", code))
                 return
         _LOGGER.warning(
             "%s: %r is not a valid preset mode (supported: %s)",
-            self.entity_id, preset_mode, self.preset_modes,
+            self.entity_id,
+            preset_mode,
+            self.preset_modes,
         )
 
 
-_AIRFLOW_SPEED_FIELD = 'speed'
+_AIRFLOW_SPEED_FIELD = "speed"
 # Raw `speed` codes, low-to-high -- confirmed monotonic (Auto=0, Sleep=1,
-# Low=2, Medium=3, High=4) via air_purifier.py's module docstring. Ordered
-# as plain strings, same as _all_speed_codes above, so
-# ordered_list_item_to_percentage/percentage_to_ordered_list_item can treat
-# it exactly like the range hood's numeric levels -- no named-preset table
-# needed since this board never reports mode names to hang one off of.
-_AIRFLOW_SPEED_CODES = ('0', '1', '2', '3', '4')
+# Low=2, Medium=3, High=4) via air_purifier.py's module docstring. Treated
+# as plain ordered strings, same as the range hood's numeric levels.
+_AIRFLOW_SPEED_CODES = ["0", "1", "2", "3", "4"]
 
 
 class LocalThingsAirflowFan(LocalThingsEntity, FanEntity):
@@ -335,9 +326,7 @@ class LocalThingsAirflowFan(LocalThingsEntity, FanEntity):
 
     _enable_turn_on_off_backwards_compatibility = False
     _attr_supported_features = (
-        FanEntityFeature.SET_SPEED
-        | FanEntityFeature.TURN_ON
-        | FanEntityFeature.TURN_OFF
+        FanEntityFeature.SET_SPEED | FanEntityFeature.TURN_ON | FanEntityFeature.TURN_OFF
     )
 
     def __init__(self, coordinator: LocalThingsCoordinator, bound) -> None:
@@ -350,24 +339,21 @@ class LocalThingsAirflowFan(LocalThingsEntity, FanEntity):
     def _power_payload(self, enabled: bool) -> tuple[str, bool, str]:
         """Prefer /power/0 like LocalThingsRangeHoodFan above, NOT
         LocalThingsAirPurifierFan's vs/0-first order -- that order is only
-        harmless for the TP1X board because it never reports /power/0 at
-        all. This family's dumps carry both hrefs, and common.POWER_GENERIC
-        (the power_switch entity) is unconditionally bound to /power/0
-        whenever it's present, so writing here to /power/vs/0 first would
-        leave power_switch and this fan reading/writing two different
-        resources -- disagreeing until the next poll refreshes the other
-        one (the same optimistic-apply lag coordinator.py's own comments
-        warn about)."""
+        harmless for the TP1X board because it never reports /power/0.
+        This family's dumps carry both hrefs, and common.POWER_GENERIC is
+        unconditionally bound to /power/0 when present, so writing to
+        /power/vs/0 first would leave power_switch and this fan
+        disagreeing until the next poll."""
         resources = self._resources
         target = POWER_HREF if POWER_HREF in resources else POWER_VS_HREF
-        return 'power', enabled, target
+        return "power", enabled, target
 
     @property
     def is_on(self) -> bool:
         power = self._rep(POWER_HREF)
-        if 'value' in power:
-            return bool(power.get('value'))
-        return str(self._rep(POWER_VS_HREF).get('x.com.samsung.da.power', '')).lower() == 'on'
+        if "value" in power:
+            return bool(power.get("value"))
+        return str(self._rep(POWER_VS_HREF).get("x.com.samsung.da.power", "")).lower() == "on"
 
     @property
     def speed_count(self) -> int:
@@ -377,13 +363,15 @@ class LocalThingsAirflowFan(LocalThingsEntity, FanEntity):
     def percentage(self) -> int | None:
         if not self.is_on:
             return 0
-        current = str(self._rep(self._bound.href).get(_AIRFLOW_SPEED_FIELD, ''))
+        current = str(self._rep(self._bound.href).get(_AIRFLOW_SPEED_FIELD, ""))
         if current not in _AIRFLOW_SPEED_CODES:
             return None
         return ordered_list_item_to_percentage(_AIRFLOW_SPEED_CODES, current)
 
     async def async_turn_on(
-        self, percentage: int | None = None, preset_mode: str | None = None,
+        self,
+        percentage: int | None = None,
+        preset_mode: str | None = None,
         **kwargs,
     ) -> None:
         await self.coordinator.async_send_command(self._bound, self._power_payload(True))
@@ -400,4 +388,4 @@ class LocalThingsAirflowFan(LocalThingsEntity, FanEntity):
         if not self.is_on:
             await self.coordinator.async_send_command(self._bound, self._power_payload(True))
         code = percentage_to_ordered_list_item(_AIRFLOW_SPEED_CODES, percentage)
-        await self.coordinator.async_send_command(self._bound, ('speed', int(code)))
+        await self.coordinator.async_send_command(self._bound, ("speed", int(code)))

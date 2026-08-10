@@ -5,13 +5,21 @@ from tests.conftest import _load_device
 
 
 def _reg():
-    return {c.href: [c] for c in (
-        common.KIDS_LOCK_GENERIC, common.KIDS_LOCK_VS_FALLBACK,
-        common.REMOTE_CONTROL_GENERIC, common.REMOTE_CONTROL_VS_FALLBACK,
-        common.POWER_GENERIC, common.POWER_VS_FALLBACK,
-        common.ALARMS, common.ENERGY_METER, common.WATER_METER,
-        common.WATER_FILTER,
-    )}
+    return {
+        c.href: [c]
+        for c in (
+            common.KIDS_LOCK_GENERIC,
+            common.KIDS_LOCK_VS_FALLBACK,
+            common.REMOTE_CONTROL_GENERIC,
+            common.REMOTE_CONTROL_VS_FALLBACK,
+            common.POWER_GENERIC,
+            common.POWER_VS_FALLBACK,
+            common.ALARMS,
+            common.ENERGY_METER,
+            common.WATER_METER,
+            common.WATER_FILTER,
+        )
+    }
 
 
 def test_kids_lock_vs_value_fn():
@@ -20,16 +28,16 @@ def test_kids_lock_vs_value_fn():
     TestKidsLockFallback.test_vs_fallback_is_read_only for why this is a
     binary_sensor at all)."""
     desc = common.KIDS_LOCK_VS_FALLBACK.entities[0]
-    assert desc.value_fn('Lock') is False
-    assert desc.value_fn('Ready') is True
+    assert desc.value_fn("Lock") is False
+    assert desc.value_fn("Ready") is True
 
 
 def test_common_caps_discover_on_dishwasher(dishwasher_resources):
     bound = discover(dishwasher_resources, _reg())
     keys = {b.desc.key for b in bound}
-    assert 'child_lock' in keys
-    assert 'remote_control' in keys
-    assert 'power_switch' in keys
+    assert "child_lock" in keys
+    assert "remote_control" in keys
+    assert "power_switch" in keys
 
 
 class TestMergeOptionsField:
@@ -39,28 +47,31 @@ class TestMergeOptionsField:
     still present) without waiting on a real poll."""
 
     def test_replaces_matching_prefix(self):
-        cached = ['DeviceType_0167', 'Course_16', 'GMT_04']
-        assert common.merge_options_field(cached, ['Course_1D']) == [
-            'DeviceType_0167', 'Course_1D', 'GMT_04',
+        cached = ["DeviceType_0167", "Course_16", "GMT_04"]
+        assert common.merge_options_field(cached, ["Course_1D"]) == [
+            "DeviceType_0167",
+            "Course_1D",
+            "GMT_04",
         ]
 
     def test_appends_when_prefix_absent(self):
-        cached = ['DeviceType_0167']
-        assert common.merge_options_field(cached, ['NaturalSteam_On']) == [
-            'DeviceType_0167', 'NaturalSteam_On',
+        cached = ["DeviceType_0167"]
+        assert common.merge_options_field(cached, ["NaturalSteam_On"]) == [
+            "DeviceType_0167",
+            "NaturalSteam_On",
         ]
 
     def test_merges_multiple_tokens_independently(self):
-        cached = ['DetergentLevelCtrl_1', 'SoftenerLevelCtrl_0', 'GMT_04']
-        merged = common.merge_options_field(cached, ['SoftenerLevelCtrl_2'])
-        assert merged == ['DetergentLevelCtrl_1', 'SoftenerLevelCtrl_2', 'GMT_04']
+        cached = ["DetergentLevelCtrl_1", "SoftenerLevelCtrl_0", "GMT_04"]
+        merged = common.merge_options_field(cached, ["SoftenerLevelCtrl_2"])
+        assert merged == ["DetergentLevelCtrl_1", "SoftenerLevelCtrl_2", "GMT_04"]
 
     def test_handles_missing_cache(self):
-        assert common.merge_options_field(None, ['Course_1D']) == ['Course_1D']
+        assert common.merge_options_field(None, ["Course_1D"]) == ["Course_1D"]
 
     def test_ignores_malformed_tokens(self):
-        cached = ['Course_16']
-        assert common.merge_options_field(cached, ['nounderscore']) == ['Course_16']
+        cached = ["Course_16"]
+        assert common.merge_options_field(cached, ["nounderscore"]) == ["Course_16"]
 
 
 class TestMergeItemsField:
@@ -72,31 +83,45 @@ class TestMergeItemsField:
     present) without waiting on a real poll."""
 
     def test_merges_fields_into_matching_id(self):
-        cached = [{'x.com.samsung.da.id': '0', 'x.com.samsung.da.current': '20.0',
-                   'x.com.samsung.da.maximum': '30', 'x.com.samsung.da.minimum': '16'}]
+        cached = [
+            {
+                "x.com.samsung.da.id": "0",
+                "x.com.samsung.da.current": "20.0",
+                "x.com.samsung.da.maximum": "30",
+                "x.com.samsung.da.minimum": "16",
+            }
+        ]
         merged = common.merge_items_field(
-            cached, [{'x.com.samsung.da.id': '0', 'x.com.samsung.da.desired': '22'}])
-        assert merged == [{'x.com.samsung.da.id': '0', 'x.com.samsung.da.current': '20.0',
-                            'x.com.samsung.da.maximum': '30', 'x.com.samsung.da.minimum': '16',
-                            'x.com.samsung.da.desired': '22'}]
+            cached, [{"x.com.samsung.da.id": "0", "x.com.samsung.da.desired": "22"}]
+        )
+        assert merged == [
+            {
+                "x.com.samsung.da.id": "0",
+                "x.com.samsung.da.current": "20.0",
+                "x.com.samsung.da.maximum": "30",
+                "x.com.samsung.da.minimum": "16",
+                "x.com.samsung.da.desired": "22",
+            }
+        ]
 
     def test_appends_when_id_absent(self):
-        cached = [{'x.com.samsung.da.id': '0', 'x.com.samsung.da.current': '20.0'}]
+        cached = [{"x.com.samsung.da.id": "0", "x.com.samsung.da.current": "20.0"}]
         merged = common.merge_items_field(
-            cached, [{'x.com.samsung.da.id': '1', 'x.com.samsung.da.desired': '22'}])
+            cached, [{"x.com.samsung.da.id": "1", "x.com.samsung.da.desired": "22"}]
+        )
         assert merged == [
-            {'x.com.samsung.da.id': '0', 'x.com.samsung.da.current': '20.0'},
-            {'x.com.samsung.da.id': '1', 'x.com.samsung.da.desired': '22'},
+            {"x.com.samsung.da.id": "0", "x.com.samsung.da.current": "20.0"},
+            {"x.com.samsung.da.id": "1", "x.com.samsung.da.desired": "22"},
         ]
 
     def test_handles_missing_cache(self):
         assert common.merge_items_field(
-            None, [{'x.com.samsung.da.id': '0', 'x.com.samsung.da.desired': '22'}]
-        ) == [{'x.com.samsung.da.id': '0', 'x.com.samsung.da.desired': '22'}]
+            None, [{"x.com.samsung.da.id": "0", "x.com.samsung.da.desired": "22"}]
+        ) == [{"x.com.samsung.da.id": "0", "x.com.samsung.da.desired": "22"}]
 
     def test_ignores_malformed_new_items(self):
-        cached = [{'x.com.samsung.da.id': '0', 'x.com.samsung.da.current': '20.0'}]
-        assert common.merge_items_field(cached, ['not-a-dict']) == cached
+        cached = [{"x.com.samsung.da.id": "0", "x.com.samsung.da.current": "20.0"}]
+        assert common.merge_items_field(cached, ["not-a-dict"]) == cached
 
 
 # ---------------------------------------------------------------------------
@@ -106,95 +131,119 @@ class TestMergeItemsField:
 
 class TestPowerFallback:
     def test_generic_href_read_write(self):
-        assert common.POWER_GENERIC.href == '/power/0'
+        assert common.POWER_GENERIC.href == "/power/0"
         desc = next(e for e in common.POWER_GENERIC.entities if isinstance(e, SwitchDesc))
         assert desc.value_fn(True) is True
         assert desc.value_fn(False) is False
-        path, body = desc.write_fn('On', {})
-        assert path == ['power', '0']
-        assert body == {'value': True}
-        assert desc.write_fn('Off', {})[1] == {'value': False}
+        assert desc.write_fn is not None
+        result = desc.write_fn("On", {})
+        assert result is not None
+        path, body = result
+        assert path == ["power", "0"]
+        assert body == {"value": True}
+        off_result = desc.write_fn("Off", {})
+        assert off_result is not None
+        assert off_result[1] == {"value": False}
 
     def test_vs_fallback_binds_only_when_generic_absent(self):
-        assert common.POWER_VS_FALLBACK.href == '/power/vs/0'
-        assert common.POWER_VS_FALLBACK.match_fn({}, {'/power/vs/0': {}}) is True
-        assert common.POWER_VS_FALLBACK.match_fn(
-            {}, {'/power/0': {}, '/power/vs/0': {}}) is False
+        assert common.POWER_VS_FALLBACK.href == "/power/vs/0"
+        assert common.POWER_VS_FALLBACK.match_fn is not None
+        assert common.POWER_VS_FALLBACK.match_fn({}, {"/power/vs/0": {}}) is True
+        assert common.POWER_VS_FALLBACK.match_fn({}, {"/power/0": {}, "/power/vs/0": {}}) is False
 
     def test_vs_fallback_read_write(self):
         desc = next(e for e in common.POWER_VS_FALLBACK.entities if isinstance(e, SwitchDesc))
-        assert desc.value_fn('On') is True
-        assert desc.value_fn('Off') is False
-        path, body = desc.write_fn('On', {})
-        assert path == ['power', 'vs', '0']
-        assert body == {'x.com.samsung.da.power': 'On'}
+        assert desc.value_fn("On") is True
+        assert desc.value_fn("Off") is False
+        assert desc.write_fn is not None
+        result = desc.write_fn("On", {})
+        assert result is not None
+        path, body = result
+        assert path == ["power", "vs", "0"]
+        assert body == {"x.com.samsung.da.power": "On"}
 
     def test_power_switch_hidden_when_firmware_disallows(self):
         switch = next(e for e in common.POWER_GENERIC.entities if isinstance(e, SwitchDesc))
         sensor = next(e for e in common.POWER_GENERIC.entities if isinstance(e, BinarySensorDesc))
         resources = {
-            '/power/0': {'value': True},
-            '/wm/setinfo/vs/0': {'x.com.samsung.da.isModelSettingPowerOnOff': 'false'},
+            "/power/0": {"value": True},
+            "/wm/setinfo/vs/0": {"x.com.samsung.da.isModelSettingPowerOnOff": "false"},
         }
-        assert switch.exists_fn(resources['/power/0'], resources) is False
-        assert sensor.exists_fn(resources['/power/0'], resources) is True
+        assert switch.exists_fn is not None
+        assert sensor.exists_fn is not None
+        assert switch.exists_fn(resources["/power/0"], resources) is False
+        assert sensor.exists_fn(resources["/power/0"], resources) is True
 
     def test_power_switch_writable_when_firmware_allows(self):
         switch = next(e for e in common.POWER_GENERIC.entities if isinstance(e, SwitchDesc))
         sensor = next(e for e in common.POWER_GENERIC.entities if isinstance(e, BinarySensorDesc))
         resources = {
-            '/power/0': {'value': True},
-            '/wm/setinfo/vs/0': {'x.com.samsung.da.isModelSettingPowerOnOff': 'true'},
+            "/power/0": {"value": True},
+            "/wm/setinfo/vs/0": {"x.com.samsung.da.isModelSettingPowerOnOff": "true"},
         }
-        assert switch.exists_fn(resources['/power/0'], resources) is True
-        assert sensor.exists_fn(resources['/power/0'], resources) is False
+        assert switch.exists_fn is not None
+        assert sensor.exists_fn is not None
+        assert switch.exists_fn(resources["/power/0"], resources) is True
+        assert sensor.exists_fn(resources["/power/0"], resources) is False
 
     def test_power_switch_default_writable_without_setinfo(self):
         switch = next(e for e in common.POWER_GENERIC.entities if isinstance(e, SwitchDesc))
         sensor = next(e for e in common.POWER_GENERIC.entities if isinstance(e, BinarySensorDesc))
-        resources = {'/power/0': {'value': True}}
-        assert switch.exists_fn(resources['/power/0'], resources) is True
-        assert sensor.exists_fn(resources['/power/0'], resources) is False
+        resources = {"/power/0": {"value": True}}
+        assert switch.exists_fn is not None
+        assert sensor.exists_fn is not None
+        assert switch.exists_fn(resources["/power/0"], resources) is True
+        assert sensor.exists_fn(resources["/power/0"], resources) is False
 
     def test_polled_warm_so_power_state_reflects_quickly(self):
         """issue #56 follow-up: neither href had a poll_tier, so power state
         only ever refreshed on the once-per-30s summary poll instead of the
         subscribe/subpoll cadence 'warm'/'hot' hrefs get -- same reasoning
         as REMOTE_CONTROL_GENERIC/VS_FALLBACK's own 'warm' tier."""
-        assert common.POWER_GENERIC.poll_tier == 'warm'
-        assert common.POWER_VS_FALLBACK.poll_tier == 'warm'
+        assert common.POWER_GENERIC.poll_tier == "warm"
+        assert common.POWER_VS_FALLBACK.poll_tier == "warm"
 
 
 class TestWmSetinfoFlags:
     def test_washer_fixture_carries_setinfo_from_device0(self):
         """/wm/setinfo/vs/0 lands in the seed snapshot -- no dedicated capability."""
-        resources = _load_device('washer')
-        assert '/wm/setinfo/vs/0' in resources
+        resources = _load_device("washer")
+        assert "/wm/setinfo/vs/0" in resources
         assert common.model_allows_power_on_off(resources) is False
         assert common.model_setting_without_sc(resources) is True
 
     def test_dishwasher_allows_power_on_off(self):
-        resources = _load_device('dishwasher')
+        resources = _load_device("dishwasher")
         assert common.model_allows_power_on_off(resources) is True
         assert common.model_setting_without_sc(resources) is False
 
     def test_deleted_alarms_filtered(self):
-        assert common._active_alarm_codes([
-            {
-                'x.com.samsung.da.code': 'ErrorCode',
-                'x.com.samsung.da.state': 'Deleted',
-            },
-        ]) == 'none'
-        assert common._active_alarm_codes([
-            {
-                'x.com.samsung.da.code': 'LE',
-                'x.com.samsung.da.state': 'Triggered',
-            },
-            {
-                'x.com.samsung.da.code': 'ErrorCode',
-                'x.com.samsung.da.state': 'Deleted',
-            },
-        ]) == 'LE'
+        assert (
+            common._active_alarm_codes(
+                [
+                    {
+                        "x.com.samsung.da.code": "ErrorCode",
+                        "x.com.samsung.da.state": "Deleted",
+                    },
+                ]
+            )
+            == "none"
+        )
+        assert (
+            common._active_alarm_codes(
+                [
+                    {
+                        "x.com.samsung.da.code": "LE",
+                        "x.com.samsung.da.state": "Triggered",
+                    },
+                    {
+                        "x.com.samsung.da.code": "ErrorCode",
+                        "x.com.samsung.da.state": "Deleted",
+                    },
+                ]
+            )
+            == "LE"
+        )
 
     def test_off_suffixed_placeholder_codes_filtered(self):
         """issue #166: Samsung pre-populates /alarms/vs/0 with one row per
@@ -203,32 +252,42 @@ class TestWmSetinfoFlags:
         confirmed not just for 'ErrorCode_OFF' but also 'FilterAlarm_OFF'
         on the same dump. These were previously shown as if they were
         active alarms."""
-        assert common._active_alarm_codes([
-            {
-                'x.com.samsung.da.code': 'ErrorCode_OFF',
-                'x.com.samsung.da.triggeredTime': '2026-07-28T12:59:22',
-            },
-            {
-                'x.com.samsung.da.code': 'FilterAlarm_OFF',
-                'x.com.samsung.da.triggeredTime': '2026-07-28T12:59:22',
-            },
-        ]) == 'none'
+        assert (
+            common._active_alarm_codes(
+                [
+                    {
+                        "x.com.samsung.da.code": "ErrorCode_OFF",
+                        "x.com.samsung.da.triggeredTime": "2026-07-28T12:59:22",
+                    },
+                    {
+                        "x.com.samsung.da.code": "FilterAlarm_OFF",
+                        "x.com.samsung.da.triggeredTime": "2026-07-28T12:59:22",
+                    },
+                ]
+            )
+            == "none"
+        )
 
     def test_real_filter_alarm_not_off_suffixed_still_shown(self):
         """issue #166's actual live filter alert: code 'FilterAlarm' (no
         '_OFF' suffix), state 'Created' -- distinct from the 'FilterAlarm_OFF'
         placeholder and must still surface."""
-        assert common._active_alarm_codes([
-            {
-                'x.com.samsung.da.code': 'ErrorCode_OFF',
-                'x.com.samsung.da.triggeredTime': '2026-07-28T12:59:22',
-            },
-            {
-                'x.com.samsung.da.code': 'FilterAlarm',
-                'x.com.samsung.da.state': 'Created',
-                'x.com.samsung.da.triggeredTime': '2026-07-28T12:59:22',
-            },
-        ]) == 'FilterAlarm'
+        assert (
+            common._active_alarm_codes(
+                [
+                    {
+                        "x.com.samsung.da.code": "ErrorCode_OFF",
+                        "x.com.samsung.da.triggeredTime": "2026-07-28T12:59:22",
+                    },
+                    {
+                        "x.com.samsung.da.code": "FilterAlarm",
+                        "x.com.samsung.da.state": "Created",
+                        "x.com.samsung.da.triggeredTime": "2026-07-28T12:59:22",
+                    },
+                ]
+            )
+            == "FilterAlarm"
+        )
 
 
 class TestKidsLockFallback:
@@ -240,16 +299,19 @@ class TestKidsLockFallback:
         KIDS_LOCK_VS_FALLBACK now share the same shape (BinarySensorDesc,
         device_class='lock', same key) so both surfaces render with the
         same polarity: 'On' means open/unlocked."""
-        assert common.KIDS_LOCK_GENERIC.href == '/kidslock/0'
+        assert common.KIDS_LOCK_GENERIC.href == "/kidslock/0"
         desc = common.KIDS_LOCK_GENERIC.entities[0]
         assert isinstance(desc, BinarySensorDesc)
-        assert desc.value_fn(False) is True   # value=False -> On=Unlocked
-        assert desc.value_fn(True) is False   # value=True -> Off=Locked
+        assert desc.value_fn(False) is True  # value=False -> On=Unlocked
+        assert desc.value_fn(True) is False  # value=True -> Off=Locked
 
     def test_vs_fallback_gated(self):
-        assert common.KIDS_LOCK_VS_FALLBACK.match_fn({}, {'/kidslock/vs/0': {}}) is True
-        assert common.KIDS_LOCK_VS_FALLBACK.match_fn(
-            {}, {'/kidslock/0': {}, '/kidslock/vs/0': {}}) is False
+        assert common.KIDS_LOCK_VS_FALLBACK.match_fn is not None
+        assert common.KIDS_LOCK_VS_FALLBACK.match_fn({}, {"/kidslock/vs/0": {}}) is True
+        assert (
+            common.KIDS_LOCK_VS_FALLBACK.match_fn({}, {"/kidslock/0": {}, "/kidslock/vs/0": {}})
+            is False
+        )
 
     def test_vs_fallback_is_read_only(self):
         """Issues #181/#183: writing this resource 4.05s on real hardware
@@ -264,23 +326,28 @@ class TestKidsLockFallback:
 
 class TestRemoteControlFallback:
     def test_generic_read(self):
-        assert common.REMOTE_CONTROL_GENERIC.href == '/remotectrl/0'
+        assert common.REMOTE_CONTROL_GENERIC.href == "/remotectrl/0"
         desc = common.REMOTE_CONTROL_GENERIC.entities[0]
         assert desc.value_fn(True) is True
         assert desc.value_fn(False) is False
 
     def test_vs_fallback_gated(self):
-        assert common.REMOTE_CONTROL_VS_FALLBACK.match_fn({}, {'/remotectrl/vs/0': {}}) is True
-        assert common.REMOTE_CONTROL_VS_FALLBACK.match_fn(
-            {}, {'/remotectrl/0': {}, '/remotectrl/vs/0': {}}) is False
+        assert common.REMOTE_CONTROL_VS_FALLBACK.match_fn is not None
+        assert common.REMOTE_CONTROL_VS_FALLBACK.match_fn({}, {"/remotectrl/vs/0": {}}) is True
+        assert (
+            common.REMOTE_CONTROL_VS_FALLBACK.match_fn(
+                {}, {"/remotectrl/0": {}, "/remotectrl/vs/0": {}}
+            )
+            is False
+        )
 
     def test_polled_warm_so_write_gating_stays_fresh(self):
         """coordinator.async_send_command blocks writes on this signal, so
         it can't sit in the default 'cold' tier (refreshed only once per
         30s summary poll) -- it needs the subscribe/subpoll cadence 'warm'
         and 'hot' hrefs get instead."""
-        assert common.REMOTE_CONTROL_GENERIC.poll_tier == 'warm'
-        assert common.REMOTE_CONTROL_VS_FALLBACK.poll_tier == 'warm'
+        assert common.REMOTE_CONTROL_GENERIC.poll_tier == "warm"
+        assert common.REMOTE_CONTROL_VS_FALLBACK.poll_tier == "warm"
 
 
 # ---------------------------------------------------------------------------
@@ -292,36 +359,42 @@ class TestRemoteControlFallback:
 
 class TestEnergyMeter:
     def test_href(self):
-        assert common.ENERGY_METER.href == '/energy/consumption/vs/0'
+        assert common.ENERGY_METER.href == "/energy/consumption/vs/0"
 
     def test_power_clamps_negative(self):
-        pw = next(e for e in common.ENERGY_METER.entities if e.key == 'power_watts')
+        pw = next(e for e in common.ENERGY_METER.entities if e.key == "power_watts")
         assert pw.value_fn(-500.0) == 0.0
         assert pw.value_fn(93.0) == 93.0
 
     def test_power_watts_hidden_for_dead_sentinel(self):
-        pw = next(e for e in common.ENERGY_METER.entities if e.key == 'power_watts')
-        assert pw.exists_fn({'x.com.samsung.da.instantaneousPower': '-500'}, {}) is False
+        pw = next(e for e in common.ENERGY_METER.entities if e.key == "power_watts")
+        assert pw.exists_fn is not None
+        assert pw.exists_fn({"x.com.samsung.da.instantaneousPower": "-500"}, {}) is False
 
     def test_power_watts_shown_for_real_value(self):
-        pw = next(e for e in common.ENERGY_METER.entities if e.key == 'power_watts')
-        assert pw.exists_fn({'x.com.samsung.da.instantaneousPower': '150'}, {}) is True
+        pw = next(e for e in common.ENERGY_METER.entities if e.key == "power_watts")
+        assert pw.exists_fn is not None
+        assert pw.exists_fn({"x.com.samsung.da.instantaneousPower": "150"}, {}) is True
 
     def test_energy_kwh_hidden_when_cumulative_power_absent(self):
-        kwh = next(e for e in common.ENERGY_METER.entities if e.key == 'energy_kwh')
-        assert kwh.exists_fn({'x.com.samsung.da.instantaneousPower': '-500'}, {}) is False
+        kwh = next(e for e in common.ENERGY_METER.entities if e.key == "energy_kwh")
+        assert kwh.exists_fn is not None
+        assert kwh.exists_fn({"x.com.samsung.da.instantaneousPower": "-500"}, {}) is False
 
     def test_energy_kwh_shown_when_present(self):
-        kwh = next(e for e in common.ENERGY_METER.entities if e.key == 'energy_kwh')
-        assert kwh.exists_fn({'x.com.samsung.da.cumulativePower': '58900'}, {}) is True
+        kwh = next(e for e in common.ENERGY_METER.entities if e.key == "energy_kwh")
+        assert kwh.exists_fn is not None
+        assert kwh.exists_fn({"x.com.samsung.da.cumulativePower": "58900"}, {}) is True
 
     def test_both_entities_included_on_true_stub(self):
         """A true stub -- /device/0's {"href": "..."} "not fetched yet"
         marker (see registry.batch.is_stub_rep) -- means the resource exists
         but data isn't fetched yet; include both so sub-polls populate them."""
-        pw = next(e for e in common.ENERGY_METER.entities if e.key == 'power_watts')
-        kwh = next(e for e in common.ENERGY_METER.entities if e.key == 'energy_kwh')
-        stub = {'href': '/energy/consumption/vs/0'}
+        pw = next(e for e in common.ENERGY_METER.entities if e.key == "power_watts")
+        kwh = next(e for e in common.ENERGY_METER.entities if e.key == "energy_kwh")
+        assert pw.exists_fn is not None
+        assert kwh.exists_fn is not None
+        stub = {"href": "/energy/consumption/vs/0"}
         assert pw.exists_fn(stub, {}) is True
         assert kwh.exists_fn(stub, {}) is True
 
@@ -329,16 +402,19 @@ class TestEnergyMeter:
         """A real {} rep (no 'href' key) is the device's confirmed -- if
         empty -- answer, not a stub, so a model that never populates this
         resource doesn't get a phantom always-"unknown" entity (issue #127)."""
-        pw = next(e for e in common.ENERGY_METER.entities if e.key == 'power_watts')
-        kwh = next(e for e in common.ENERGY_METER.entities if e.key == 'energy_kwh')
+        pw = next(e for e in common.ENERGY_METER.entities if e.key == "power_watts")
+        kwh = next(e for e in common.ENERGY_METER.entities if e.key == "energy_kwh")
+        assert pw.exists_fn is not None
+        assert kwh.exists_fn is not None
         assert pw.exists_fn({}, {}) is False
         assert kwh.exists_fn({}, {}) is False
 
     def test_power_watts_hidden_when_field_absent_in_populated_rep(self):
         """A populated rep that lacks instantaneousPower must not spawn a
         phantom power sensor (the exists_fn replaces the field-presence gate)."""
-        pw = next(e for e in common.ENERGY_METER.entities if e.key == 'power_watts')
-        assert pw.exists_fn({'x.com.samsung.da.cumulativePower': '5'}, {}) is False
+        pw = next(e for e in common.ENERGY_METER.entities if e.key == "power_watts")
+        assert pw.exists_fn is not None
+        assert pw.exists_fn({"x.com.samsung.da.cumulativePower": "5"}, {}) is False
 
 
 # ---------------------------------------------------------------------------
@@ -352,36 +428,35 @@ class TestEnergyMeter:
 
 
 def _ai_energy_level_desc(cls_name):
-    return next(e for e in common.AI_ENERGY_LEVEL.entities
-                if e.__class__.__name__ == cls_name)
+    return next(e for e in common.AI_ENERGY_LEVEL.entities if e.__class__.__name__ == cls_name)
 
 
 class TestAiEnergyLevelSwitch:
     def _desc(self):
-        return _ai_energy_level_desc('SwitchDesc')
+        return _ai_energy_level_desc("SwitchDesc")
 
     def test_href(self):
-        assert common.AI_ENERGY_LEVEL.href == '/energy/ailevel/vs/0'
+        assert common.AI_ENERGY_LEVEL.href == "/energy/ailevel/vs/0"
 
     def test_shown_only_with_single_supported_level(self):
         desc = self._desc()
-        assert desc.exists_fn({'aiLevel': '1', 'supportedAiLevel': ['1']}, {}) is True
-        assert desc.exists_fn({'aiLevel': '1', 'supportedAiLevel': ['1', '2']}, {}) is False
+        assert desc.exists_fn({"aiLevel": "1", "supportedAiLevel": ["1"]}, {}) is True
+        assert desc.exists_fn({"aiLevel": "1", "supportedAiLevel": ["1", "2"]}, {}) is False
 
     def test_hidden_when_supported_level_is_non_list_scalar(self):
         """A stray scalar (e.g. a string) must not be len()-checked as if it
         were a list -- a 2-char string would otherwise wrongly pass `== 1`
         style checks."""
         desc = self._desc()
-        assert desc.exists_fn({'aiLevel': '1', 'supportedAiLevel': '1'}, {}) is False
+        assert desc.exists_fn({"aiLevel": "1", "supportedAiLevel": "1"}, {}) is False
 
     def test_hidden_when_supported_level_missing(self):
         desc = self._desc()
-        assert desc.exists_fn({'aiLevel': '1'}, {}) is False
+        assert desc.exists_fn({"aiLevel": "1"}, {}) is False
 
     def test_hidden_when_supported_level_empty_list(self):
         desc = self._desc()
-        assert desc.exists_fn({'aiLevel': '0', 'supportedAiLevel': []}, {}) is False
+        assert desc.exists_fn({"aiLevel": "0", "supportedAiLevel": []}, {}) is False
 
     def test_hidden_on_empty_stub_rep(self):
         desc = self._desc()
@@ -389,43 +464,43 @@ class TestAiEnergyLevelSwitch:
 
     def test_value_fn(self):
         desc = self._desc()
-        assert desc.value_fn('0') is False
-        assert desc.value_fn('1') is True
+        assert desc.value_fn("0") is False
+        assert desc.value_fn("1") is True
 
     def test_write_on_uses_the_single_supported_level(self):
         """The on-value is whatever the device calls its one level, not a
         hardcoded '1'."""
         desc = self._desc()
-        path, body = desc.write_fn('On', {'supportedAiLevel': ['2']})
-        assert path == ['energy', 'ailevel', 'vs', '0']
-        assert body == {'aiLevel': '2'}
+        path, body = desc.write_fn("On", {"supportedAiLevel": ["2"]})
+        assert path == ["energy", "ailevel", "vs", "0"]
+        assert body == {"aiLevel": "2"}
 
     def test_write_off(self):
         desc = self._desc()
-        path, body = desc.write_fn('Off', {'supportedAiLevel': ['1']})
-        assert body == {'aiLevel': '0'}
+        _path, body = desc.write_fn("Off", {"supportedAiLevel": ["1"]})
+        assert body == {"aiLevel": "0"}
 
 
 class TestAiEnergyLevelSelect:
     def _desc(self):
-        return _ai_energy_level_desc('SelectDesc')
+        return _ai_energy_level_desc("SelectDesc")
 
     def test_shown_only_with_multiple_supported_levels(self):
         desc = self._desc()
-        assert desc.exists_fn({'aiLevel': '1', 'supportedAiLevel': ['1', '2']}, {}) is True
-        assert desc.exists_fn({'aiLevel': '1', 'supportedAiLevel': ['1']}, {}) is False
+        assert desc.exists_fn({"aiLevel": "1", "supportedAiLevel": ["1", "2"]}, {}) is True
+        assert desc.exists_fn({"aiLevel": "1", "supportedAiLevel": ["1"]}, {}) is False
 
     def test_hidden_when_supported_level_is_non_list_scalar(self):
         desc = self._desc()
-        assert desc.exists_fn({'aiLevel': '1', 'supportedAiLevel': '12'}, {}) is False
+        assert desc.exists_fn({"aiLevel": "1", "supportedAiLevel": "12"}, {}) is False
 
     def test_hidden_when_supported_level_missing(self):
         desc = self._desc()
-        assert desc.exists_fn({'aiLevel': '1'}, {}) is False
+        assert desc.exists_fn({"aiLevel": "1"}, {}) is False
 
     def test_hidden_when_supported_level_empty_list(self):
         desc = self._desc()
-        assert desc.exists_fn({'aiLevel': '0', 'supportedAiLevel': []}, {}) is False
+        assert desc.exists_fn({"aiLevel": "0", "supportedAiLevel": []}, {}) is False
 
     def test_no_translation_key(self):
         """aiLevel's values are plain digits that render fine untranslated
@@ -438,18 +513,18 @@ class TestAiEnergyLevelSelect:
         """'0' is never in supportedAiLevel but is a real, observed aiLevel
         value -- synthesized back in as the explicit off option."""
         desc = self._desc()
-        resources = {'/energy/ailevel/vs/0': {'supportedAiLevel': ['1', '2']}}
-        assert desc.options(resources) == ['0', '1', '2']
+        resources = {"/energy/ailevel/vs/0": {"supportedAiLevel": ["1", "2"]}}
+        assert desc.options(resources) == ["0", "1", "2"]
 
     def test_options_empty_when_resource_missing(self):
         desc = self._desc()
-        assert desc.options({}) == ['0']
+        assert desc.options({}) == ["0"]
 
     def test_write(self):
         desc = self._desc()
-        path, body = desc.write_fn('2', {})
-        assert path == ['energy', 'ailevel', 'vs', '0']
-        assert body == {'aiLevel': '2'}
+        path, body = desc.write_fn("2", {})
+        assert path == ["energy", "ailevel", "vs", "0"]
+        assert body == {"aiLevel": "2"}
 
 
 class TestAiEnergyLevelStubDoesNotDecideThePlatform:
@@ -468,15 +543,15 @@ class TestAiEnergyLevelStubDoesNotDecideThePlatform:
     on first-poll timing, instead of appearing as the wrong widget type."""
 
     def test_neither_widget_exists_on_true_stub_rep(self):
-        switch = _ai_energy_level_desc('SwitchDesc')
-        select = _ai_energy_level_desc('SelectDesc')
-        stub = {'href': '/energy/ailevel/vs/0'}
+        switch = _ai_energy_level_desc("SwitchDesc")
+        select = _ai_energy_level_desc("SelectDesc")
+        stub = {"href": "/energy/ailevel/vs/0"}
         assert switch.exists_fn(stub, {}) is False
         assert select.exists_fn(stub, {}) is False
 
     def test_neither_widget_exists_on_genuinely_empty_rep(self):
-        switch = _ai_energy_level_desc('SwitchDesc')
-        select = _ai_energy_level_desc('SelectDesc')
+        switch = _ai_energy_level_desc("SwitchDesc")
+        select = _ai_energy_level_desc("SelectDesc")
         assert switch.exists_fn({}, {}) is False
         assert select.exists_fn({}, {}) is False
 
@@ -486,21 +561,21 @@ class TestSelfCheckError:
     x.com.samsung.da.error, joined into a single display string."""
 
     def _desc(self):
-        return next(e for e in common.SELF_CHECK.entities if e.key == 'selfcheck_error')
+        return next(e for e in common.SELF_CHECK.entities if e.key == "selfcheck_error")
 
     def test_exists_when_field_present(self):
         desc = self._desc()
-        assert desc.exists_fn({'x.com.samsung.da.error': ['DA_ERROR_NONE']}, {}) is True
+        assert desc.exists_fn({"x.com.samsung.da.error": ["DA_ERROR_NONE"]}, {}) is True
 
     def test_does_not_exist_when_field_absent(self):
         desc = self._desc()
-        assert desc.exists_fn({'x.com.samsung.da.status': 'Ready'}, {}) is False
+        assert desc.exists_fn({"x.com.samsung.da.status": "Ready"}, {}) is False
 
     def test_exists_for_true_stub_rep(self):
         """A true stub ({"href": "..."}) is /device/0's not-yet-fetched
         marker -- must be included-for-now, same as ENERGY_METER's fields."""
         desc = self._desc()
-        assert desc.exists_fn({'href': '/selfcheck/vs/0'}, {}) is True
+        assert desc.exists_fn({"href": "/selfcheck/vs/0"}, {}) is True
 
     def test_hidden_for_genuinely_empty_rep(self):
         """A real {} rep is the device's confirmed empty answer, not a stub --
@@ -510,11 +585,11 @@ class TestSelfCheckError:
 
     def test_value_joins_list(self):
         desc = self._desc()
-        assert desc.value_fn(['E1', 'E2']) == 'E1, E2'
+        assert desc.value_fn(["E1", "E2"]) == "E1, E2"
 
     def test_value_passes_through_scalar(self):
         desc = self._desc()
-        assert desc.value_fn('DA_ERROR_NONE') == 'DA_ERROR_NONE'
+        assert desc.value_fn("DA_ERROR_NONE") == "DA_ERROR_NONE"
 
     def test_value_none_for_empty_list(self):
         """An empty error list means no value to show -- None (unknown),
@@ -533,10 +608,15 @@ class TestSelfCheckError:
 class TestUniversalAndPowerBundles:
     def test_universal_contains_the_no_conflict_capabilities(self):
         assert set(common.UNIVERSAL) == {
-            common.ALARMS, common.ENERGY_METER, common.FIRMWARE_UPDATE,
-            common.SELF_CHECK, common.AI_ENERGY_LEVEL,
-            common.KIDS_LOCK_GENERIC, common.KIDS_LOCK_VS_FALLBACK,
-            common.REMOTE_CONTROL_GENERIC, common.REMOTE_CONTROL_VS_FALLBACK,
+            common.ALARMS,
+            common.ENERGY_METER,
+            common.FIRMWARE_UPDATE,
+            common.SELF_CHECK,
+            common.AI_ENERGY_LEVEL,
+            common.KIDS_LOCK_GENERIC,
+            common.KIDS_LOCK_VS_FALLBACK,
+            common.REMOTE_CONTROL_GENERIC,
+            common.REMOTE_CONTROL_VS_FALLBACK,
         }
 
     def test_power_kept_separate_for_airconditioners_sake(self):
@@ -548,6 +628,7 @@ class TestUniversalAndPowerBundles:
 
     def test_airconditioner_registry_does_not_include_power(self):
         from custom_components.localthings.registry.by_type import airconditioner
+
         bound_caps = {c for caps in airconditioner.REGISTRY.capabilities.values() for c in caps}
         assert common.POWER_GENERIC not in bound_caps
         assert common.POWER_VS_FALLBACK not in bound_caps

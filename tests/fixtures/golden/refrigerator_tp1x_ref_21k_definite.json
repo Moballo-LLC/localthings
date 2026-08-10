@@ -1,0 +1,30 @@
+{
+  "state_keys": [
+    "ai_energy_level",
+    "alarm_code",
+    "auto_door_opener",
+    "brightness_level",
+    "cabinet_light_dim",
+    "cabinet_light_switch",
+    "cooler_temperature_setpoint",
+    "day_brightness",
+    "door_alert",
+    "door_cooler_open",
+    "door_freezer_open",
+    "energy_kwh",
+    "energy_saved_kwh",
+    "firmware_update",
+    "flex_zone_mode",
+    "freezer_temperature_setpoint",
+    "fridge_sound",
+    "night_end",
+    "night_start",
+    "power_energy_kwh",
+    "power_watts",
+    "rapid_freezing",
+    "rapid_fridge",
+    "selfcheck_error",
+    "selfcheck_result",
+    "selfcheck_status"
+  ]
+}

@@ -10,6 +10,7 @@
     "detergent_low",
     "diagnosis_status",
     "drum_clean_cycles_remaining",
+    "drum_clean_last_cleaned",
     "dry_level",
     "energy_kwh",
     "finish_time",

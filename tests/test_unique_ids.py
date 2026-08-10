@@ -5,19 +5,19 @@ protect this (see DESIGN-177.md section 3/6). Run over the entire fixture
 set, not just the two new subdevice fixtures, so a future dump -- subdevice-
 capable or not -- exercises it automatically.
 """
+
 from collections import Counter
+from typing import cast
 
 import pytest
 
+from custom_components.localthings.coordinator import LocalThingsCoordinator
 from custom_components.localthings.entity import _is_included
 from custom_components.localthings.registry.adapter import _key
 from custom_components.localthings.registry.entities import PLATFORM_OF
-
 from tests.conftest import FIXTURES, _discover_full, _load_device_full
 
-_FIXTURE_NAMES = sorted(
-    p.name[:-len('_device.json')] for p in FIXTURES.glob('*_device.json')
-)
+_FIXTURE_NAMES = sorted(p.name[: -len("_device.json")] for p in FIXTURES.glob("*_device.json"))
 
 
 class _FakeCoordinator:
@@ -31,10 +31,11 @@ class _FakeCoordinator:
 
     def canonical_resources(self, subdevice):
         from custom_components.localthings.registry.subdevices import canonical_view
+
         return canonical_view(subdevice, self.last_resources, self._subdevices)
 
 
-@pytest.mark.parametrize('name', _FIXTURE_NAMES)
+@pytest.mark.parametrize("name", _FIXTURE_NAMES)
 def test_key_is_unique_across_all_bound_entities(name):
     """`_key(b)` only has to be unique among entities `_is_included` would
     actually register -- discover() alone can (deliberately) produce two
@@ -53,10 +54,12 @@ def test_key_is_unique_across_all_bound_entities(name):
     BinarySensorDesc both named 'power_switch' on /power/0).
     """
     resources, oic_res, seeds = _load_device_full(name)
-    bound, materialized, skipped, full_resources, device_type_name = _discover_full(
-        resources, oic_res, seeds,
+    bound, materialized, _skipped, full_resources, _device_type_name = _discover_full(
+        resources,
+        oic_res,
+        seeds,
     )
-    coordinator = _FakeCoordinator(full_resources, materialized)
+    coordinator = cast(LocalThingsCoordinator, _FakeCoordinator(full_resources, materialized))
     included = [b for b in bound if _is_included(b, coordinator)]
     keys = [(PLATFORM_OF[type(b.desc)], _key(b)) for b in included]
     dupes = {k: n for k, n in Counter(keys).items() if n > 1}
@@ -75,8 +78,7 @@ def test_subdevice_capable_fixtures_actually_exercise_a_subdevice():
     the two fixtures this design added actually produce a materialized
     subdevice, so that silent-vacuous-pass failure mode is caught here
     instead."""
-    for name in ('airconditioner_artik051_dongle_fac_18k',
-                 'airconditioner_fac_bora_2in1'):
+    for name in ("airconditioner_artik051_dongle_fac_18k", "airconditioner_fac_bora_2in1"):
         resources, oic_res, seeds = _load_device_full(name)
         _, materialized, _, _, _ = _discover_full(resources, oic_res, seeds)
         assert materialized, f"{name}: expected at least one materialized subdevice"

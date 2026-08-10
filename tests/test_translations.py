@@ -19,17 +19,12 @@ from string import Formatter
 from custom_components.localthings.registry.capability import Capability
 from custom_components.localthings.registry.entities import PLATFORM_OF
 
-
-INTEGRATION = (
-    Path(__file__).parents[1] / "custom_components" / "localthings"
-)
+INTEGRATION = Path(__file__).parents[1] / "custom_components" / "localthings"
 TRANSLATIONS = INTEGRATION / "translations"
 
 
 def _load(language: str) -> dict:
-    return json.loads(
-        (TRANSLATIONS / f"{language}.json").read_text(encoding="utf-8")
-    )
+    return json.loads((TRANSLATIONS / f"{language}.json").read_text(encoding="utf-8"))
 
 
 def _languages() -> list[str]:
@@ -46,9 +41,7 @@ def _topology(value):
 
 def _placeholders(value: str) -> set[str]:
     return {
-        field_name
-        for _, field_name, _, _ in Formatter().parse(value)
-        if field_name is not None
+        field_name for _, field_name, _, _ in Formatter().parse(value) if field_name is not None
     }
 
 
@@ -105,9 +98,7 @@ def test_every_language_mirrors_the_english_catalog():
         for path, value in english_strings.items():
             # Placeholders are substituted by name, so a translation that
             # drops or invents one renders a literal '{...}' in the UI.
-            assert _placeholders(value) == _placeholders(
-                translated_strings[path]
-            ), (language, path)
+            assert _placeholders(value) == _placeholders(translated_strings[path]), (language, path)
 
 
 def test_no_catalog_carries_unresolved_core_references():
@@ -118,105 +109,218 @@ def test_no_catalog_carries_unresolved_core_references():
     """
     for language in _languages():
         unresolved = [
-            (path, value)
-            for path, value in _walk_strings(_load(language))
-            if "[%key:" in value
+            (path, value) for path, value in _walk_strings(_load(language)) if "[%key:" in value
         ]
         assert unresolved == [], language
 
 
 def test_confirmed_korean_table_02_washer_course_names():
-    states = _load('en')['entity']['select']['washer_cycle_table_02']['state']
-    assert {code: states[code] for code in (
-        '69', '6a', '6b', '6c', '6d', '6e', '6f', '70', '71',
-        '72', '73', '74', '75', '76', '77', '78', '79', '88',
-    )} == {
-        '69': 'AI Wash',
-        '6a': 'Wool',
-        '6b': 'Denim',
-        '6c': 'Blouses',
-        '6d': 'Delicates',
-        '6e': 'Active Wear',
-        '6f': 'Bedding',
-        '70': 'Towels',
-        '71': 'Quick Wash',
-        '72': 'Shirts',
-        '73': 'Sanitize',
-        '74': 'Drum Clean',
-        '75': 'Outdoor',
-        '76': 'Baby Care',
-        '77': 'Cottons',
-        '78': 'Rinse + Spin',
-        '79': 'Spin Only',
-        '88': 'Pet Care',
+    states = _load("en")["entity"]["select"]["washer_cycle_table_02"]["state"]
+    assert {
+        code: states[code]
+        for code in (
+            "69",
+            "6a",
+            "6b",
+            "6c",
+            "6d",
+            "6e",
+            "6f",
+            "70",
+            "71",
+            "72",
+            "73",
+            "74",
+            "75",
+            "76",
+            "77",
+            "78",
+            "79",
+            "88",
+        )
+    } == {
+        "69": "AI Wash",
+        "6a": "Wool",
+        "6b": "Denim",
+        "6c": "Blouses",
+        "6d": "Delicates",
+        "6e": "Active Wear",
+        "6f": "Bedding",
+        "70": "Towels",
+        "71": "Quick Wash",
+        "72": "Shirts",
+        "73": "Sanitize",
+        "74": "Drum Clean",
+        "75": "Outdoor",
+        "76": "Baby Care",
+        "77": "Cottons",
+        "78": "Rinse + Spin",
+        "79": "Spin Only",
+        "88": "Pet Care",
+    }
+
+
+def test_confirmed_washer_table_02_towels_bedding_are_not_swapped():
+    """Issue #343: DA_WM_TP1_21_COMMON's Table_02 had 24/33 transposed --
+    selecting 'Towels' in HA ran the washer's Bedding cycle and vice versa.
+    24 must agree with the 69/6A-79/88 family's own Bedding/Towels pair
+    (6f/70), not with each other.
+
+    Checked in every locale catalog, not just English: the underlying bug
+    is a device-code mapping error, not a wording issue, and
+    test_every_language_mirrors_the_english_catalog only checks key
+    topology -- a locale-specific 24/33 swap (the exact shape of #343)
+    would still pass that test."""
+    for language in _languages():
+        states = _load(language)["entity"]["select"]["washer_cycle_table_02"]["state"]
+        assert states["24"] == states["6f"], language
+        assert states["33"] == states["70"], language
+
+
+def test_confirmed_washer_table_02_missing_course_names():
+    """Issue #342: 06/08/a0 had no translation and fell back to the raw
+    device code in the UI; 74 was already translated by the time this
+    landed and is pinned here only as a "didn't regress" anchor."""
+    states = _load("en")["entity"]["select"]["washer_cycle_table_02"]["state"]
+    assert {code: states[code] for code in ("06", "08", "74", "a0")} == {
+        "06": "XXL Laundry",
+        "08": "Rinse+Spin",
+        "74": "Drum Clean",
+        "a0": "15' Quick Wash",
     }
 
 
 def test_confirmed_dishwasher_course_names():
-    states = _load('en')['entity']['select']['dishwasher_cycle']['state']
-    assert {code: states[code] for code in (
-        '82', '8a', 'a7', 'a8', '8c', '88',
-    )} == {
-        '82': 'Auto',
-        '8a': 'Normal',
-        'a7': 'Heavy',
-        'a8': 'Express',
-        '8c': 'Extra Silence',
-        '88': 'Self Clean',
+    states = _load("en")["entity"]["select"]["dishwasher_cycle"]["state"]
+    assert {
+        code: states[code]
+        for code in (
+            "82",
+            "8a",
+            "a7",
+            "a8",
+            "8c",
+            "88",
+        )
+    } == {
+        "82": "Auto",
+        "8a": "Normal",
+        "a7": "Heavy",
+        "a8": "Express",
+        "8c": "Extra Silence",
+        "88": "Self Clean",
     }
 
 
 def test_confirmed_course_names_are_localized():
     washer_codes = (
-        '69', '6a', '6b', '6c', '6d', '6e', '6f', '70', '71',
-        '72', '73', '74', '75', '76', '77', '78', '79', '88',
+        "69",
+        "6a",
+        "6b",
+        "6c",
+        "6d",
+        "6e",
+        "6f",
+        "70",
+        "71",
+        "72",
+        "73",
+        "74",
+        "75",
+        "76",
+        "77",
+        "78",
+        "79",
+        "88",
     )
-    dishwasher_codes = ('82', '8a', 'a7', 'a8', '8c', '88')
+    dishwasher_codes = ("82", "8a", "a7", "a8", "8c", "88")
     expected = {
-        'cs': {
-            'washer': (
-                'AI praní', 'Vlna', 'Džíny', 'Halenky', 'Jemné prádlo',
-                'Sportovní oblečení', 'Ložní prádlo', 'Ručníky',
-                'Rychlé praní', 'Košile', 'Dezinfekce', 'Čištění bubnu',
-                'Outdoor', 'Dětské potřeby', 'Bavlna',
-                'Máchání + odstřeďování', 'Pouze odstřeďování',
-                'Péče o domácí mazlíčky',
+        "cs": {
+            "washer": (
+                "AI praní",
+                "Vlna",
+                "Džíny",
+                "Halenky",
+                "Jemné prádlo",
+                "Sportovní oblečení",
+                "Ložní prádlo",
+                "Ručníky",
+                "Rychlé praní",
+                "Košile",
+                "Dezinfekce",
+                "Čištění bubnu",
+                "Outdoor",
+                "Dětské potřeby",
+                "Bavlna",
+                "Máchání + odstřeďování",
+                "Pouze odstřeďování",
+                "Péče o domácí mazlíčky",
             ),
-            'dishwasher': (
-                'Automatický', 'Normální', 'Intenzivní', 'Expresní',
-                'Extra tichý', 'Samočištění',
+            "dishwasher": (
+                "Automatický",
+                "Normální",
+                "Intenzivní",
+                "Expresní",
+                "Extra tichý",
+                "Samočištění",
             ),
         },
-        'nl': {
-            'washer': (
-                'AI Wash', 'Wol', 'Spijkergoed', 'Blouses', 'Fijne was',
-                'Sportkleding', 'Beddengoed', 'Handdoeken', 'Snelle was',
-                'Overhemden', 'Hygiëne', 'Trommel reinigen', 'Outdoor',
-                'Babyverzorging', 'Katoen', 'Spoelen + centrifugeren',
-                'Alleen centrifugeren', 'Pet Care',
+        "nl": {
+            "washer": (
+                "AI wassen",
+                "Wol",
+                "Spijkergoed",
+                "Blouses",
+                "Fijne was",
+                "Sportkleding",
+                "Beddengoed",
+                "Handdoeken",
+                "Snelle was",
+                "Overhemden",
+                "Hygiëne",
+                "Trommel reinigen",
+                "Outdoor",
+                "Babyverzorging",
+                "Katoen",
+                "Spoelen + centrifugeren",
+                "Alleen centrifugeren",
+                "Huisdierverzorging",
             ),
-            'dishwasher': (
-                'Auto', 'Normaal', 'Intensief', 'Express', 'Extra stil',
-                'Zelfreiniging',
+            "dishwasher": (
+                "Auto",
+                "Normaal",
+                "Intensief",
+                "Express",
+                "Extra stil",
+                "Zelfreiniging",
             ),
         },
     }
 
     for language, translations in expected.items():
-        catalog = _load(language)['entity']['select']
-        washer = catalog['washer_cycle_table_02']['state']
-        dishwasher = catalog['dishwasher_cycle']['state']
-        assert tuple(washer[code] for code in washer_codes) == translations['washer']
-        assert tuple(dishwasher[code] for code in dishwasher_codes) == (
-            translations['dishwasher']
-        )
+        catalog = _load(language)["entity"]["select"]
+        washer = catalog["washer_cycle_table_02"]["state"]
+        dishwasher = catalog["dishwasher_cycle"]["state"]
+        assert tuple(washer[code] for code in washer_codes) == translations["washer"]
+        assert tuple(dishwasher[code] for code in dishwasher_codes) == (translations["dishwasher"])
 
 
 # The hood fan is its device's primary feature: fan.py sets _attr_name = None
 # so it presents as the device itself, and never reads a catalog name. Same
 # for the ARTIK051 air-purifier's airflow_fan (issue #56) -- ordered speed
 # levels, no presets, same _attr_name = None treatment.
-UNNAMED_DESCRIPTORS = {("fan", "fan"), ("fan", "airflow_fan")}
+#
+# The EHS DHW water_heater is deliberately NOT in here: it is one loop of a
+# two-loop device rather than the device itself, so it carries a catalog
+# name like everything else (entity.water_heater.dhw, via the descriptor's
+# translation_key). That is independent of its *states* -- those are all
+# HA's own standard water_heater states (STATE_ECO/HEAT_PUMP/HIGH_DEMAND/
+# PERFORMANCE/OFF), which Home Assistant translates itself via the
+# entity_component fallback, so no per-state entry is needed either way.
+UNNAMED_DESCRIPTORS = {
+    ("fan", "fan"),
+    ("fan", "airflow_fan"),
+}
 
 
 def test_every_descriptor_has_an_entity_catalog_entry():
@@ -269,22 +373,40 @@ def test_every_ac_convenient_mode_code_has_a_preset_label():
     en.json.
     """
     from homeassistant.components.climate.const import (
-        PRESET_ACTIVITY, PRESET_AWAY, PRESET_BOOST, PRESET_COMFORT,
-        PRESET_ECO, PRESET_HOME, PRESET_SLEEP,
+        PRESET_ACTIVITY,
+        PRESET_AWAY,
+        PRESET_BOOST,
+        PRESET_COMFORT,
+        PRESET_ECO,
+        PRESET_HOME,
+        PRESET_SLEEP,
     )
-    standard = {PRESET_ACTIVITY, PRESET_AWAY, PRESET_BOOST, PRESET_COMFORT,
-                PRESET_ECO, PRESET_HOME, PRESET_SLEEP}
+
+    standard = {
+        PRESET_ACTIVITY,
+        PRESET_AWAY,
+        PRESET_BOOST,
+        PRESET_COMFORT,
+        PRESET_ECO,
+        PRESET_HOME,
+        PRESET_SLEEP,
+    }
     preset_labels = set(
-        _load("en")["entity"]["climate"]["airconditioner"]["state_attributes"]
-        ["preset_mode"]["state"]
+        _load("en")["entity"]["climate"]["airconditioner"]["state_attributes"]["preset_mode"][
+            "state"
+        ]
     )
     fixtures_dir = Path(__file__).parent / "fixtures"
     missing = []
     for path in sorted(fixtures_dir.glob("airconditioner*_device.json")):
         dump = json.loads(path.read_text())
         conv = next(
-            (item for item in dump.get("device0", [])
-             if item.get("href") == "/mode/convenient/vs/0"), None,
+            (
+                item
+                for item in dump.get("device0", [])
+                if item.get("href") == "/mode/convenient/vs/0"
+            ),
+            None,
         )
         if not conv:
             continue
@@ -305,9 +427,7 @@ def test_every_kimchi_zone_supportmode_code_has_a_state_label():
     code across any /status/kimchi/<slot>/vs/0 resource would silently
     render as its raw device token instead of the translated state.
     """
-    state_labels = set(
-        _load("en")["entity"]["select"]["kimchi_zone_mode"]["state"]
-    )
+    state_labels = set(_load("en")["entity"]["select"]["kimchi_zone_mode"]["state"])
     fixtures_dir = Path(__file__).parent / "fixtures"
     missing = []
     for path in sorted(fixtures_dir.glob("*_device.json")):
@@ -316,7 +436,9 @@ def test_every_kimchi_zone_supportmode_code_has_a_state_label():
             href = item.get("href", "")
             if not (href.startswith("/status/kimchi/") and href.endswith("/vs/0")):
                 continue
-            for code in item["rep"].get("x.com.samsung.da.supportMode", []):
-                if code.lower() not in state_labels:
-                    missing.append((path.name, href, code))
+            missing.extend(
+                (path.name, href, code)
+                for code in item["rep"].get("x.com.samsung.da.supportMode", [])
+                if code.lower() not in state_labels
+            )
     assert missing == []

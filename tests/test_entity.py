@@ -7,6 +7,10 @@ normal, no-alarm state (fridge._active_alarm_codes), so excluding the
 entity there would silently drop working sensors on first-poll timing,
 not just fix phantom ones.
 """
+
+from typing import cast
+
+from custom_components.localthings.coordinator import LocalThingsCoordinator
 from custom_components.localthings.entity import _is_included
 from custom_components.localthings.registry.capability import Capability
 from custom_components.localthings.registry.discovery import BoundEntity
@@ -26,6 +30,10 @@ class _FakeCoordinator:
         return self.last_resources
 
 
+def _coord(last_resources) -> LocalThingsCoordinator:
+    return cast(LocalThingsCoordinator, _FakeCoordinator(last_resources))
+
+
 def _bound(desc, href):
     capability = Capability(href=href, entities=(desc,))
     return BoundEntity(href=href, capability=capability, desc=desc)
@@ -35,21 +43,21 @@ class TestDefaultFieldGate:
     """No explicit exists_fn -- the field-presence default in entity.py."""
 
     def _bound(self):
-        return _bound(SensorDesc(key='x', field='x.com.samsung.da.value'), '/x/vs/0')
+        return _bound(SensorDesc(key="x", field="x.com.samsung.da.value"), "/x/vs/0")
 
     def test_included_when_field_present(self):
         bound = self._bound()
-        coord = _FakeCoordinator({'/x/vs/0': {'x.com.samsung.da.value': '1'}})
+        coord = _coord({"/x/vs/0": {"x.com.samsung.da.value": "1"}})
         assert _is_included(bound, coord) is True
 
     def test_excluded_when_field_absent_from_populated_rep(self):
         bound = self._bound()
-        coord = _FakeCoordinator({'/x/vs/0': {'x.com.samsung.da.other': '1'}})
+        coord = _coord({"/x/vs/0": {"x.com.samsung.da.other": "1"}})
         assert _is_included(bound, coord) is False
 
     def test_included_on_true_stub(self):
         bound = self._bound()
-        coord = _FakeCoordinator({'/x/vs/0': {'href': '/x/vs/0'}})
+        coord = _coord({"/x/vs/0": {"href": "/x/vs/0"}})
         assert _is_included(bound, coord) is True
 
     def test_included_on_genuinely_empty_rep(self):
@@ -59,29 +67,32 @@ class TestDefaultFieldGate:
         exists_fn (e.g. common.ENERGY_METER) opts into excluding on
         confirmed-empty, after verifying that's actually safe for its field."""
         bound = self._bound()
-        coord = _FakeCoordinator({'/x/vs/0': {}})
+        coord = _coord({"/x/vs/0": {}})
         assert _is_included(bound, coord) is True
 
     def test_excluded_when_href_missing_from_resources(self):
         bound = self._bound()
-        coord = _FakeCoordinator({})
+        coord = _coord({})
         assert _is_included(bound, coord) is False
 
 
 class TestExplicitExistsFnGate:
     def test_explicit_exists_fn_overrides_default_field_gate(self):
-        desc = SensorDesc(key='x', field='x.com.samsung.da.value',
-                           exists_fn=lambda rep, resources: rep.get('flag') is True)
-        bound = _bound(desc, '/x/vs/0')
-        coord = _FakeCoordinator({'/x/vs/0': {'flag': True}})
+        desc = SensorDesc(
+            key="x",
+            field="x.com.samsung.da.value",
+            exists_fn=lambda rep, resources: rep.get("flag") is True,
+        )
+        bound = _bound(desc, "/x/vs/0")
+        coord = _coord({"/x/vs/0": {"flag": True}})
         assert _is_included(bound, coord) is True
-        coord = _FakeCoordinator({'/x/vs/0': {'flag': False, 'x.com.samsung.da.value': '1'}})
+        coord = _coord({"/x/vs/0": {"flag": False, "x.com.samsung.da.value": "1"}})
         assert _is_included(bound, coord) is False
 
 
 class TestNoFieldEntities:
     def test_rep_fn_entity_always_included(self):
-        desc = SensorDesc(key='x', rep_fn=lambda rep: rep.get('x.com.samsung.da.value'))
-        bound = _bound(desc, '/x/vs/0')
-        coord = _FakeCoordinator({'/x/vs/0': {}})
+        desc = SensorDesc(key="x", rep_fn=lambda rep: rep.get("x.com.samsung.da.value"))
+        bound = _bound(desc, "/x/vs/0")
+        coord = _coord({"/x/vs/0": {}})
         assert _is_included(bound, coord) is True

@@ -7,18 +7,20 @@ Exercises the two things this board does differently: a populated
 fallback #162 relies on) and the new /airdresseroption/sanitize/vs/0
 capability #162's dump doesn't report at all.
 """
+
 from custom_components.localthings.registry.adapter import flatten
 from custom_components.localthings.registry.by_type import air_dresser, for_device_by_model
 from custom_components.localthings.registry.discovery import discover
-
+from custom_components.localthings.registry.entities import SwitchDesc
 from tests.conftest import _load_device
 
 
 def _air_dresser():
-    resources = _load_device('air_dresser_tp2_20')
-    info = resources['/information/vs/0']
+    resources = _load_device("air_dresser_tp2_20")
+    info = resources["/information/vs/0"]
     reg = for_device_by_model(
-        info['x.com.samsung.da.modelNum'], info['x.com.samsung.da.description'])
+        info["x.com.samsung.da.modelNum"], info["x.com.samsung.da.description"]
+    )
     return reg, resources
 
 
@@ -30,7 +32,7 @@ def _state():
 
 def test_resolves_to_air_dresser_registry():
     reg, _ = _air_dresser()
-    assert reg is not None and reg.name == 'air_dresser'
+    assert reg is not None and reg.name == "air_dresser"
 
 
 def test_no_unbound_hrefs():
@@ -48,15 +50,16 @@ def test_course_options_come_from_edit_course_list_not_the_fallback():
     directly, so cycle_options() should never reach the
     supportedOptions-decode fallback."""
     from custom_components.localthings.registry.capabilities.laundry import cycle_options
+
     _, resources = _air_dresser()
     codes = cycle_options(resources)
-    assert codes[:3] == ['22', '23', '0C']
-    assert codes == cycle_options({'/wm/editcourse/vs/0': resources['/wm/editcourse/vs/0']})
+    assert codes[:3] == ["22", "23", "0C"]
+    assert codes == cycle_options({"/wm/editcourse/vs/0": resources["/wm/editcourse/vs/0"]})
 
 
 def test_course_select_reads_current_selection():
     state = _state()
-    assert state['cycle'] == '22'
+    assert state["cycle"] == "22"
 
 
 def test_course_translation_key_falls_back_to_cycle_for_unidentified_table():
@@ -64,19 +67,23 @@ def test_course_translation_key_falls_back_to_cycle_for_unidentified_table():
     translation_key resolves to the generic 'cycle' catalog entry rather
     than a table-specific one that doesn't exist."""
     _, resources = _air_dresser()
-    desc = air_dresser.REGISTRY.capabilities['/course/vs/0'][0].entities[0]
-    assert desc.translation_key(resources) == 'cycle'
+    desc = air_dresser.REGISTRY.capabilities["/course/vs/0"][0].entities[0]
+    assert desc.translation_key(resources) == "cycle"
 
 
 def test_sanitize_present_and_toggles():
     state = _state()
-    assert state['sanitize'] is False
+    assert state["sanitize"] is False
 
     desc = next(
-        e for e in air_dresser.REGISTRY.capabilities['/airdresseroption/sanitize/vs/0'][0].entities
-        if e.key == 'sanitize'
+        e
+        for e in air_dresser.REGISTRY.capabilities["/airdresseroption/sanitize/vs/0"][0].entities
+        if e.key == "sanitize" and isinstance(e, SwitchDesc)
     )
-    path, body = desc.write_fn('On', {})
-    assert path == ['airdresseroption', 'sanitize', 'vs', '0']
-    assert body == {'x.com.samsung.da.sanitize': 'On'}
-    assert desc.write_fn('Sparkle', {}) is None
+    assert desc.write_fn is not None
+    result = desc.write_fn("On", {})
+    assert result is not None
+    path, body = result
+    assert path == ["airdresseroption", "sanitize", "vs", "0"]
+    assert body == {"x.com.samsung.da.sanitize": "On"}
+    assert desc.write_fn("Sparkle", {}) is None

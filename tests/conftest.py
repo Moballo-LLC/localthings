@@ -3,16 +3,17 @@ from pathlib import Path
 
 import pytest
 
-FIXTURES = Path(__file__).resolve().parent / 'fixtures'
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
 def _resources_from_dump(dump: dict) -> dict[str, dict]:
     from custom_components.localthings.registry.batch import parse_device0_batch
-    return parse_device0_batch(dump['device0'])
+
+    return parse_device0_batch(dump["device0"])
 
 
 def _load_device(name: str) -> dict[str, dict]:
-    data = json.loads((FIXTURES / f'{name}_device.json').read_text())
+    data = json.loads((FIXTURES / f"{name}_device.json").read_text())
     return _resources_from_dump(data)
 
 
@@ -33,10 +34,10 @@ def _load_device_full(name: str):
     ARTIK051_DONGLE_FAC_18K fixture) is folded into `seeds` here, since
     FakeCoapSession answers both shapes off the same href key.
     """
-    data = json.loads((FIXTURES / f'{name}_device.json').read_text())
+    data = json.loads((FIXTURES / f"{name}_device.json").read_text())
     resources = _resources_from_dump(data)
-    seeds = {**data.get('seeds', {}), **data.get('probes', {})}
-    return resources, data.get('oic_res', []), seeds
+    seeds = {**data.get("seeds", {}), **data.get("probes", {})}
+    return resources, data.get("oic_res", []), seeds
 
 
 class FakeCoapSession:
@@ -57,24 +58,31 @@ class FakeCoapSession:
         self.seeds = seeds or {}
 
     def get(self, path, timeout=None):
-        href = '/' + '/'.join(path)
+        href = "/" + "/".join(path)
         body = self.seeds.get(href)
         if body is None:
-            return 0x84, b''   # 4.04 not found -- tolerated absence
+            return 0x84, b""  # 4.04 not found -- tolerated absence
         import cbor2
+
         return 0x45, cbor2.dumps(body)
 
     def pace(self):
         pass
 
 
-def _discover_full(resources: dict[str, dict], oic_res, seeds: dict[str, list]):
+def _discover_full(resources: dict[str, dict], oic_res, seeds: dict[str, list], device_types=()):
     """Run the *whole* subdevice-aware discovery pipeline against fixture
     data, HA-free -- mirrors exactly what LocalThingsCoordinator does across
     _enumerate_subdevices_blocking + _run_discovery (issue #177), so a test
     exercising this exercises the real code path, not a re-implementation of
     it. See the adding-device-support skill's section 2 for the plain
     (non-subdevice) equivalent this extends.
+
+    `device_types` is the master's own /oic/d `rt` (see
+    discover_partitioned's `oic_device_types` param) -- only needed for a
+    board with no /information/vs/0 at all to route from (issue #324's
+    range, whose modelNum-based fallback has nothing to read), so it
+    defaults to () for every fixture that resolves by board token instead.
 
     Returns `(bound, materialized, skipped, full_resources, device_type_name)`:
     - `bound`: every BoundEntity, main + every materialized subdevice.
@@ -87,14 +95,19 @@ def _discover_full(resources: dict[str, dict], oic_res, seeds: dict[str, list]):
     from custom_components.localthings.registry.by_type import resolve
     from custom_components.localthings.registry.registry import CAPABILITIES
     from custom_components.localthings.registry.subdevices import (
-        discover_partitioned, enumerate_subdevices,
+        discover_partitioned,
+        enumerate_subdevices,
     )
 
     sess = FakeCoapSession(seeds)
     candidates, extra = enumerate_subdevices(sess, resources, oic_res)
     full_resources = {**resources, **extra}
     bound, device_type_name, materialized, skipped = discover_partitioned(
-        full_resources, candidates, resolve, CAPABILITIES,
+        full_resources,
+        candidates,
+        resolve,
+        CAPABILITIES,
+        oic_device_types=device_types,
     )
     return bound, materialized, skipped, full_resources, device_type_name
 
@@ -102,8 +115,8 @@ def _discover_full(resources: dict[str, dict], oic_res, seeds: dict[str, list]):
 def _load_resources(ip: str) -> dict[str, dict]:
     """Legacy IP-based loader — maps known IPs to named fixtures."""
     _ip_to_name = {
-        '10.0.0.129': 'dishwasher',
-        '10.0.0.254': 'refrigerator',
+        "10.0.0.129": "dishwasher",
+        "10.0.0.254": "refrigerator",
     }
     name = _ip_to_name.get(ip)
     if name is None:
@@ -113,17 +126,17 @@ def _load_resources(ip: str) -> dict[str, dict]:
 
 @pytest.fixture
 def dishwasher_resources() -> dict[str, dict]:
-    return _load_device('dishwasher')
+    return _load_device("dishwasher")
 
 
 @pytest.fixture
 def fridge_resources() -> dict[str, dict]:
-    return _load_device('refrigerator')
+    return _load_device("refrigerator")
 
 
 @pytest.fixture
 def washer_resources() -> dict[str, dict]:
-    return _load_device('washer')
+    return _load_device("washer")
 
 
 @pytest.fixture
@@ -134,8 +147,6 @@ def all_device_fixtures() -> dict[str, dict[str, dict]]:
     device -- so a newly added dump exercises them automatically.
     """
     return {
-        path.name[:-len('_device.json')]: _resources_from_dump(
-            json.loads(path.read_text())
-        )
-        for path in sorted(FIXTURES.glob('*_device.json'))
+        path.name[: -len("_device.json")]: _resources_from_dump(json.loads(path.read_text()))
+        for path in sorted(FIXTURES.glob("*_device.json"))
     }

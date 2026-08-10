@@ -9,6 +9,7 @@ master and its materialized sibling, which is exactly the shape climate.py's
 own comments warn is easy to get wrong if the canonical view leaks between
 subdevices.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -17,13 +18,13 @@ from homeassistant.core import HomeAssistant
 
 from custom_components.localthings.climate import LocalThingsClimate
 from custom_components.localthings.registry.entities import ClimateDesc
-
 from tests.test_subdevice_discovery import _coordinator, _discover
 
 
 def _climate_entities(coordinator):
     """{subdevice_key_or_None: LocalThingsClimate}, None standing for MAIN."""
     from custom_components.localthings.registry.subdevices import MAIN
+
     out = {}
     for b in coordinator.bound:
         if isinstance(b.desc, ClimateDesc):
@@ -35,7 +36,7 @@ def _climate_entities(coordinator):
 @pytest.fixture
 async def climates(hass: HomeAssistant):
     coordinator = _coordinator(hass)
-    await _discover(coordinator, 'airconditioner_artik051_dongle_fac_18k')
+    await _discover(coordinator, "airconditioner_artik051_dongle_fac_18k")
     return _climate_entities(coordinator)
 
 
@@ -44,7 +45,7 @@ async def test_subdevice_climate_reads_its_own_mode_and_power(climates):
     confirmed distinct in the real captured fixture. If the subdevice
     entity's _rep() weren't translating through its own subdevice, it would
     read the master's /mode/vs/0 instead and report the master's mode."""
-    main, sub1 = climates[None], climates['1']
+    main, sub1 = climates[None], climates["1"]
     assert main.hvac_mode == HVACMode.AUTO
     assert sub1.hvac_mode == HVACMode.COOL
 
@@ -53,7 +54,7 @@ async def test_subdevice_climate_reads_its_own_temperature(climates):
     """Master: current 25.0 / desired 26.0. Subdevice 1: current 27.0 / desired
     28.0 -- distinct values in the real fixture, so a href mix-up here
     would show up as a wrong number, not just a wrong mode string."""
-    main, sub1 = climates[None], climates['1']
+    main, sub1 = climates[None], climates["1"]
     assert main.current_temperature == 25.0
     assert main.target_temperature == 26.0
     assert sub1.current_temperature == 27.0
@@ -66,7 +67,7 @@ async def test_subdevice_climate_reads_its_own_power_state(climates):
     hardcoded /power/vs/0, by checking the entity resolves without falling
     back to OFF (which _is_on() would do if it silently read an absent
     href instead of the subdevice's actual one)."""
-    main, sub1 = climates[None], climates['1']
+    main, sub1 = climates[None], climates["1"]
     assert main.hvac_mode != HVACMode.OFF
     assert sub1.hvac_mode != HVACMode.OFF
 
@@ -82,7 +83,7 @@ async def test_legacy_board_test_is_evaluated_per_subdevice(climates):
     future board with one legacy + one modern subdevice sharing a
     connection would silently read the wrong fan/swing channel on one
     side."""
-    main, sub1 = climates[None], climates['1']
+    main, sub1 = climates[None], climates["1"]
     assert main._legacy_airflow() != {}
     assert sub1._legacy_airflow() != {}
     # Both resolve to *some* fan mode via the legacy path rather than the
@@ -99,7 +100,7 @@ async def test_subdevice_climate_writes_are_scoped_to_its_own_bound_entity(clima
     per-subdevice reads/writes possible at all -- see async_send_command's
     translation test in test_coordinator_send_command.py for the write
     side of this."""
-    main, sub1 = climates[None], climates['1']
-    assert main._bound.href == '/mode/vs/0'
-    assert sub1._bound.href == '/mode/vs/1'
+    main, sub1 = climates[None], climates["1"]
+    assert main._bound.href == "/mode/vs/0"
+    assert sub1._bound.href == "/mode/vs/1"
     assert main._bound is not sub1._bound

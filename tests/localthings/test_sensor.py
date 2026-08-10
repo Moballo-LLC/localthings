@@ -1,7 +1,7 @@
 """Tests for the sensor platform."""
+
 from __future__ import annotations
 
-import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
@@ -18,7 +18,7 @@ async def test_sensors_registered(
 
     ent_reg = er.async_get(hass)
     entries = er.async_entries_for_config_entry(ent_reg, mock_entry.entry_id)
-    sensor_entries = [e for e in entries if e.domain == 'sensor']
+    sensor_entries = [e for e in entries if e.domain == "sensor"]
     assert sensor_entries, "Expected at least one sensor entity"
 
 
@@ -34,18 +34,11 @@ async def test_sensor_state_from_coordinator(
     await hass.config_entries.async_setup(mock_entry.entry_id)
     await hass.async_block_till_done()
 
-    states = hass.states.async_all('sensor')
-    temp_states = [
-        s for s in states
-        if s.attributes.get('icon') == 'mdi:thermometer'
-    ]
-    assert temp_states, (
-        f"No thermometer sensor found. Sensors: {[s.entity_id for s in states]}"
-    )
+    states = hass.states.async_all("sensor")
+    temp_states = [s for s in states if s.attributes.get("icon") == "mdi:thermometer"]
+    assert temp_states, f"No thermometer sensor found. Sensors: {[s.entity_id for s in states]}"
     state = temp_states[0]
-    assert state.state not in ('unknown', 'unavailable'), (
-        f"Sensor state is {state.state}"
-    )
+    assert state.state not in ("unknown", "unavailable"), f"Sensor state is {state.state}"
 
 
 async def test_connection_mode_sensor_registered_disabled_by_default(
@@ -58,11 +51,11 @@ async def test_connection_mode_sensor_registered_disabled_by_default(
 
     ent_reg = er.async_get(hass)
     entries = er.async_entries_for_config_entry(ent_reg, mock_entry.entry_id)
-    mode_entries = [e for e in entries if e.unique_id.endswith('_connection_mode')]
+    mode_entries = [e for e in entries if e.unique_id.endswith("_connection_mode")]
     assert len(mode_entries) == 1
     entry = mode_entries[0]
     assert entry.disabled_by is not None
-    assert entry.entity_category == 'diagnostic'
+    assert entry.entity_category == "diagnostic"
 
 
 async def test_connection_mode_sensor_reflects_coordinator_mode(
@@ -78,5 +71,5 @@ async def test_connection_mode_sensor_reflects_coordinator_mode(
     sensor = LocalThingsConnectionModeSensor(coordinator)
     assert sensor.native_value == MODE_POLL
 
-    coordinator._observe._set_mode('observe')
-    assert sensor.native_value == 'observe'
+    coordinator._observe._set_mode("observe")
+    assert sensor.native_value == "observe"

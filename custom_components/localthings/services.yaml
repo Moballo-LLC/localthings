@@ -1,0 +1,88 @@
+write_resource:
+  name: Write resource
+  description: >-
+    Send one or more raw partial-rep writes straight to a device's OCF
+    resources, in order, with an optional settle delay between steps and a
+    delayed re-read at the end -- for reverse-engineering a device's write
+    contract (issue #300), not day-to-day control. This bypasses the
+    remote-control-off block and every write_fn/validate_fn a normal entity
+    write goes through, and sends exactly the fields you give it verbatim:
+    it can misconfigure your appliance. Prefer a real entity, or the Debug
+    write panel in the integration's Configure menu, for anything this
+    integration already models.
+  fields:
+    device_id:
+      name: Device
+      description: The appliance to write to, or one of its subdevices.
+      required: true
+      selector:
+        device:
+          integration: localthings
+    writes:
+      name: Writes
+      description: >-
+        1-10 writes to perform in order. Each item needs href (the
+        canonical resource, e.g. /mode/vs/0) and payload (a non-empty
+        object sent verbatim as a partial-rep POST); settle is how many
+        seconds to wait after that write before starting the next one
+        (0-30, default 0).
+      required: true
+      example: >-
+        [{"href": "/mode/vs/0", "payload": {"x.com.samsung.da.modes":
+        ["Bake"]}, "settle": 3}]
+      selector:
+        object:
+    hold_session_lock:
+      name: Hold the session for the whole sequence
+      description: >-
+        Keep the device session for the entire sequence, settle delays
+        included, so nothing else -- a routine poll, another entity's write
+        -- can land between two steps and blur which write the appliance
+        was reacting to. On by default. Turning it off takes the session
+        per write and frees it across the waits, which lets entities keep
+        updating during a long sequence at the cost of that certainty.
+      required: false
+      default: true
+      selector:
+        boolean:
+    verify_after:
+      name: Verify after
+      description: >-
+        Seconds to wait after the whole sequence finishes before
+        re-reading every href touched, to see whether the values held or
+        were reverted by the board. 0 (default) skips verification.
+      required: false
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 60
+          step: 0.5
+          unit_of_measurement: seconds
+          mode: box
+
+read_resource:
+  name: Read resource
+  description: >-
+    Read a device's OCF resources directly, bypassing this integration's
+    entity model. Give an href for a live GET straight from the device --
+    deliberately not the cache, which can be up to a poll interval stale --
+    or omit it to get the cached snapshot of every resource this
+    integration currently tracks on that device.
+  fields:
+    device_id:
+      name: Device
+      description: The appliance to read from, or one of its subdevices.
+      required: true
+      selector:
+        device:
+          integration: localthings
+    href:
+      name: Resource href
+      description: >-
+        Canonical resource href to read (e.g. /mode/vs/0). Omit to get the
+        cached snapshot of every tracked resource instead of a live GET.
+      required: false
+      example: /mode/vs/0
+      selector:
+        text:

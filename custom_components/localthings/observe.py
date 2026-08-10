@@ -8,23 +8,24 @@ are an external pip dependency we don't own, so behavior that would
 naturally live inside StateCache.apply_rep lives here instead, gating
 whether apply_rep is called at all.
 """
+
 from __future__ import annotations
 
 import logging
 import threading
 import time
+from collections.abc import Callable
 
 import cbor2
-
-from smartthings_local.ocf.state_cache import StateCache
 from smartthings_local.ocf.observe_refresh import ObserveRefreshTask
+from smartthings_local.ocf.state_cache import StateCache
 
 _LOGGER = logging.getLogger(__name__)
 
 REFRESH_INTERVAL_S = 6 * 3600.0
 
-MODE_OBSERVE = 'observe'
-MODE_POLL = 'poll'
+MODE_OBSERVE = "observe"
+MODE_POLL = "poll"
 
 DEFAULT_SETTLE_S = 4.0
 GRACE_PERIOD_S = 15.0
@@ -77,9 +78,20 @@ class ObserveManager:
         # have notified. Guards only `_notified` mutations + the `wait_for`.
         self._notify_cond = threading.Condition()
         self.fallback_hrefs: set[str] = set()
+        self._on_applied: Callable[[str, dict, str], None] | None = None
         self._refresh_task: ObserveRefreshTask | None = None
         self._refresh_stop: threading.Event | None = None
         self._refresh_thread: threading.Thread | None = None
+
+    def set_on_applied(self, callback: Callable[[str, dict, str], None]) -> None:
+        """Hook run after every accepted rep, on the applying thread.
+
+        Unlike StateCache.set_on_change it carries the href and rep, and
+        fires even when the rep is unchanged -- which learned.py needs, a
+        device sitting in an unadvertised mode re-sending the same rep
+        every poll.
+        """
+        self._on_applied = callback
 
     def mark_write_pending(self, href: str, settle_s: float = DEFAULT_SETTLE_S) -> None:
         with self._settle_lock:
@@ -133,12 +145,19 @@ class ObserveManager:
         happened to expire, i.e. the exact symptom this guard exists to
         prevent, just relocated to whichever write loses the race.
         """
-        if source != 'optimistic' and self._is_settling(href):
+        if source != "optimistic" and self._is_settling(href):
             self.log.debug("dropping %s update for %s (settling)", source, href)
             return False
         with self._cache_lock:
             merged = {**(self.cache.get(href) or {}), **rep}
-            return self.cache.apply_rep(href, merged, source=source)
+            changed = self.cache.apply_rep(href, merged, source=source)
+        # Outside the cache lock -- the hook takes locks of its own and
+        # never reads the cache back. `source` is passed along rather than
+        # filtered here: which sources are worth acting on is the hook's
+        # policy, not this manager's.
+        if self._on_applied is not None:
+            self._on_applied(href, merged, source)
+        return changed
 
     def on_notification(self, href: str, payload: bytes) -> None:
         """Wired as DtlsCoapSession.on_notification. Runs on the DTLS
@@ -155,7 +174,7 @@ class ObserveManager:
             self._last_notify_ts = time.monotonic()
             self._notify_cond.notify_all()
         self.log.debug("observe notify: %s", href)
-        self.apply(href, rep, source='observe')
+        self.apply(href, rep, source="observe")
 
     def recently_notified(self, window_s: float = PUSH_HEALTH_WINDOW_S) -> bool:
         """True if any OBSERVE notify has arrived within `window_s`.
@@ -168,55 +187,88 @@ class ObserveManager:
         channel has been perfectly healthy").
         """
         return (
-            self._last_notify_ts is not None
-            and time.monotonic() - self._last_notify_ts < window_s
+            self._last_notify_ts is not None and time.monotonic() - self._last_notify_ts < window_s
         )
 
+    def subscribe_hrefs(self, session, hrefs: list[str]) -> set[str]:
+        """Register OBSERVE on every href; returns the ones that took.
+        Blocking — run in an executor.
+
+        Split from the grace wait below (issue #294) so the coordinator can
+        hold its session lock for just these sends -- each is a fire-and-
+        forget UDP datagram (DtlsCoapSession.subscribe doesn't wait for the
+        device's ack), unlike the wait, which can block for the whole grace
+        period and must not hold a lock a command write is also waiting on.
+        """
+        with self._notify_cond:
+            self._notified.clear()
+        subscribed: set[str] = set()
+        for href in hrefs:
+            segs = [s for s in href.strip("/").split("/") if s]
+            try:
+                session.subscribe(segs)
+                subscribed.add(href)
+            except Exception as e:
+                self.log.warning("subscribe %s failed: %s", href, e)
+        return subscribed
+
+    def await_observe_notifies(
+        self,
+        subscribed: set[str],
+        grace_period_s: float = GRACE_PERIOD_S,
+        success_fraction: float = SUCCESS_FRACTION,
+    ) -> bool:
+        """Blocking — waits up to `grace_period_s`, returning early once
+        `success_fraction` of `subscribed` have notified. Touches no
+        session; safe to run without holding a session lock."""
+        if not subscribed:
+            return False
+
+        def _fraction_reached() -> bool:
+            return len(set(self._notified) & subscribed) / len(subscribed) >= success_fraction
+
+        with self._notify_cond:
+            return self._notify_cond.wait_for(_fraction_reached, timeout=grace_period_s)
+
+    def enter_observe_mode(self, session, subscribed: set[str]) -> None:
+        """Commit a successful attempt. Caller must have re-confirmed
+        `session` is still the live one under its session lock (issue
+        #294) -- committing against a session a reconnect already replaced
+        would claim observe mode with nothing left to notice it's dead."""
+        self.subscribed_hrefs = set(subscribed)
+        self._set_mode(MODE_OBSERVE)
+        self.start_refresh_task(session)
+
+    def abandon_observe_attempt(self) -> None:
+        """Drop a failed or stale attempt: no subscriptions worth keeping."""
+        self._stop_refresh_task()
+        self.subscribed_hrefs = set()
+        self._set_mode(MODE_POLL)
+
     def try_enter_observe_mode(
-        self, session, hrefs: list[str],
+        self,
+        session,
+        hrefs: list[str],
         grace_period_s: float = GRACE_PERIOD_S,
         success_fraction: float = SUCCESS_FRACTION,
     ) -> bool:
         """Blocking — subscribes to every href then waits up to
         `grace_period_s`, returning early once `success_fraction` of hrefs
         have notified. Caller must run this in an executor, never on the
-        event loop."""
-        with self._notify_cond:
-            self._notified.clear()
-        subscribed: set[str] = set()
-        for href in hrefs:
-            segs = [s for s in href.strip('/').split('/') if s]
-            try:
-                session.subscribe(segs)
-                subscribed.add(href)
-            except Exception as e:
-                self.log.warning("subscribe %s failed: %s", href, e)
+        event loop.
+
+        Single-threaded convenience wrapper around the phase split above
+        (subscribe_hrefs / await_observe_notifies / enter_observe_mode /
+        abandon_observe_attempt) for callers -- direct and most existing
+        tests -- that don't need the lock-scoping those phases exist for."""
+        subscribed = self.subscribe_hrefs(session, hrefs)
         if not subscribed:
-            self._stop_refresh_task()
-            self._set_mode(MODE_POLL)
-            self.subscribed_hrefs = set()
+            self.abandon_observe_attempt()
             return False
-
-        def _fraction_reached() -> bool:
-            return (
-                len(set(self._notified) & subscribed) / len(subscribed)
-                >= success_fraction
-            )
-
-        with self._notify_cond:
-            reached = self._notify_cond.wait_for(
-                _fraction_reached, timeout=grace_period_s,
-            )
-
-        if reached:
-            self.subscribed_hrefs = subscribed
-            self._set_mode(MODE_OBSERVE)
-            self.start_refresh_task(session)
+        if self.await_observe_notifies(subscribed, grace_period_s, success_fraction):
+            self.enter_observe_mode(session, subscribed)
             return True
-
-        self._stop_refresh_task()
-        self.subscribed_hrefs = set()
-        self._set_mode(MODE_POLL)
+        self.abandon_observe_attempt()
         return False
 
     def _set_mode(self, mode: str) -> None:
@@ -271,7 +323,8 @@ class ObserveManager:
                 found = True
                 self.log.debug(
                     "observe missed a change on %s (sweep disagrees with cache): %s",
-                    href, diff,
+                    href,
+                    diff,
                 )
         return found
 
@@ -283,15 +336,19 @@ class ObserveManager:
 
     def start_refresh_task(self, session) -> None:
         self._stop_refresh_task()
-        paths = [tuple(h.strip('/').split('/')) for h in self.subscribed_hrefs]
+        paths = [tuple(h.strip("/").split("/")) for h in self.subscribed_hrefs]
         self._refresh_task = ObserveRefreshTask(
-            session, paths, interval_s=REFRESH_INTERVAL_S, logger=self.log,
+            session,
+            paths,
+            interval_s=REFRESH_INTERVAL_S,
+            logger=self.log,
         )
         self._refresh_stop = threading.Event()
         self._refresh_thread = threading.Thread(
             target=self._refresh_task.run_forever,
             args=(self._refresh_stop,),
-            daemon=True, name='localthings-observe-refresh',
+            daemon=True,
+            name="localthings-observe-refresh",
         )
         self._refresh_thread.start()
 

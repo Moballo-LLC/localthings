@@ -9,6 +9,7 @@
     "detergent_low",
     "diagnosis_status",
     "drum_clean_cycles_remaining",
+    "drum_clean_last_cleaned",
     "energy_kwh",
     "finish_time",
     "job_beginning_status",

@@ -2,8 +2,13 @@
 (custom_components/localthings/select.py) -- the static tuple, options_field,
 and callable forms of SelectDesc.options.
 """
+
+from typing import ClassVar, cast
+
+from custom_components.localthings.coordinator import LocalThingsCoordinator
 from custom_components.localthings.registry.capabilities.laundry import (
-    cycle_select, washer_cycle_fallback,
+    cycle_select,
+    washer_cycle_fallback,
 )
 from custom_components.localthings.registry.capability import Capability
 from custom_components.localthings.registry.discovery import BoundEntity
@@ -12,7 +17,7 @@ from custom_components.localthings.select import LocalThingsSelect
 
 
 class _FakeCoordinator:
-    device_serial = 'TEST-SERIAL'
+    device_serial = "TEST-SERIAL"
 
     def __init__(self, last_resources):
         self.last_resources = last_resources
@@ -27,19 +32,19 @@ class _FakeCoordinator:
 def _make_select(desc, href, last_resources):
     capability = Capability(href=href, entities=(desc,))
     bound = BoundEntity(href=href, capability=capability, desc=desc)
-    return LocalThingsSelect(_FakeCoordinator(last_resources), bound)
+    return LocalThingsSelect(cast(LocalThingsCoordinator, _FakeCoordinator(last_resources)), bound)
 
 
 def test_static_options_unaffected():
-    desc = SelectDesc(key='x', options=('A', 'B'))
-    entity = _make_select(desc, '/x/vs/0', {})
-    assert entity.options == ['A', 'B']
+    desc = SelectDesc(key="x", options=("A", "B"))
+    entity = _make_select(desc, "/x/vs/0", {})
+    assert entity.options == ["A", "B"]
 
 
 def test_options_field_unaffected():
-    desc = SelectDesc(key='x', options_field='supported')
-    entity = _make_select(desc, '/x/vs/0', {'/x/vs/0': {'supported': ['Lo', 'Hi']}})
-    assert entity.options == ['Lo', 'Hi']
+    desc = SelectDesc(key="x", options_field="supported")
+    entity = _make_select(desc, "/x/vs/0", {"/x/vs/0": {"supported": ["Lo", "Hi"]}})
+    assert entity.options == ["Lo", "Hi"]
 
 
 def test_callable_options_receives_full_resource_snapshot():
@@ -50,21 +55,21 @@ def test_callable_options_receives_full_resource_snapshot():
 
     def _options_fn(resources):
         calls.append(resources)
-        return list(resources.get('/other/vs/0', {}).get('codes', []))
+        return list(resources.get("/other/vs/0", {}).get("codes", []))
 
-    desc = SelectDesc(key='cycle', translation_key='fake_cycle', options=_options_fn)
+    desc = SelectDesc(key="cycle", translation_key="fake_cycle", options=_options_fn)
     resources = {
-        '/x/vs/0': {},
-        '/other/vs/0': {'codes': ['1C', '1D']},
+        "/x/vs/0": {},
+        "/other/vs/0": {"codes": ["1C", "1D"]},
     }
-    entity = _make_select(desc, '/x/vs/0', resources)
-    assert entity.options == ['1C', '1D']
+    entity = _make_select(desc, "/x/vs/0", resources)
+    assert entity.options == ["1C", "1D"]
     assert calls == [resources]
 
 
 def test_callable_options_empty_result():
-    desc = SelectDesc(key='cycle', options=lambda resources: [])
-    entity = _make_select(desc, '/x/vs/0', {})
+    desc = SelectDesc(key="cycle", options=lambda resources: [])
+    entity = _make_select(desc, "/x/vs/0", {})
     assert entity.options == []
 
 
@@ -76,19 +81,20 @@ def test_callable_translation_key_reresolves_live_not_once_at_construction():
     (see entity.py's _is_included docstring), and a one-time resolution
     would permanently show untranslated codes even after a later poll
     populates the real value."""
-    desc = SelectDesc(key='cycle', translation_key=lambda resources: resources.get('key'))
-    resources = {'key': None}
-    entity = _make_select(desc, '/x/vs/0', resources)
+    desc = SelectDesc(key="cycle", translation_key=lambda resources: resources.get("key"))
+    resources = {"key": None}
+    entity = _make_select(desc, "/x/vs/0", resources)
     assert entity.translation_key is None
 
-    resources['key'] = 'washer_cycle_table_02'
-    assert entity.translation_key == 'washer_cycle_table_02'
+    resources["key"] = "washer_cycle_table_02"
+    assert entity.translation_key == "washer_cycle_table_02"
 
 
 async def test_unknown_vendor_option_round_trips_to_exact_raw_value():
     """Readable fallback labels must still write the exact Samsung token."""
+
     class _WritableCoordinator(_FakeCoordinator):
-        data = {'mode': 'FutureVendorMode'}
+        data: ClassVar[dict] = {"mode": "FutureVendorMode"}
 
         def __init__(self, last_resources):
             super().__init__(last_resources)
@@ -98,23 +104,26 @@ async def test_unknown_vendor_option_round_trips_to_exact_raw_value():
             self.writes.append(value)
 
     desc = SelectDesc(
-        key='mode', translation_key='door_alert',
-        options=('Known', 'FutureVendorMode'), write_fn=lambda *args: None,
+        key="mode",
+        translation_key="door_alert",
+        options=("Known", "FutureVendorMode"),
+        write_fn=lambda *args: None,
     )
-    capability = Capability(href='/x/vs/0', entities=(desc,))
-    bound = BoundEntity(href='/x/vs/0', capability=capability, desc=desc)
+    capability = Capability(href="/x/vs/0", entities=(desc,))
+    bound = BoundEntity(href="/x/vs/0", capability=capability, desc=desc)
     coordinator = _WritableCoordinator({})
-    entity = LocalThingsSelect(coordinator, bound)
+    entity = LocalThingsSelect(cast(LocalThingsCoordinator, coordinator), bound)
 
-    assert entity.options[-1] == 'Future Vendor Mode'
-    await entity.async_select_option('Future Vendor Mode')
-    assert coordinator.writes == ['FutureVendorMode']
+    assert entity.options[-1] == "Future Vendor Mode"
+    await entity.async_select_option("Future Vendor Mode")
+    assert coordinator.writes == ["FutureVendorMode"]
 
 
 async def test_washer_diagnostic_cycle_values_share_one_display_and_write_path():
     """Regression for Course_69/EditCourseList_696F... from real hardware."""
+
     class _WritableCoordinator(_FakeCoordinator):
-        data = {'cycle': '69'}
+        data: ClassVar[dict] = {"cycle": "69"}
 
         def __init__(self, last_resources):
             super().__init__(last_resources)
@@ -124,63 +133,63 @@ async def test_washer_diagnostic_cycle_values_share_one_display_and_write_path()
             self.writes.append(value)
 
     desc = cycle_select(
-        translation_key='washer_cycle',
-        icon='mdi:washing-machine',
-        table_href='/st/washercourse/vs/0',
+        translation_key="washer_cycle",
+        icon="mdi:washing-machine",
+        table_href="/st/washercourse/vs/0",
         display_fn=washer_cycle_fallback,
     )
-    capability = Capability(href='/course/vs/0', entities=(desc,))
-    bound = BoundEntity(href='/course/vs/0', capability=capability, desc=desc)
+    capability = Capability(href="/course/vs/0", entities=(desc,))
+    bound = BoundEntity(href="/course/vs/0", capability=capability, desc=desc)
     resources = {
-        '/course/vs/0': {'x.com.samsung.da.options': ['Course_69']},
-        '/st/washercourse/vs/0': {
-            'x.com.samsung.da.st.courseTable': 'Table_02',
+        "/course/vs/0": {"x.com.samsung.da.options": ["Course_69"]},
+        "/st/washercourse/vs/0": {
+            "x.com.samsung.da.st.courseTable": "Table_02",
         },
-        '/wm/editcourse/vs/0': {
-            'x.com.samsung.da.editCourseList': (
-                'EditCourseList_696F757801719688706D6A7376726C6E6B777479F1F3'
+        "/wm/editcourse/vs/0": {
+            "x.com.samsung.da.editCourseList": (
+                "EditCourseList_696F757801719688706D6A7376726C6E6B777479F1F3"
             ),
         },
-        '/wm/personalcourse/vs/0': {
-            'x.com.samsung.da.courses': [
-                'F1_0106EC868DEC98B7',
-                'F3_0109EC9A94EAB8B0EBB3B4',
+        "/wm/personalcourse/vs/0": {
+            "x.com.samsung.da.courses": [
+                "F1_0106EC868DEC98B7",
+                "F3_0109EC9A94EAB8B0EBB3B4",
             ],
         },
     }
     coordinator = _WritableCoordinator(resources)
-    entity = LocalThingsSelect(coordinator, bound)
-    first_name = bytes.fromhex('EC868DEC98B7').decode('utf-8')
-    second_name = bytes.fromhex('EC9A94EAB8B0EBB3B4').decode('utf-8')
+    entity = LocalThingsSelect(cast(LocalThingsCoordinator, coordinator), bound)
+    first_name = bytes.fromhex("EC868DEC98B7").decode("utf-8")
+    second_name = bytes.fromhex("EC9A94EAB8B0EBB3B4").decode("utf-8")
 
     # Known catalog states stay as HA translation keys; the frontend renders
     # this confirmed Table_02 mapping as "AI Wash".
-    assert entity.current_option == '69'
+    assert entity.current_option == "69"
     assert entity.options == [
-        '69',
-        '6f',
-        '75',
-        '78',
-        '01',
-        '71',
-        '96',
-        '88',
-        '70',
-        '6d',
-        '6a',
-        '73',
-        '76',
-        '72',
-        '6c',
-        '6e',
-        '6b',
-        '77',
-        '74',
-        '79',
+        "69",
+        "6f",
+        "75",
+        "78",
+        "01",
+        "71",
+        "96",
+        "88",
+        "70",
+        "6d",
+        "6a",
+        "73",
+        "76",
+        "72",
+        "6c",
+        "6e",
+        "6b",
+        "77",
+        "74",
+        "79",
         first_name,
         second_name,
     ]
 
-    await entity.async_select_option('6f')
+    await entity.async_select_option("6f")
     await entity.async_select_option(first_name)
-    assert coordinator.writes == ['6F', 'F1']
+    assert coordinator.writes == ["6F", "F1"]

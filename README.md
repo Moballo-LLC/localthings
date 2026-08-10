@@ -63,7 +63,7 @@ Other Tizen RT / DAWIT-family appliances almost certainly speak the same protoco
 nmap -Pn -sU -p 49152-49160 "$APPLIANCE_IP"
 ```
 
-- Any UDP port in `49152-49160` open|filtered with a DTLS handshake responding: newer firmware (Tizen RT 3.x, DAWIT 3.0+). This is what the integration talks to. Most devices answer on `49154`/`49155`, but some builds bind lower (e.g. `49153`). The config flow sweeps the whole range and auto-detects the live port, so you don't need to know which one your device uses.
+- Any UDP port in `49152-49160` open|filtered with a DTLS handshake responding: newer firmware (Tizen RT 3.x, DAWIT 3.0+). This is what the integration talks to. Most devices answer on `49154`/`49155`, but some builds bind lower (e.g. `49153`). The config flow probes the whole range and auto-detects the live port, so you don't need to know which one your device uses.
 - Only `8888/tcp` open (token-based HTTPS): older firmware (roughly 2018-2022). **Not supported here.**
 
 ---
@@ -82,10 +82,10 @@ This repo doesn't include the needed CA bundle. For an example of how to obtain 
 2. Restart HA.
 3. **Settings > Devices & Services > Add Integration > LocalThings.**
 4. First device: paste the appliance's IP, plus the contents of the CA private and public key from Part 2.
-5. The flow fetches the current UUID from Samsung's cloud gateway, mints a leaf cert signed by your CA, sweeps the `49152-49160` range to find the live DTLS port, and confirms the device answers `/device/0`. On success it creates the config entry and detects the device type automatically.
-6. Every subsequent device only asks for the host IP; the stored CA credentials are reused to mint that device's leaf cert.
+5. The flow sends a DTLS `ClientHello` to every port in the `49152-49160` range at once and keeps the one that answers -- a real DTLS server identifies itself in about one round trip, and the probe stops there, so nothing is left behind on the appliance. Only that port is then given a real certificate handshake: it fetches the current UUID from Samsung's cloud gateway, mints a leaf cert signed by your CA, and reads the device's identity and `/device/0`. On success it creates the config entry, already knowing the appliance's serial, model, and type.
+6. Every subsequent device only asks for the host IP. The stored CA credentials are reused, and so is the leaf cert itself -- every appliance accepts the same one -- so adding a second appliance doesn't depend on Samsung's cloud being reachable at all. If a device rejects the reused cert (the UUID behind it does rotate), the flow mints a fresh one and retries by itself.
 
-Entities appear under one HA device per appliance, named `Samsung Appliance (<ip>)` initially. Rename freely: the config entry is keyed on the device's serial, not the name.
+Entities appear under one HA device per appliance, named for the appliance's type and model. Rename freely: the device is keyed on its serial, not its name.
 
 ---
 
@@ -95,6 +95,73 @@ Each device has its own **Configure** option in Settings > Devices & Services, u
 
 - **Allow writes even when remote control is reported off** — by default, LocalThings blocks every write with a clear error whenever a device reports remote control off, rather than letting the device silently reject it. Some devices accept certain writes anyway (e.g. default detergent/softener dosing on a washer) even while reporting remote control off. Only enable this if you've confirmed writes actually work on your device with remote control off — otherwise you trade a clear error for a silent failure.
 - **Estimated finish -- minimum change (minutes)** — a washer/dryer/dishwasher's `finish_time` sensor is recomputed from the device's own remaining-time estimate on every poll, which commonly drifts or gets revised by a minute or two between updates. This setting holds `finish_time` at its last reported value until a new estimate differs by at least this many minutes, cutting down on Home Assistant history/logbook noise from a value that hasn't meaningfully changed. Defaults to `3`; set it to `0` to report every computed change.
+- **Remember modes the device reports but doesn't advertise** — some firmware reports a current mode it never lists as supported. Issue #327's air conditioner sits in `Quiet` while offering only `Off/Sleep/Speed/Nano/NanoSleep`, so Home Assistant showed the preset as active but refused to select it. LocalThings remembers any such mode it sees and keeps offering it afterwards, stored on the config entry so it survives a restart — the device only names the mode while it is in it, and you shouldn't have to reach for the physical remote after every reboot. Defaults to on. Turning it off offers only what the device advertises, without discarding what was already learned.
+
+The same **Configure** menu has a **Forget remembered modes** step, which clears what has been learned for that device. Use it if a mode was learned that turns out not to be selectable — otherwise, by design, it stays forever.
+
+---
+
+## Part 5: Reading and writing resources directly
+
+Two HA actions, `localthings.write_resource` and `localthings.read_resource`, talk to a device's OCF resources directly instead of through this integration's entity model. They exist for two overlapping jobs: pinning down a device-specific write contract (the reverse-engineering work `docs/investigations/` and the provenance comments throughout `registry/capabilities/` are all about), and driving a resource this integration doesn't model as an entity yet, without waiting on a release.
+
+Both take a `device_id` (a device picker filtered to this integration) and resolve to exactly one appliance — a target that expands to more than one LocalThings device is rejected rather than silently fanned out across all of them. `href` is always canonical (e.g. `/mode/vs/0`); if the device you targeted is a subdevice — an oven's second cavity, an AC's second indoor unit — it's translated to the real on-the-wire href for you (`/mode/vs/1`, say), and the response reports both forms so there's no ambiguity about what was actually sent.
+
+`write_resource` exists because a single write, one at a time, isn't enough to probe some boards. Issue #300's Samsung wall oven answers `2.04 Changed` to a settings write while idle and then silently reverts it — the write only sticks once a cycle is already running. Finding what actually triggers a cycle needs an *ordered sequence* of writes to different resources, with real delays between them, and a way to check afterward whether anything actually held:
+
+```yaml
+action: localthings.write_resource
+data:
+  device_id: abc123...
+  writes:
+    - href: /mode/vs/0
+      payload:
+        x.com.samsung.da.modes: ["Bake"]
+      settle: 5
+    - href: /operational/state/vs/0
+      payload:
+        x.com.samsung.da.state: "Run"
+  verify_after: 30
+```
+
+Mind the shapes: what you write is sent verbatim, so the field names and types have to be the ones that resource actually uses. `/mode/vs/0` takes `modes` as an *array* on this board; a bare string, or the singular `mode`, is a different field the device will simply ignore. `read_resource` (below) with no `href` is the quickest way to see the real shape of everything before you write to any of it.
+
+Each write in `writes` (1-10 of them) needs `href` and a non-empty `payload`, sent verbatim as a partial-rep POST — this bypasses the remote-control-off block and every `write_fn`/`validate_fn` a normal entity write goes through, and sends exactly the fields you give it, so it can misconfigure your appliance if you get it wrong. `settle` (0-30s, default 0) is how long to wait *after* that write before starting the next one.
+
+By default the whole sequence holds the device session from the first write to the last, settle delays included, so a routine poll or another entity's write can't land between two steps and blur which write the appliance was reacting to. The cost is that nothing else on that device updates until the sequence ends — up to 10 × 30s if you ask for the maximum of both. Set `hold_session_lock: false` to take the session per write and release it across the waits instead, trading that certainty for a device whose entities keep updating throughout.
+
+The response has one `results` entry per write, with `before`/`after` reps and a `changed` flag (every key/value in `payload` present and equal in the immediate readback):
+
+```json
+{
+  "device_id": "abc123...",
+  "results": [
+    {"href": "/mode/vs/0", "actual_href": "/mode/vs/0", "code": "2.04", "raw_code": 68,
+     "accepted": true, "before": {...}, "after": {...}, "changed": true},
+    ...
+  ],
+  "verified": {
+    "/mode/vs/0": {"code": "2.05", "raw_code": 69, "rep": {...}, "held": false}
+  }
+}
+```
+
+`verify_after` (0-60s, default 0, omit to skip) is what actually answers the "did it stick" question: after the sequence finishes, it waits that long and then re-reads every distinct href the sequence touched, reporting the result under `verified`, keyed by canonical href. `changed` tells you the write was accepted and reflected immediately; `held` tells you whether it was still there N seconds later, or whether the board quietly put it back — issue #300's exact symptom. Where an href was written more than once in a sequence, `held` compares against the *last* payload sent to it. A `held` of `null` means the re-read itself didn't come back (check `code` next to it) — unknown, deliberately not reported as a revert.
+
+If the session drops partway through a sequence, the action raises rather than returning, and the error names how many writes completed and which — the appliance is left holding a partial sequence, so knowing where it stopped is the difference between a usable result and starting over blind.
+
+`read_resource` is the read half, and it's deliberately not just a cache lookup:
+
+```yaml
+action: localthings.read_resource
+data:
+  device_id: abc123...
+  href: /mode/vs/0
+```
+
+returning `{"href", "actual_href", "code", "raw_code", "rep"}` off a **live GET straight from the device**, not the cache — which can be up to a poll interval stale, exactly the staleness that would make `held` above meaningless. Omit `href` and you get `{"resources": {href: rep, ...}}`, the cached snapshot of everything this integration currently tracks on that device, with no GET at all — useful for seeing what's there before you start writing to it, without hammering the appliance.
+
+The **Debug write** panel under a device's Configure menu (Part 4) is the friendlier single-write path over this same machinery — pick an href, type a payload, see the result — for when you don't need a sequence.
 
 ---
 
@@ -131,13 +198,15 @@ A large suite covering registry composition, discovery, entity descriptors, and 
 custom_components/localthings/
   manifest.json         Requirements (incl. the smartthings-local PyPI dep), version, domain
   __init__.py            async_setup_entry / async_unload_entry
-  config_flow.py          UUID fetch, leaf cert minting, port probing, config entry creation
+  config_flow.py          ClientHello port probe, UUID fetch, leaf cert minting, identity resolution
   coordinator.py          Polling + push update coordination, stale-state fallback, write dispatch
   observe.py              CoAP OBSERVE (push-mode) support layered on the coordinator
   diagnostics.py           Redacted diagnostics download (device state + coverage metadata)
+  services.py              write_resource/read_resource actions (device resolution, href translation)
+  services.yaml            Selectors/descriptions for the two services above
   const.py                 Domain, config keys, probe ports
   entity.py                Base entity wiring capability registry -> HA entity
-  sensor.py / binary_sensor.py / switch.py / number.py / select.py / button.py / time.py / fan.py / climate.py
+  sensor.py / binary_sensor.py / switch.py / number.py / select.py / button.py / time.py / fan.py / climate.py / water_heater.py
                             One module per HA platform
   catalog.py               Reads the shipped translation catalog (which keys/states exist)
   translations/            Config-flow copy + entity name/state translations, one file per
@@ -172,6 +241,11 @@ email, access tokens, device IDs, MAC addresses, serial numbers) before it's gen
 directly to a new issue using the linked device-support template. This is the fastest way to help add or expand
 support for hardware the maintainers don't have.
 
+When a diagnostics dump alone isn't enough to pin down how a resource actually behaves — whether a write sticks,
+what order things need to happen in, whether the device reverts a change on its own — the `localthings.write_resource`
+and `localthings.read_resource` actions from Part 5 are the tool for probing it directly and reporting back what
+you found.
+
 ---
 
 ## Adding a new appliance type
@@ -193,6 +267,8 @@ No config-flow changes are needed. Device-type detection and entity wiring are f
 Samsung's firmware occasionally drops the DTLS session briefly — this is normal appliance-side behavior, not a bug. The integration reconnects automatically, and from HA's perspective a brief reconnect looks like an entity holding its last value for one poll cycle rather than going `unavailable`. When an appliance supports it, the integration prefers push-based updates (instant, via `observe.py`) over polling, falling back to polling otherwise.
 
 If reconnects become persistent (more than a handful per minute), something's actually wrong. Check the appliance's Wi-Fi link first, then look for a competing DTLS client on the LAN — only one active session per appliance is allowed at a time.
+
+Deregistering a device in SmartThings causes a reset of its network settings as soon as it accesses Samsung's servers, dropping it off Wi-Fi until it's re-onboarded through the SmartThings app. As such, consider keeping devices registered even if egress-blocked, to avoid them resetting upon brief internet access.
 
 ### Multi-subdevice ("2-in-1") air conditioner systems
 

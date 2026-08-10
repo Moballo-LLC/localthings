@@ -1,8 +1,12 @@
-from . import (
-    common, cooktop, dishwasher, fridge, ignored, laundry, operational, oven,
-    range_hood,
-)
 from ..capability import Capability
+from . import (
+    common,
+    fridge,
+    ignored,
+    laundry,
+    operational,
+    oven,
+)
 
 
 def _is_capability(v):
@@ -18,5 +22,13 @@ _OVEN_GLOBAL_CAPS = [
     oven.OVEN_CAVITY,
 ]
 
-ALL = [v for mod in (common, operational, laundry, fridge)
-       for v in vars(mod).values() if _is_capability(v)] + _OVEN_GLOBAL_CAPS + ignored.IGNORED
+ALL = (
+    [
+        v
+        for mod in (common, operational, laundry, fridge)
+        for v in vars(mod).values()
+        if _is_capability(v)
+    ]
+    + _OVEN_GLOBAL_CAPS
+    + ignored.IGNORED
+)

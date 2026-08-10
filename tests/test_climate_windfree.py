@@ -10,15 +10,16 @@ table with a generic resolver that covers WindFree/motion generically
 instead of a per-model dict -- duplicating that here would just conflict
 with it.
 """
+
 from custom_components.localthings.climate import _DEVICE_TO_SWING, _SWING_TO_DEVICE
 
 
 def test_horizontal_swing_maps_both_directions():
-    assert _DEVICE_TO_SWING['Left_And_Right'] == 'horizontal'
-    assert _SWING_TO_DEVICE['horizontal'] == 'Left_And_Right'
+    assert _DEVICE_TO_SWING["Left_And_Right"] == "horizontal"
+    assert _SWING_TO_DEVICE["horizontal"] == "Left_And_Right"
 
 
 def test_existing_swing_modes_unchanged():
-    assert _DEVICE_TO_SWING['Fix'] == 'off'
-    assert _DEVICE_TO_SWING['All'] == 'both'
-    assert _DEVICE_TO_SWING['Up_And_Low'] == 'vertical'
+    assert _DEVICE_TO_SWING["Fix"] == "off"
+    assert _DEVICE_TO_SWING["All"] == "both"
+    assert _DEVICE_TO_SWING["Up_And_Low"] == "vertical"

@@ -8,6 +8,7 @@ refrigerator whose diagnostics now report no subdevices at all) sticks
 around forever. Defining this callback is what puts a working "Delete
 device" button on it.
 """
+
 from __future__ import annotations
 
 from homeassistant.core import HomeAssistant
@@ -20,7 +21,8 @@ from custom_components.localthings.registry.subdevices import Subdevice
 
 def _device(hass, entry, identifiers) -> dr.DeviceEntry:
     return dr.async_get(hass).async_get_or_create(
-        config_entry_id=entry.entry_id, identifiers=identifiers,
+        config_entry_id=entry.entry_id,
+        identifiers=identifiers,
     )
 
 
@@ -33,9 +35,11 @@ async def test_stale_device_can_be_removed(
     await hass.async_block_till_done()
 
     coordinator = hass.data[DOMAIN][mock_entry.entry_id]
-    assert coordinator.subdevices == []   # this fixture is not a composite device
+    assert coordinator.subdevices == []  # this fixture is not a composite device
     stale = _device(
-        hass, mock_entry, {(DOMAIN, f'{coordinator.device_serial}_1')},
+        hass,
+        mock_entry,
+        {(DOMAIN, f"{coordinator.device_serial}_1")},
     )
 
     assert await async_remove_config_entry_device(hass, mock_entry, stale) is True
@@ -50,7 +54,7 @@ async def test_master_device_cannot_be_removed(
     await hass.async_block_till_done()
 
     coordinator = hass.data[DOMAIN][mock_entry.entry_id]
-    master = _device(hass, mock_entry, set(coordinator.device_info['identifiers']))
+    master = _device(hass, mock_entry, set(coordinator.device_info["identifiers"]))
 
     assert await async_remove_config_entry_device(hass, mock_entry, master) is False
 
@@ -65,22 +69,24 @@ async def test_live_subdevice_device_cannot_be_removed(
     await hass.async_block_till_done()
 
     coordinator = hass.data[DOMAIN][mock_entry.entry_id]
-    subdevice = Subdevice(kind='indexed', key='1', seed_path=('device', '1'))
+    subdevice = Subdevice(kind="indexed", key="1", seed_path=("device", "1"))
     coordinator.subdevices = [subdevice]
     live = _device(
-        hass, mock_entry,
-        set(coordinator.device_info_for(subdevice)['identifiers']),
+        hass,
+        mock_entry,
+        set(coordinator.device_info_for(subdevice)["identifiers"]),
     )
 
     assert await async_remove_config_entry_device(hass, mock_entry, live) is False
 
 
 async def test_removal_allowed_when_entry_is_not_loaded(
-    hass: HomeAssistant, mock_entry,
+    hass: HomeAssistant,
+    mock_entry,
 ) -> None:
     """No coordinator means nothing is claiming the device -- don't strand
     it behind a callback that can't answer."""
     mock_entry.add_to_hass(hass)
-    orphan = _device(hass, mock_entry, {(DOMAIN, 'whatever')})
+    orphan = _device(hass, mock_entry, {(DOMAIN, "whatever")})
 
     assert await async_remove_config_entry_device(hass, mock_entry, orphan) is True

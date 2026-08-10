@@ -1,0 +1,15 @@
+{
+  "state_keys": [
+    "alarm_code",
+    "away_mode",
+    "energy_kwh",
+    "energy_saved_kwh",
+    "firmware_update",
+    "mute_once",
+    "water_heater",
+    "zone_mode",
+    "zone_power",
+    "zone_target_temperature",
+    "zone_temperature"
+  ]
+}

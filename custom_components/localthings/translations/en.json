@@ -1,6 +1,9 @@
 {
   "entity": {
     "binary_sensor": {
+      "auto_clean_running": {
+        "name": "Auto clean running"
+      },
       "after_run_active": {
         "name": "After run active"
       },
@@ -114,6 +117,12 @@
       "diagnosis_start": {
         "name": "Start diagnosis"
       },
+      "auto_clean_stop": {
+        "name": "Stop auto clean"
+      },
+      "filter_time_reset": {
+        "name": "Reset filter time"
+      },
       "pause": {
         "name": "Pause"
       },
@@ -143,11 +152,13 @@
               "smart": "Smart",
               "speed": "Speed",
               "nano": "WindFree",
+              "sleep": "Sleep",
               "nanosleep": "WindFree sleep",
               "longwind": "Long wind",
               "motionindirect": "Motion indirect",
               "motiondirect": "Motion direct",
               "drycomfort": "Dry comfort",
+              "dlightcool": "d'light Cool",
               "2step": "2-Step"
             }
           }
@@ -188,6 +199,9 @@
       "oven_setpoint": {
         "name": "Setpoint"
       },
+      "sensing_interval": {
+        "name": "AI Purify interval"
+      },
       "setpoint": {
         "name": "Setpoint"
       },
@@ -199,6 +213,9 @@
       },
       "tropical_night_mode": {
         "name": "Tropical night mode"
+      },
+      "zone_target_temperature": {
+        "name": "Zone target temperature"
       }
     },
     "select": {
@@ -207,6 +224,9 @@
       },
       "air_filter_threshold": {
         "name": "Filter alarm threshold"
+      },
+      "auto_door_timer": {
+        "name": "Auto door open timer"
       },
       "beverage_zone_mode": {
         "name": "Beverage zone mode",
@@ -272,13 +292,16 @@
         "name": "Cycle",
         "state": {
           "80": "Delicate",
-          "83": "Express 60",
+          "83": "Normal",
           "84": "Heavy",
-          "86": "Normal",
+          "86": "Express 60",
           "90": "Self clean",
           "0e": "AI Wash",
           "07": "Pre blast",
           "8d": "Pots and pans",
+          "85": "Delicate",
+          "0c": "Express",
+          "0d": "Self clean",
           "8e": "Plastic",
           "8f": "Baby Care",
           "82": "Auto",
@@ -316,8 +339,10 @@
           "23": "Quick Dry 35'",
           "24": "Cool air",
           "25": "Warm air",
+          "26": "Air wash",
           "27": "Time dry",
           "29": "AI Dry",
+          "2a": "Hygiene Care+",
           "1a": "Wool",
           "1b": "Bedding",
           "1c": "Shirts",
@@ -325,7 +350,10 @@
           "1e": "Outdoor",
           "1f": "Mixed load",
           "2b": "Self Tub Dry",
-          "4c": "Air Refresh"
+          "4c": "Air Refresh",
+          "51": "Eco Cotton",
+          "53": "AI Dry+",
+          "4e": "Self Dry"
         }
       },
       "favorite_capacity": {
@@ -449,9 +477,11 @@
           "storage_fridge_normal": "Fridge",
           "storage_fridge_cold": "Fridge, strong",
           "storage_fridge_warm": "Fridge, weak",
+          "storage_fridge": "Fridge",
           "storage_freezer_normal": "Freezer",
           "storage_freezer_cold": "Freezer, strong",
           "storage_freezer_warm": "Freezer, weak",
+          "storage_freezer": "Freezer",
           "kimchi_ripe_low_temp": "Kimchi ripening, low temperature",
           "kimchi_ripe_normal_temp": "Kimchi ripening, room temperature",
           "kimchi_ripe_kkakdugi": "Kkakdugi ripening",
@@ -462,7 +492,8 @@
           "storage_fresh_cereal": "Grains",
           "storage_fridge_drink": "Beverages",
           "storage_fresh_wine": "Wine",
-          "storage_fresh_potato_banana": "Potato & banana"
+          "storage_fresh_potato_banana": "Potato & banana",
+          "newmode_kimchi_0000": "New mode"
         }
       },
       "pantry_zone_mode": {
@@ -471,6 +502,16 @@
           "fdr_wine": "Wine",
           "fdr_deli": "Deli",
           "fdr_drinks": "Drinks"
+        }
+      },
+      "winecellar_pantry_zone_mode": {
+        "name": "Pantry zone mode",
+        "state": {
+          "processed_meat": "Processed meat",
+          "cheese": "Cheese",
+          "nuts": "Nuts",
+          "fruit": "Fruit",
+          "wine": "Wine"
         }
       },
       "range_burner_power_level": {
@@ -490,6 +531,14 @@
       },
       "rinse_cycles": {
         "name": "Rinse cycles"
+      },
+      "sensing_mode": {
+        "name": "AI Purify action",
+        "state": {
+          "off": "Sensing only",
+          "airpurify": "Auto clean",
+          "alarm": "Get notified"
+        }
       },
       "softener_concentration": {
         "name": "Softener concentration",
@@ -515,6 +564,9 @@
           "tone": "Tone",
           "mute": "Mute"
         }
+      },
+      "energy_saving_mode": {
+        "name": "Energy saving mode"
       },
       "air_purifier_sound_mode": {
         "name": "Sound mode",
@@ -557,6 +609,8 @@
         "state": {
           "01": "Normal",
           "04": "Quick Wash",
+          "06": "XXL Laundry",
+          "08": "Rinse+Spin",
           "17": "Downloaded",
           "1b": "Cotton",
           "1c": "Eco 40-60",
@@ -567,7 +621,7 @@
           "21": "Colors",
           "22": "Wool",
           "23": "Outdoor",
-          "24": "Towels",
+          "24": "Bedding",
           "25": "Synthetics",
           "26": "Delicates",
           "27": "Rinse+Spin",
@@ -580,8 +634,9 @@
           "2f": "Activewear",
           "30": "Cloudy Day",
           "32": "Shirts",
-          "33": "Bedding",
+          "33": "Towels",
           "34": "Mixed",
+          "35": "E Cotton",
           "36": "Wash+Dry",
           "37": "Air Wash",
           "38": "Cotton Dry",
@@ -621,7 +676,8 @@
           "87": "Download",
           "88": "Pet Care",
           "8f": "Intense Cold",
-          "96": "Less Microfiber"
+          "96": "Less Microfiber",
+          "a0": "15' Quick Wash"
         }
       },
       "washer_dry_level": {
@@ -636,9 +692,69 @@
           "none": "Off",
           "cupboard": "Cupboard"
         }
+      },
+      "zone_mode": {
+        "name": "Zone mode"
+      },
+      "watertank_light_color": {
+        "name": "Water tank light color",
+        "state": {
+          "warmwhite": "Warm white",
+          "naturalwhite": "Natural white",
+          "coolwhite": "Cool white",
+          "green": "Green",
+          "purple": "Purple",
+          "blue": "Blue",
+          "orange": "Orange",
+          "pink": "Pink"
+        }
+      },
+      "watertank_light_brightness": {
+        "name": "Water tank light brightness"
+      },
+      "air_filter_pm1_threshold": {
+        "name": "PM1 filter alarm threshold"
+      },
+      "freezer_temperature_setpoint": {
+        "name": "Freezer temperature"
+      },
+      "edge_lighting_mode": {
+        "name": "Edge lighting mode",
+        "state": {
+          "smart": "Smart",
+          "high": "High",
+          "low": "Low"
+        }
+      },
+      "edge_lighting_color": {
+        "name": "Edge lighting color",
+        "state": {
+          "3000k": "3000 K",
+          "4000k": "4000 K",
+          "6500k": "6500 K"
+        }
+      },
+      "indicator_light_mode": {
+        "name": "Indicator light mode",
+        "state": {
+          "smart": "Smart",
+          "high": "High",
+          "low": "Low"
+        }
+      },
+      "ventilation_mode": {
+        "name": "Mode",
+        "state": {
+          "purification": "Purification",
+          "ventilation": "Ventilation",
+          "smartventilation": "Smart Ventilation"
+        }
       }
     },
     "sensor": {
+      "auto_clean_progress": {
+        "name": "Auto clean progress"
+      },
       "after_run_progress": {
         "name": "After run progress"
       },
@@ -647,6 +763,9 @@
       },
       "air_filter_usage_hours": {
         "name": "Filter usage hours"
+      },
+      "deodor_filter_usage": {
+        "name": "Filter usage"
       },
       "air_quality_standard": {
         "name": "Air quality standard"
@@ -754,6 +873,12 @@
           "direct": "Direct",
           "indirect": "Indirect"
         }
+      },
+      "energy_saving_state": {
+        "name": "Energy saving state"
+      },
+      "energy_saving_operating_status": {
+        "name": "Energy saving operating status"
       },
       "current_temp_c": {
         "name": "Temperature"
@@ -978,6 +1103,18 @@
           "icestatus_stop": "Idle",
           "icestatus_run": "Making ice"
         }
+      },
+      "zone_temperature": {
+        "name": "Zone temperature"
+      },
+      "watertank_full_alarm_status": {
+        "name": "Water tank full alarm status"
+      },
+      "air_filter_pm1_usage": {
+        "name": "PM1 filter usage"
+      },
+      "air_filter_pm1_usage_hours": {
+        "name": "PM1 filter usage hours"
       }
     },
     "switch": {
@@ -996,6 +1133,9 @@
       "absence_power_saving_active": {
         "name": "Absence power saving active"
       },
+      "absence_clean": {
+        "name": "Absence clean"
+      },
       "motion_detect_wind_active": {
         "name": "Motion-detect wind avoidance active"
       },
@@ -1004,6 +1144,12 @@
       },
       "display": {
         "name": "Display"
+      },
+      "periodic_air_sensing": {
+        "name": "AI Purify"
+      },
+      "periodic_sensing_skip_status": {
+        "name": "AI Purify sensing skip"
       },
       "pet_filter_activation": {
         "name": "Pet filter activation"
@@ -1022,6 +1168,12 @@
       },
       "auto_door_opener": {
         "name": "Auto door opener"
+      },
+      "auto_door_sound_control": {
+        "name": "Auto door sound"
+      },
+      "auto_door_voice_control": {
+        "name": "Auto door voice control"
       },
       "auto_release_dry": {
         "name": "Auto release dry"
@@ -1139,6 +1291,33 @@
       },
       "wrinkle_prevent": {
         "name": "Wrinkle prevent"
+      },
+      "zone_power": {
+        "name": "Zone power"
+      },
+      "away_mode": {
+        "name": "Away mode"
+      },
+      "watertank_light": {
+        "name": "Water tank light"
+      },
+      "uv_led": {
+        "name": "UV LED"
+      },
+      "ventilation_alarm": {
+        "name": "Ventilation alarm"
+      },
+      "edge_lighting": {
+        "name": "Edge lighting"
+      },
+      "indicator_light": {
+        "name": "Indicator light"
+      },
+      "windfree": {
+        "name": "Wind-Free mode"
+      },
+      "windsleep": {
+        "name": "Sleep mode"
       }
     },
     "time": {
@@ -1159,6 +1338,17 @@
       },
       "night_start": {
         "name": "Night light start"
+      },
+      "sensing_skip_end": {
+        "name": "AI Purify sensing skip end"
+      },
+      "sensing_skip_start": {
+        "name": "AI Purify sensing skip start"
+      }
+    },
+    "water_heater": {
+      "dhw": {
+        "name": "Hot water"
       }
     }
   },
@@ -1190,10 +1380,18 @@
       },
       "confirm_unknown_type": {
         "title": "Appliance type not recognized",
-        "description": "This appliance's type couldn't be recognized. It'll still be added, but only with common capabilities (power, alarms, etc. where present) rather than the full set for its family. You can help add full support afterward by downloading diagnostics for this device (Settings > Devices & Services > this device > the menu > Download diagnostics) and filing them in a new issue. Submit to add it anyway."
+        "description": "This appliance reported model \"{model}\", which isn't a type LocalThings recognizes yet. It'll still be added, but only with common capabilities (power, alarms, etc. where present) rather than the full set for its family. You can help add full support afterward by downloading diagnostics for this device (Settings > Devices & Services > this device > the menu > Download diagnostics) and filing them in a new issue. Submit to add it anyway."
       }
     },
     "error": {
+      "no_response": "No response from that IP address — nothing came back on any port in the appliance's local API range (UDP 49152-49160). Check the IP address is correct, the appliance is powered on and on the same network as Home Assistant, and that no firewall is dropping UDP traffic to it.",
+      "ports_closed": "That IP address is reachable, but it actively refused every port in the local API range (UDP 49152-49160). Either it isn't a Samsung appliance, or it's on older firmware that only talks to Samsung's cloud over TCP 8888, which this integration can't use.",
+      "no_dtls_server": "Ports in the local API range are reachable at that address, but nothing there answered a DTLS handshake. Check that the IP address belongs to the appliance and not another device on your network.",
+      "handshake_timeout": "The appliance answered on its local API port but never finished the DTLS handshake. It is usually still holding the session from a previous attempt — wait about a minute and try again.",
+      "cert_rejected": "The appliance rejected the certificate. The CA certificate and key are most likely not the AC14K_M CA this appliance trusts, or they don't pair. The Home Assistant log records the exact alert the appliance sent.",
+      "handshake_failed": "The appliance refused the DTLS handshake for a reason unrelated to the certificate, most likely a protocol or cipher mismatch. The Home Assistant log records the exact alert it sent.",
+      "cloud_unreachable": "Couldn't reach Samsung's cloud gateway to fetch the UUID needed to mint this device's certificate. Check Home Assistant's internet access and try again.",
+      "unexpected_response": "Connected to the device successfully, but it didn't return a usable device description. It may not be an appliance this integration supports. The Home Assistant log records what it sent.",
       "cannot_connect": "Cannot connect to the device. Verify the IP address is reachable and the CA credentials are correct.",
       "invalid_ca": "The CA certificate or private key could not be loaded. Verify the PEM contents are correct and the key matches the certificate.",
       "unknown": "Unexpected error. Check the Home Assistant logs for details."
@@ -1208,16 +1406,22 @@
         "title": "LocalThings options",
         "menu_options": {
           "settings": "Device settings",
+          "forget_learned_modes": "Forget remembered modes",
           "debug_write": "Debug: write to a resource"
         }
       },
       "settings": {
         "title": "Device settings",
-        "description": "Some devices accept certain writes (e.g. default detergent/softener dosing on a washer) even while reporting remote control off. By default, LocalThings blocks every write with a clear error whenever a device reports remote control off, rather than letting the device silently reject it. Only enable this if you've confirmed writes actually work on this device with remote control off -- otherwise you'll trade that clear error for a silent failure.\n\nEstimated finish time is recomputed from the device's remaining-time estimate on every poll, which can drift or get revised by a minute or two between updates. Raise the minimum-change value below to hold the sensor at its last reported value until the estimate moves by at least that many minutes, cutting down on history/logbook noise. Set it to 0 to report every computed change.",
+        "description": "Some devices accept certain writes (e.g. default detergent/softener dosing on a washer) even while reporting remote control off. By default, LocalThings blocks every write with a clear error whenever a device reports remote control off, rather than letting the device silently reject it. Only enable this if you've confirmed writes actually work on this device with remote control off -- otherwise you'll trade that clear error for a silent failure.\n\nEstimated finish time is recomputed from the device's remaining-time estimate on every poll, which can drift or get revised by a minute or two between updates. Raise the minimum-change value below to hold the sensor at its last reported value until the estimate moves by at least that many minutes, cutting down on history/logbook noise. Set it to 0 to report every computed change.\n\nSome models report a mode they never list as supported -- an air conditioner sitting in Quiet that only offers Off/Sleep/Speed, for instance. LocalThings remembers any such mode it sees and keeps offering it, so it stays selectable once the device has been in it at least once. Turn this off to offer only what the device advertises; use \"Forget remembered modes\" on the previous screen to clear what has already been remembered.",
         "data": {
           "bypass_remote_control_lock": "Allow writes even when remote control is reported off",
-          "finish_time_hysteresis_minutes": "Estimated finish -- minimum change (minutes)"
+          "finish_time_hysteresis_minutes": "Estimated finish -- minimum change (minutes)",
+          "learn_device_modes": "Remember modes the device reports but doesn't advertise"
         }
+      },
+      "forget_learned_modes": {
+        "title": "Forget remembered modes",
+        "description": "Currently remembered: {codes}\n\nThese are modes this device reported itself in without listing them as supported, kept so they stay selectable. Forgetting them is the fix if one turned out to be bogus -- anything the device genuinely reports again will simply be remembered again, unless you also turn off \"Remember modes the device reports but doesn't advertise\" in Device settings."
       },
       "debug_write": {
         "title": "Debug: write to a resource",
@@ -1274,6 +1478,27 @@
     },
     "intensive_unavailable_for_cycle": {
       "message": "Intensive isn't available on the selected cycle."
+    },
+    "command_failed": {
+      "message": "The command to {href} failed even after reconnecting: {error}"
+    },
+    "debug_too_many_writes": {
+      "message": "Provide between 1 and 10 writes."
+    },
+    "debug_settle_out_of_range": {
+      "message": "settle must be between 0 and 30 seconds."
+    },
+    "debug_verify_after_out_of_range": {
+      "message": "verify_after must be between 0 and 60 seconds."
+    },
+    "service_device_target_invalid": {
+      "message": "This service requires exactly one target device."
+    },
+    "service_device_not_found": {
+      "message": "No matching device was found for that target."
+    },
+    "service_device_not_loaded": {
+      "message": "This device isn't connected yet. Try again once it has loaded."
     }
   }
 }

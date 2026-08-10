@@ -1,5 +1,15 @@
 """Tests for fridge-specific capabilities."""
+
+from collections.abc import Callable
+from typing import ClassVar, cast
+
+from custom_components.localthings.coordinator import LocalThingsCoordinator
 from custom_components.localthings.registry.capabilities import fridge
+from custom_components.localthings.registry.entities import (
+    NumberDesc,
+    SelectDesc,
+    SensorDesc,
+)
 
 
 class TestTempCurrentGeneric:
@@ -8,16 +18,19 @@ class TestTempCurrentGeneric:
     resource in Celsius."""
 
     def test_unit_reads_celsius(self):
-        desc = fridge.TEMP_CURRENT_GENERIC.entities[0]
-        assert desc.unit_fn({'temperature': 3.0, 'units': 'C'}) == '°C'
+        desc = next(e for e in fridge.TEMP_CURRENT_GENERIC.entities if isinstance(e, SensorDesc))
+        assert desc.unit_fn is not None
+        assert desc.unit_fn({"temperature": 3.0, "units": "C"}) == "°C"
 
     def test_unit_reads_fahrenheit(self):
-        desc = fridge.TEMP_CURRENT_GENERIC.entities[0]
-        assert desc.unit_fn({'temperature': 5.0, 'units': 'F'}) == '°F'
+        desc = next(e for e in fridge.TEMP_CURRENT_GENERIC.entities if isinstance(e, SensorDesc))
+        assert desc.unit_fn is not None
+        assert desc.unit_fn({"temperature": 5.0, "units": "F"}) == "°F"
 
     def test_unit_defaults_to_fahrenheit_when_missing(self):
-        desc = fridge.TEMP_CURRENT_GENERIC.entities[0]
-        assert desc.unit_fn({'temperature': 5.0}) == '°F'
+        desc = next(e for e in fridge.TEMP_CURRENT_GENERIC.entities if isinstance(e, SensorDesc))
+        assert desc.unit_fn is not None
+        assert desc.unit_fn({"temperature": 5.0}) == "°F"
 
 
 class TestDoorGeneric:
@@ -29,24 +42,28 @@ class TestDoorGeneric:
 
     def test_reads_bare_open_state(self):
         desc = fridge.DOOR_GENERIC.entities[0]
-        assert desc.rep_fn({'openState': 'Open'}) is True
-        assert desc.rep_fn({'openState': 'Close'}) is False
+        assert desc.rep_fn is not None
+        assert desc.rep_fn({"openState": "Open"}) is True
+        assert desc.rep_fn({"openState": "Close"}) is False
 
     def test_reads_vendor_prefixed_open_state(self):
         desc = fridge.DOOR_GENERIC.entities[0]
-        assert desc.rep_fn({'x.com.samsung.da.openState': 'Open'}) is True
-        assert desc.rep_fn({'x.com.samsung.da.openState': 'Close'}) is False
+        assert desc.rep_fn is not None
+        assert desc.rep_fn({"x.com.samsung.da.openState": "Open"}) is True
+        assert desc.rep_fn({"x.com.samsung.da.openState": "Close"}) is False
 
     def test_prefers_bare_field_when_both_present(self):
         desc = fridge.DOOR_GENERIC.entities[0]
-        rep = {'openState': 'Open', 'x.com.samsung.da.openState': 'Close'}
+        assert desc.rep_fn is not None
+        rep = {"openState": "Open", "x.com.samsung.da.openState": "Close"}
         assert desc.rep_fn(rep) is True
 
 
 class TestTempSetpointGeneric:
     def test_unit_reads_celsius(self):
-        desc = fridge.TEMP_SETPOINT.entities[0]
-        assert desc.unit_fn({'temperature': -19.0, 'units': 'C'}) == '°C'
+        desc = next(e for e in fridge.TEMP_SETPOINT.entities if isinstance(e, NumberDesc))
+        assert desc.unit_fn is not None
+        assert desc.unit_fn({"temperature": -19.0, "units": "C"}) == "°C"
 
 
 class TestTemperaturesFallback:
@@ -54,30 +71,55 @@ class TestTemperaturesFallback:
     x.com.samsung.da.unit ('Celsius'/'Fahrenheit')."""
 
     def test_freezer_unit_celsius(self):
-        desc = next(e for e in fridge.TEMPERATURES_FALLBACK.entities
-                    if e.key == 'freezer_temperature')
-        rep = {'x.com.samsung.da.items': [
-            {'x.com.samsung.da.description': 'Freezer', 'x.com.samsung.da.current': '-19',
-             'x.com.samsung.da.unit': 'Celsius'},
-            {'x.com.samsung.da.description': 'Fridge', 'x.com.samsung.da.current': '3',
-             'x.com.samsung.da.unit': 'Celsius'},
-        ]}
-        assert desc.unit_fn(rep) == '°C'
-        assert desc.value_fn(rep['x.com.samsung.da.items']) == -19
+        desc = next(
+            e
+            for e in fridge.TEMPERATURES_FALLBACK.entities
+            if e.key == "freezer_temperature" and isinstance(e, SensorDesc)
+        )
+        assert desc.unit_fn is not None
+        rep = {
+            "x.com.samsung.da.items": [
+                {
+                    "x.com.samsung.da.description": "Freezer",
+                    "x.com.samsung.da.current": "-19",
+                    "x.com.samsung.da.unit": "Celsius",
+                },
+                {
+                    "x.com.samsung.da.description": "Fridge",
+                    "x.com.samsung.da.current": "3",
+                    "x.com.samsung.da.unit": "Celsius",
+                },
+            ]
+        }
+        assert desc.unit_fn(rep) == "°C"
+        assert desc.value_fn(rep["x.com.samsung.da.items"]) == -19
 
     def test_fridge_unit_fahrenheit(self):
-        desc = next(e for e in fridge.TEMPERATURES_FALLBACK.entities
-                    if e.key == 'fridge_temperature')
-        rep = {'x.com.samsung.da.items': [
-            {'x.com.samsung.da.description': 'Fridge', 'x.com.samsung.da.current': '37',
-             'x.com.samsung.da.unit': 'Fahrenheit'},
-        ]}
-        assert desc.unit_fn(rep) == '°F'
+        desc = next(
+            e
+            for e in fridge.TEMPERATURES_FALLBACK.entities
+            if e.key == "fridge_temperature" and isinstance(e, SensorDesc)
+        )
+        assert desc.unit_fn is not None
+        rep = {
+            "x.com.samsung.da.items": [
+                {
+                    "x.com.samsung.da.description": "Fridge",
+                    "x.com.samsung.da.current": "37",
+                    "x.com.samsung.da.unit": "Fahrenheit",
+                },
+            ]
+        }
+        assert desc.unit_fn(rep) == "°F"
 
     def test_unit_defaults_to_fahrenheit_when_item_missing(self):
-        desc = next(e for e in fridge.TEMPERATURES_FALLBACK.entities
-                    if e.key == 'freezer_temperature')
-        assert desc.unit_fn({'x.com.samsung.da.items': []}) == '°F'
+        desc = next(
+            e
+            for e in fridge.TEMPERATURES_FALLBACK.entities
+            if e.key == "freezer_temperature" and isinstance(e, SensorDesc)
+        )
+        assert desc.unit_fn is not None
+        assert desc.unit_fn({"x.com.samsung.da.items": []}) == "°F"
 
 
 class TestDefrostBlockStatus:
@@ -87,12 +129,12 @@ class TestDefrostBlockStatus:
 
     def test_key_and_name_reflect_active_defrosting(self):
         desc = fridge.DEFROST_BLOCK_STATUS.entities[0]
-        assert desc.key == 'defrost_active'
+        assert desc.key == "defrost_active"
 
     def test_value_fn(self):
         desc = fridge.DEFROST_BLOCK_STATUS.entities[0]
-        assert desc.value_fn(['DEFROST_BLOCK_ON']) is True
-        assert desc.value_fn(['DEFROST_BLOCK_OFF']) is False
+        assert desc.value_fn(["DEFROST_BLOCK_ON"]) is True
+        assert desc.value_fn(["DEFROST_BLOCK_OFF"]) is False
 
 
 class TestRefrigerationFallback:
@@ -102,29 +144,30 @@ class TestRefrigerationFallback:
     (defrost) that has no vs-href equivalent."""
 
     def test_href(self):
-        assert fridge.REFRIGERATION_FALLBACK.href == '/refrigeration/0'
+        assert fridge.REFRIGERATION_FALLBACK.href == "/refrigeration/0"
 
     def test_defrost_active_is_fallback_of_defrost_block_status(self):
         # Duplicates DEFROST_BLOCK_STATUS's defrost_active
         # (/defrost/block/vs/0) -- only a true fallback when that richer
         # href is absent (issue #7's device: /refrigeration/0 only).
-        desc = next(e for e in fridge.REFRIGERATION_FALLBACK.entities
-                    if e.key == 'defrost_active')
+        desc = next(e for e in fridge.REFRIGERATION_FALLBACK.entities if e.key == "defrost_active")
         assert desc.value_fn(True) is True
         assert desc.value_fn(False) is False
-        assert desc.exists_fn({}, {'/refrigeration/0': {}}) is True
-        assert desc.exists_fn(
-            {}, {'/refrigeration/0': {}, '/defrost/block/vs/0': {}}) is False
+        assert desc.exists_fn is not None
+        assert desc.exists_fn({}, {"/refrigeration/0": {}}) is True
+        assert desc.exists_fn({}, {"/refrigeration/0": {}, "/defrost/block/vs/0": {}}) is False
 
     def test_rapid_switches_hidden_when_vs_href_present(self):
-        for key in ('rapid_fridge', 'rapid_freezing'):
+        for key in ("rapid_fridge", "rapid_freezing"):
             desc = next(e for e in fridge.REFRIGERATION_FALLBACK.entities if e.key == key)
-            assert desc.exists_fn({}, {'/refrigeration/vs/0': {}, '/refrigeration/0': {}}) is False
+            assert desc.exists_fn is not None
+            assert desc.exists_fn({}, {"/refrigeration/vs/0": {}, "/refrigeration/0": {}}) is False
 
     def test_rapid_switches_shown_when_vs_href_absent(self):
-        for key in ('rapid_fridge', 'rapid_freezing'):
+        for key in ("rapid_fridge", "rapid_freezing"):
             desc = next(e for e in fridge.REFRIGERATION_FALLBACK.entities if e.key == key)
-            assert desc.exists_fn({}, {'/refrigeration/0': {}}) is True
+            assert desc.exists_fn is not None
+            assert desc.exists_fn({}, {"/refrigeration/0": {}}) is True
 
 
 class TestFlexZone:
@@ -136,32 +179,42 @@ class TestFlexZone:
 
     def test_reads_rf9000_prefix(self):
         rep = {
-            'x.com.samsung.da.modes': ['CV_TTYPE_RF9000A_BEVERAGE', 'WATERFILTER_DISABLE'],
-            'x.com.samsung.da.supportedOptions': [
-                'CV_TTYPE_RF9000A_FREEZE', 'CV_TTYPE_RF9000A_BEVERAGE'],
+            "x.com.samsung.da.modes": ["CV_TTYPE_RF9000A_BEVERAGE", "WATERFILTER_DISABLE"],
+            "x.com.samsung.da.supportedOptions": [
+                "CV_TTYPE_RF9000A_FREEZE",
+                "CV_TTYPE_RF9000A_BEVERAGE",
+            ],
         }
-        assert fridge._flex_zone_current(rep) == 'CV_TTYPE_RF9000A_BEVERAGE'
+        assert fridge._flex_zone_current(rep) == "CV_TTYPE_RF9000A_BEVERAGE"
 
     def test_reads_cv_fdr_prefix(self):
         rep = {
-            'x.com.samsung.da.modes': ['CVN_CONVERTIBLE_ZONE', 'CV_FDR_MEAT', 'WATERFILTER_ENABLE'],
-            'x.com.samsung.da.supportedOptions': [
-                'CV_FDR_WINE', 'CV_FDR_DELI', 'CV_FDR_BEVERAGE', 'CV_FDR_MEAT'],
+            "x.com.samsung.da.modes": ["CVN_CONVERTIBLE_ZONE", "CV_FDR_MEAT", "WATERFILTER_ENABLE"],
+            "x.com.samsung.da.supportedOptions": [
+                "CV_FDR_WINE",
+                "CV_FDR_DELI",
+                "CV_FDR_BEVERAGE",
+                "CV_FDR_MEAT",
+            ],
         }
-        assert fridge._flex_zone_current(rep) == 'CV_FDR_MEAT'
+        assert fridge._flex_zone_current(rep) == "CV_FDR_MEAT"
 
     def test_write_replaces_rather_than_duplicates(self):
         rep = {
-            'x.com.samsung.da.modes': ['CVN_CONVERTIBLE_ZONE', 'CV_FDR_MEAT', 'WATERFILTER_ENABLE'],
-            'x.com.samsung.da.supportedOptions': [
-                'CV_FDR_WINE', 'CV_FDR_DELI', 'CV_FDR_BEVERAGE', 'CV_FDR_MEAT'],
+            "x.com.samsung.da.modes": ["CVN_CONVERTIBLE_ZONE", "CV_FDR_MEAT", "WATERFILTER_ENABLE"],
+            "x.com.samsung.da.supportedOptions": [
+                "CV_FDR_WINE",
+                "CV_FDR_DELI",
+                "CV_FDR_BEVERAGE",
+                "CV_FDR_MEAT",
+            ],
         }
-        path, payload = fridge._flex_zone_write('CV_FDR_WINE', rep)
-        assert path == ['mode', 'vs', '0']
-        modes = payload['x.com.samsung.da.modes']
-        assert modes.count('CV_FDR_WINE') == 1
-        assert 'CV_FDR_MEAT' not in modes
-        assert 'CVN_CONVERTIBLE_ZONE' in modes and 'WATERFILTER_ENABLE' in modes
+        path, payload = fridge._flex_zone_write("CV_FDR_WINE", rep)
+        assert path == ["mode", "vs", "0"]
+        modes = payload["x.com.samsung.da.modes"]
+        assert modes.count("CV_FDR_WINE") == 1
+        assert "CV_FDR_MEAT" not in modes
+        assert "CVN_CONVERTIBLE_ZONE" in modes and "WATERFILTER_ENABLE" in modes
 
     def test_exists_only_when_a_current_value_resolves(self):
         """Issue #26's kimchi-refrigerator family also populates /mode/vs/0's
@@ -170,16 +223,16 @@ class TestFlexZone:
         the entity used to bind anyway (supportedOptions is nonempty) and
         get stuck on "unknown" forever."""
         no_overlap_rep = {
-            'x.com.samsung.da.modes': ['KIMCHIT_STORAGE_FREEZER_NORMAL'],
-            'x.com.samsung.da.supportedOptions': [
-                'KIMCHIT_STORAGE_FREEZER_NORMAL_[0]:[0]'],
+            "x.com.samsung.da.modes": ["KIMCHIT_STORAGE_FREEZER_NORMAL"],
+            "x.com.samsung.da.supportedOptions": ["KIMCHIT_STORAGE_FREEZER_NORMAL_[0]:[0]"],
         }
         desc = fridge.FLEX_ZONE.entities[0]
+        assert desc.exists_fn is not None
         assert desc.exists_fn(no_overlap_rep, {}) is False
 
         overlap_rep = {
-            'x.com.samsung.da.modes': ['CV_FDR_MEAT'],
-            'x.com.samsung.da.supportedOptions': ['CV_FDR_WINE', 'CV_FDR_MEAT'],
+            "x.com.samsung.da.modes": ["CV_FDR_MEAT"],
+            "x.com.samsung.da.supportedOptions": ["CV_FDR_WINE", "CV_FDR_MEAT"],
         }
         assert desc.exists_fn(overlap_rep, {}) is True
 
@@ -199,7 +252,7 @@ class TestTp1xNativeDuplicateResources:
         from custom_components.localthings.registry.discovery import discover
         from tests.conftest import _load_device
 
-        resources = _load_device('refrigerator_tp1x_ref_21k_us')
+        resources = _load_device("refrigerator_tp1x_ref_21k_us")
         unbound = []
         bound = discover(
             resources,
@@ -210,24 +263,27 @@ class TestTp1xNativeDuplicateResources:
 
         assert unbound == []
         state = flatten(bound, resources)
-        assert state['defrost_delay'] is False
-        assert 'ice_maker_enabled' not in state
-        assert state['icemaker_one_enabled'] is True
-        assert state['icemaker_two_enabled'] is True
-        assert state['selfcheck_error'] == 'DA_ERROR_NONE'
+        assert state["defrost_delay"] is False
+        assert "ice_maker_enabled" not in state
+        assert state["icemaker_one_enabled"] is True
+        assert state["icemaker_two_enabled"] is True
+        assert state["selfcheck_error"] == "DA_ERROR_NONE"
 
 
 class TestPantryZone:
     """Cool Select Zone pantry compartment on ARTIK051_REF_17K -- issue #20."""
 
     def test_href(self):
-        assert fridge.PANTRY_ZONE.href == '/status/pantry/one/vs/0'
+        assert fridge.PANTRY_ZONE.href == "/status/pantry/one/vs/0"
 
     def test_write(self):
-        desc = fridge.PANTRY_ZONE.entities[0]
-        path, body = desc.write_fn('FDR_WINE', {})
-        assert path == ['status', 'pantry', 'one', 'vs', '0']
-        assert body == {'x.com.samsung.da.mode': 'FDR_WINE'}
+        desc = next(e for e in fridge.PANTRY_ZONE.entities if isinstance(e, SelectDesc))
+        assert desc.write_fn is not None
+        result = desc.write_fn("FDR_WINE", {})
+        assert result is not None
+        path, body = result
+        assert path == ["status", "pantry", "one", "vs", "0"]
+        assert body == {"x.com.samsung.da.mode": "FDR_WINE"}
 
 
 class TestDefiniteTemperatureCooler:
@@ -237,13 +293,18 @@ class TestDefiniteTemperatureCooler:
     control was entirely unbound before this capability was added."""
 
     def test_href(self):
-        assert fridge.DEFINITE_TEMPERATURE_COOLER.href == '/temperature/definite/cooler/vs/0'
+        assert fridge.DEFINITE_TEMPERATURE_COOLER.href == "/temperature/definite/cooler/vs/0"
 
     def test_write(self):
-        desc = fridge.DEFINITE_TEMPERATURE_COOLER.entities[0]
-        path, body = desc.write_fn('3', {})
-        assert path == ['temperature', 'definite', 'cooler', 'vs', '0']
-        assert body == {'x.com.samsung.da.definite.desired': '3'}
+        desc = next(
+            e for e in fridge.DEFINITE_TEMPERATURE_COOLER.entities if isinstance(e, SelectDesc)
+        )
+        assert desc.write_fn is not None
+        result = desc.write_fn("3", {})
+        assert result is not None
+        path, body = result
+        assert path == ["temperature", "definite", "cooler", "vs", "0"]
+        assert body == {"x.com.samsung.da.definite.desired": "3"}
 
     def test_no_unbound_hrefs_and_discrete_options(self):
         from custom_components.localthings.registry.adapter import flatten
@@ -251,7 +312,7 @@ class TestDefiniteTemperatureCooler:
         from custom_components.localthings.registry.discovery import discover
         from tests.conftest import _load_device
 
-        resources = _load_device('refrigerator_definite_cooler')
+        resources = _load_device("refrigerator_definite_cooler")
         unbound = []
         bound = discover(
             resources,
@@ -262,10 +323,60 @@ class TestDefiniteTemperatureCooler:
         assert unbound == []
 
         state = flatten(bound, resources)
-        assert state['cooler_temperature_setpoint'] == '2'
+        assert state["cooler_temperature_setpoint"] == "2"
 
-        rep = resources['/temperature/definite/cooler/vs/0']
-        assert rep['x.com.samsung.da.definite.supportedList'] == ['1', '2', '3', '4', '7']
+        rep = resources["/temperature/definite/cooler/vs/0"]
+        assert rep["x.com.samsung.da.definite.supportedList"] == ["1", "2", "3", "4", "7"]
+
+
+class TestDefiniteTemperatureFreezer:
+    """Discrete freezer setpoint (TP1X_REF_21K, issue #229) -- the same
+    definite-setpoint pattern as DEFINITE_TEMPERATURE_COOLER above, on a
+    fridge/freezer combo that reports it for *both* compartments. Identical
+    field shape, just negative supportedList values."""
+
+    def test_href(self):
+        assert fridge.DEFINITE_TEMPERATURE_FREEZER.href == "/temperature/definite/freezer/vs/0"
+
+    def test_write(self):
+        desc = next(
+            e for e in fridge.DEFINITE_TEMPERATURE_FREEZER.entities if isinstance(e, SelectDesc)
+        )
+        assert desc.write_fn is not None
+        result = desc.write_fn("-19", {})
+        assert result is not None
+        path, body = result
+        assert path == ["temperature", "definite", "freezer", "vs", "0"]
+        assert body == {"x.com.samsung.da.definite.desired": "-19"}
+
+    def test_no_unbound_hrefs_and_discrete_options(self):
+        from custom_components.localthings.registry.adapter import flatten
+        from custom_components.localthings.registry.by_type import refrigerator
+        from custom_components.localthings.registry.discovery import discover
+        from tests.conftest import _load_device
+
+        resources = _load_device("refrigerator_tp1x_ref_21k_definite")
+        unbound = []
+        bound = discover(
+            resources,
+            refrigerator.REGISTRY.capabilities,
+            refrigerator.REGISTRY.pattern_capabilities,
+            log=unbound.append,
+        )
+        assert unbound == []
+
+        state = flatten(bound, resources)
+        assert state["cooler_temperature_setpoint"] == "4"
+        assert state["freezer_temperature_setpoint"] == "-19"
+
+        rep = resources["/temperature/definite/freezer/vs/0"]
+        assert rep["x.com.samsung.da.definite.supportedList"] == [
+            "-23",
+            "-21",
+            "-19",
+            "-17",
+            "-15",
+        ]
 
 
 class TestKimchiZone:
@@ -274,44 +385,56 @@ class TestKimchiZone:
     supportMode resource under /status/kimchi/<slot>/vs/0."""
 
     def test_href_prefix(self):
-        assert fridge.KIMCHI_ZONE.href_prefix == '/status/kimchi/'
-        assert fridge.KIMCHI_DOOR_GENERIC.href_prefix == '/kimchidoors/'
+        assert fridge.KIMCHI_ZONE.href_prefix == "/status/kimchi/"
+        assert fridge.KIMCHI_DOOR_GENERIC.href_prefix == "/kimchidoors/"
 
     def test_write_derives_path_from_href(self):
-        desc = fridge.KIMCHI_ZONE.entities[0]
-        rep = {'x.com.samsung.da.supportMode': ['KIMCHI_STORAGE_COLD']}
-        path, body = desc.write_fn(
-            'KIMCHI_STORAGE_COLD', rep, href='/status/kimchi/middle/vs/0')
-        assert path == ['status', 'kimchi', 'middle', 'vs', '0']
-        assert body == {'x.com.samsung.da.currentMode': 'KIMCHI_STORAGE_COLD'}
+        desc = next(e for e in fridge.KIMCHI_ZONE.entities if isinstance(e, SelectDesc))
+        assert desc.write_fn is not None
+        write_fn = cast("Callable[..., tuple[list[str], dict] | None]", desc.write_fn)
+        rep = {"x.com.samsung.da.supportMode": ["KIMCHI_STORAGE_COLD"]}
+        result = write_fn("KIMCHI_STORAGE_COLD", rep, href="/status/kimchi/middle/vs/0")
+        assert result is not None
+        path, body = result
+        assert path == ["status", "kimchi", "middle", "vs", "0"]
+        assert body == {"x.com.samsung.da.currentMode": "KIMCHI_STORAGE_COLD"}
 
     def test_write_without_href_is_rejected(self):
-        desc = fridge.KIMCHI_ZONE.entities[0]
-        rep = {'x.com.samsung.da.supportMode': ['KIMCHI_STORAGE_COLD']}
-        assert desc.write_fn('KIMCHI_STORAGE_COLD', rep) is None
+        desc = next(e for e in fridge.KIMCHI_ZONE.entities if isinstance(e, SelectDesc))
+        assert desc.write_fn is not None
+        rep = {"x.com.samsung.da.supportMode": ["KIMCHI_STORAGE_COLD"]}
+        assert desc.write_fn("KIMCHI_STORAGE_COLD", rep) is None
 
     def test_write_rejects_value_outside_supportmode(self):
         """A value the compartment never advertised is rejected rather than
         written blind -- this write path is unconfirmed against real
         hardware (module docstring above KIMCHI_ZONE), so a bad value here
         is a food-safety-adjacent outcome, not just a cosmetic one."""
-        desc = fridge.KIMCHI_ZONE.entities[0]
-        rep = {'x.com.samsung.da.supportMode': ['KIMCHI_STORAGE_COLD']}
-        assert desc.write_fn(
-            'KIMCHI_STORAGE_WARM', rep, href='/status/kimchi/middle/vs/0',
-        ) is None
+        desc = next(e for e in fridge.KIMCHI_ZONE.entities if isinstance(e, SelectDesc))
+        assert desc.write_fn is not None
+        write_fn = cast("Callable[..., tuple[list[str], dict] | None]", desc.write_fn)
+        rep = {"x.com.samsung.da.supportMode": ["KIMCHI_STORAGE_COLD"]}
+        assert (
+            write_fn(
+                "KIMCHI_STORAGE_WARM",
+                rep,
+                href="/status/kimchi/middle/vs/0",
+            )
+            is None
+        )
 
     def test_ripening_status_passes_through_device_value(self):
         """No device_class='enum' catalog entry exists for this sensor, so
         lowercasing it would only make the raw device token un-translatable
         by HA -- pass the device's own casing straight through instead."""
-        desc = next(e for e in fridge.KIMCHI_ZONE.entities if e.key == 'ripening_status')
-        assert desc.value_fn('Off') == 'Off'
+        desc = next(e for e in fridge.KIMCHI_ZONE.entities if e.key == "ripening_status")
+        assert desc.value_fn("Off") == "Off"
 
     def test_door_reuses_open_state_helper(self):
         desc = fridge.KIMCHI_DOOR_GENERIC.entities[0]
-        assert desc.rep_fn({'x.com.samsung.da.openState': 'Open'}) is True
-        assert desc.rep_fn({'x.com.samsung.da.openState': 'Close'}) is False
+        assert desc.rep_fn is not None
+        assert desc.rep_fn({"x.com.samsung.da.openState": "Open"}) is True
+        assert desc.rep_fn({"x.com.samsung.da.openState": "Close"}) is False
 
     async def test_zone_mode_select_round_trips_through_display_casing(self):
         """kimchi_zone_mode's displayed value (lowercase, catalog-translated)
@@ -327,18 +450,20 @@ class TestKimchiZone:
         from custom_components.localthings.select import LocalThingsSelect
         from tests.conftest import _load_device
 
-        resources = _load_device('refrigerator_tp2x_ref_20k_kimchi')
+        resources = _load_device("refrigerator_tp2x_ref_20k_kimchi")
         bound = discover(
-            resources, refrigerator.REGISTRY.capabilities,
+            resources,
+            refrigerator.REGISTRY.capabilities,
             refrigerator.REGISTRY.pattern_capabilities,
         )
         mode_bound = next(
-            b for b in bound
-            if isinstance(b.desc, SelectDesc) and b.href == '/status/kimchi/middle/vs/0'
+            b
+            for b in bound
+            if isinstance(b.desc, SelectDesc) and b.href == "/status/kimchi/middle/vs/0"
         )
 
         class _FakeCoordinator:
-            device_serial = 'TEST-SERIAL'
+            device_serial = "TEST-SERIAL"
 
             def __init__(self, resources, data):
                 self.last_resources = resources
@@ -349,14 +474,14 @@ class TestKimchiZone:
                 self.commands.append(value)
 
         coordinator = _FakeCoordinator(resources, flatten(bound, resources))
-        entity = LocalThingsSelect(coordinator, mode_bound)
+        entity = LocalThingsSelect(cast(LocalThingsCoordinator, coordinator), mode_bound)
 
-        assert entity.current_option == 'kimchi_storage_normal'
-        assert 'kimchi_storage_cold' in entity.options
+        assert entity.current_option == "kimchi_storage_normal"
+        assert "kimchi_storage_cold" in entity.options
 
-        await entity.async_select_option('kimchi_storage_cold')
+        await entity.async_select_option("kimchi_storage_cold")
 
-        assert coordinator.commands == ['KIMCHI_STORAGE_COLD']
+        assert coordinator.commands == ["KIMCHI_STORAGE_COLD"]
 
 
 class TestArtik051AndTp2xFixturesHaveCompleteCoverage:
@@ -372,7 +497,7 @@ class TestArtik051AndTp2xFixturesHaveCompleteCoverage:
         from custom_components.localthings.registry.discovery import discover
         from tests.conftest import _load_device
 
-        resources = _load_device('refrigerator_artik051_ref_17k')
+        resources = _load_device("refrigerator_artik051_ref_17k")
         unbound = []
         bound = discover(
             resources,
@@ -382,7 +507,7 @@ class TestArtik051AndTp2xFixturesHaveCompleteCoverage:
         )
         assert unbound == []
         state = flatten(bound, resources)
-        assert state['pantry_zone_mode'] == 'FDR_DRINKS'
+        assert state["pantry_zone_mode"] == "FDR_DRINKS"
 
     def test_tp2x_ref_20k(self):
         from custom_components.localthings.registry.adapter import flatten
@@ -390,7 +515,7 @@ class TestArtik051AndTp2xFixturesHaveCompleteCoverage:
         from custom_components.localthings.registry.discovery import discover
         from tests.conftest import _load_device
 
-        resources = _load_device('refrigerator_tp2x_ref_20k')
+        resources = _load_device("refrigerator_tp2x_ref_20k")
         unbound = []
         bound = discover(
             resources,
@@ -400,7 +525,7 @@ class TestArtik051AndTp2xFixturesHaveCompleteCoverage:
         )
         assert unbound == []
         state = flatten(bound, resources)
-        assert state['flex_zone_mode'] == 'CV_FDR_BEVERAGE'
+        assert state["flex_zone_mode"] == "CV_FDR_BEVERAGE"
 
     def test_tp2x_ref_20k_kimchi(self):
         """A different physical unit sharing the same modelNum string (issue
@@ -412,7 +537,7 @@ class TestArtik051AndTp2xFixturesHaveCompleteCoverage:
         from custom_components.localthings.registry.discovery import discover
         from tests.conftest import _load_device
 
-        resources = _load_device('refrigerator_tp2x_ref_20k_kimchi')
+        resources = _load_device("refrigerator_tp2x_ref_20k_kimchi")
         unbound = []
         bound = discover(
             resources,
@@ -422,12 +547,12 @@ class TestArtik051AndTp2xFixturesHaveCompleteCoverage:
         )
         assert unbound == []
         state = flatten(bound, resources)
-        assert state['top_mode'] == 'STORAGE_FREEZER_NORMAL'
-        assert state['middle_mode'] == 'KIMCHI_STORAGE_NORMAL'
-        assert state['bottom_mode'] == 'KIMCHI_STORAGE_NORMAL'
-        assert state['top_open'] is False
-        assert 'middle_open' not in state  # no /kimchidoors/middle/vs/0 reported
-        assert 'flex_zone_mode' not in state  # no resolvable overlap on this family
+        assert state["top_mode"] == "STORAGE_FREEZER_NORMAL"
+        assert state["middle_mode"] == "KIMCHI_STORAGE_NORMAL"
+        assert state["bottom_mode"] == "KIMCHI_STORAGE_NORMAL"
+        assert state["top_open"] is False
+        assert "middle_open" not in state  # no /kimchidoors/middle/vs/0 reported
+        assert "flex_zone_mode" not in state  # no resolvable overlap on this family
 
 
 class TestArtik051DongleRefFixtureCoverage:
@@ -440,27 +565,31 @@ class TestArtik051DongleRefFixtureCoverage:
     def test_no_unbound_hrefs_and_expected_entities(self):
         from custom_components.localthings.registry.adapter import flatten
         from custom_components.localthings.registry.by_type import (
-            for_device_by_model, refrigerator,
+            for_device_by_model,
+            refrigerator,
         )
         from custom_components.localthings.registry.discovery import discover
         from tests.conftest import _load_device
 
-        resources = _load_device('refrigerator_artik051_dongle_ref')
-        info = resources['/information/vs/0']
+        resources = _load_device("refrigerator_artik051_dongle_ref")
+        info = resources["/information/vs/0"]
         reg = for_device_by_model(
-            info['x.com.samsung.da.modelNum'], info['x.com.samsung.da.description'])
-        assert reg is not None and reg.name == 'refrigerator'
+            info["x.com.samsung.da.modelNum"], info["x.com.samsung.da.description"]
+        )
+        assert reg is not None and reg.name == "refrigerator"
 
         unbound = []
         bound = discover(
-            resources, refrigerator.REGISTRY.capabilities,
-            refrigerator.REGISTRY.pattern_capabilities, log=unbound.append,
+            resources,
+            refrigerator.REGISTRY.capabilities,
+            refrigerator.REGISTRY.pattern_capabilities,
+            log=unbound.append,
         )
         assert unbound == []
         state = flatten(bound, resources)
-        assert state['door_onedoorfreezer_open'] is False   # rep reports 'Close'
-        assert state['freezer_temperature'] == -20.0
-        assert state['freezer_setpoint'] == -20.0
+        assert state["door_onedoorfreezer_open"] is False  # rep reports 'Close'
+        assert state["freezer_temperature"] == -20.0
+        assert state["freezer_setpoint"] == -20.0
 
 
 class TestArtik051DongleRefCoolerFixtureCoverage:
@@ -475,28 +604,32 @@ class TestArtik051DongleRefCoolerFixtureCoverage:
     def test_no_unbound_hrefs_and_expected_entities(self):
         from custom_components.localthings.registry.adapter import flatten
         from custom_components.localthings.registry.by_type import (
-            for_device_by_model, refrigerator,
+            for_device_by_model,
+            refrigerator,
         )
         from custom_components.localthings.registry.discovery import discover
         from tests.conftest import _load_device
 
-        resources = _load_device('refrigerator_artik051_dongle_ref_cooler')
-        info = resources['/information/vs/0']
+        resources = _load_device("refrigerator_artik051_dongle_ref_cooler")
+        info = resources["/information/vs/0"]
         reg = for_device_by_model(
-            info['x.com.samsung.da.modelNum'], info['x.com.samsung.da.description'])
-        assert reg is not None and reg.name == 'refrigerator'
+            info["x.com.samsung.da.modelNum"], info["x.com.samsung.da.description"]
+        )
+        assert reg is not None and reg.name == "refrigerator"
 
         unbound = []
         bound = discover(
-            resources, refrigerator.REGISTRY.capabilities,
-            refrigerator.REGISTRY.pattern_capabilities, log=unbound.append,
+            resources,
+            refrigerator.REGISTRY.capabilities,
+            refrigerator.REGISTRY.pattern_capabilities,
+            log=unbound.append,
         )
         assert unbound == []
         state = flatten(bound, resources)
-        assert state['door_cooler_open'] is False
-        assert state['door_onedoorfreezer_open'] is False
-        assert state['cooler_temperature'] == 3.0
-        assert state['cooler_setpoint'] == 3.0
+        assert state["door_cooler_open"] is False
+        assert state["door_onedoorfreezer_open"] is False
+        assert state["cooler_temperature"] == 3.0
+        assert state["cooler_setpoint"] == 3.0
 
 
 class TestRefrigeratorAiEnergyLevelFixtureCoverage:
@@ -515,7 +648,7 @@ class TestRefrigeratorAiEnergyLevelFixtureCoverage:
         from custom_components.localthings.registry.discovery import discover
         from tests.conftest import _load_device
 
-        resources = _load_device('refrigerator')
+        resources = _load_device("refrigerator")
         unbound = []
         bound = discover(
             resources,
@@ -525,7 +658,7 @@ class TestRefrigeratorAiEnergyLevelFixtureCoverage:
         )
         assert unbound == []
         state = flatten(bound, resources)
-        assert state['ai_energy_level'] == '1'
+        assert state["ai_energy_level"] == "1"
 
 
 class TestSwitchOffIsNotInverted:
@@ -539,26 +672,24 @@ class TestSwitchOffIsNotInverted:
     """
 
     # (switch descriptor, payload key it writes)
-    CASES = [
-        (fridge.ICEMAKER_NIGHTTIME.entities[0], 'ice.night.status'),
-        (fridge.STATUS_LOCK.entities[0], 'x.com.samsung.da.ado.devicecontrol'),
-        (fridge.STATUS_LOCK.entities[1], 'x.com.samsung.da.device.sound'),
-        (fridge.DEFROST_DELAY.entities[0], 'x.com.samsung.da.delayDefrost'),
-        (fridge.WELCOME_LIGHTING.entities[0], 'status'),
-        (fridge.CABINET_LIGHT.entities[1], 'light.dimming.status'),
-        (fridge.ICEMAKER_STATUS_FALLBACK.entities[0], 'x.com.samsung.da.iceMaker'),
+    CASES: ClassVar[list] = [
+        (fridge.ICEMAKER_NIGHTTIME.entities[0], "ice.night.status"),
+        (fridge.STATUS_LOCK.entities[0], "x.com.samsung.da.ado.devicecontrol"),
+        (fridge.STATUS_LOCK.entities[1], "x.com.samsung.da.device.sound"),
+        (fridge.DEFROST_DELAY.entities[0], "x.com.samsung.da.delayDefrost"),
+        (fridge.WELCOME_LIGHTING.entities[0], "status"),
+        (fridge.CABINET_LIGHT.entities[1], "light.dimming.status"),
+        (fridge.ICEMAKER_STATUS_FALLBACK.entities[0], "x.com.samsung.da.iceMaker"),
     ]
 
     def test_turning_off_sends_off(self):
         for desc, key in self.CASES:
-            _segs, payload = desc.write_fn('Off', {})
-            assert payload[key] == 'Off', (
+            _segs, payload = desc.write_fn("Off", {})
+            assert payload[key] == "Off", (
                 f"{desc.key}: OFF must send 'Off', got {payload[key]!r} (inverted)"
             )
 
     def test_turning_on_sends_on(self):
         for desc, key in self.CASES:
-            _segs, payload = desc.write_fn('On', {})
-            assert payload[key] == 'On', (
-                f"{desc.key}: ON must send 'On', got {payload[key]!r}"
-            )
+            _segs, payload = desc.write_fn("On", {})
+            assert payload[key] == "On", f"{desc.key}: ON must send 'On', got {payload[key]!r}"

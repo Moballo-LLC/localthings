@@ -22,36 +22,46 @@ match_fn discriminators that keep them from colliding):
   resource surface as A-VTWW-TP2-21-COMMON above; no new capabilities
   needed.
 
+AIR_LEVEL_CHECK ("AI Purify" -- the periodic air-quality sensing engine on
+/airlevelcheck/vs/0) is shared by the last three of those: their dumps all
+carry the resource with the same field names, and only the TVTL family has no
+such href. It was covered as opaque plumbing until two AVT-WW-TP1 dumps
+(issues #84 and #190) showed it drives a real user-facing feature.
+
 Reuses dishwasher.DIAGNOSIS for /diagnosis/vs/0 (identical field/write
 contract).
 """
+
 from ..capabilities import air_purifier, airconditioner, common, dishwasher, ignored
 from ._base import DeviceRegistry, _build
 
 REGISTRY = DeviceRegistry(
-    name='air_purifier',
-    capabilities=_build([
-        *ignored.IGNORED,
-        *common.UNIVERSAL,
-        *common.POWER,
-        dishwasher.DIAGNOSIS,
-        air_purifier.AIR_QUALITY,
-        air_purifier.FILTER,
-        air_purifier.DEVICE_ACTIVE,
-        air_purifier.AIRFLOW_GENERIC,
-        air_purifier.AIRFLOW_VS_FALLBACK,
-        air_purifier.MODE,
-        air_purifier.FAN,
-        air_purifier.WIND_STRENGTH_FAN,
-        air_purifier.DISPLAY,
-        air_purifier.HEPA_FILTER,
-        air_purifier.PANEL_STATUS,
-        air_purifier.PET_FILTER_ACTIVATION,
-        air_purifier.SOUND_MODE,
-        air_purifier.SOUND_OUTPUT,
-        air_purifier.SOUND_VOLUME,
-        airconditioner.DISPLAY_LIGHT,
-        airconditioner.MUTE_ONCE,
-        *air_purifier.COVERAGE,
-    ]),
+    name="air_purifier",
+    capabilities=_build(
+        [
+            *ignored.IGNORED,
+            *common.UNIVERSAL,
+            *common.POWER,
+            dishwasher.DIAGNOSIS,
+            air_purifier.AIR_QUALITY,
+            air_purifier.AIR_LEVEL_CHECK,
+            air_purifier.FILTER,
+            air_purifier.DEVICE_ACTIVE,
+            air_purifier.AIRFLOW_GENERIC,
+            air_purifier.AIRFLOW_VS_FALLBACK,
+            air_purifier.MODE,
+            air_purifier.FAN,
+            air_purifier.WIND_STRENGTH_FAN,
+            air_purifier.DISPLAY,
+            air_purifier.HEPA_FILTER,
+            air_purifier.PANEL_STATUS,
+            air_purifier.PET_FILTER_ACTIVATION,
+            air_purifier.SOUND_MODE,
+            air_purifier.SOUND_OUTPUT,
+            air_purifier.SOUND_VOLUME,
+            airconditioner.DISPLAY_LIGHT,
+            airconditioner.MUTE_ONCE,
+            *air_purifier.COVERAGE,
+        ]
+    ),
 )

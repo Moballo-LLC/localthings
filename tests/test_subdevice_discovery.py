@@ -5,56 +5,72 @@ what actually exercises _enumerate_subdevices_blocking + _run_discovery
 together, including device_info_for/via_device and the "no phantom
 /device/2 entities" guarantee.
 """
+
 from __future__ import annotations
 
-import pytest
+from typing import Any, cast
+
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+from smartthings_local.protocol.dtls_session import DtlsCoapSession
 
 from custom_components.localthings.const import (
-    CONF_HOST, CONF_LEAF_CERT_PEM, CONF_LEAF_KEY_PEM, CONF_PORT, DOMAIN,
+    CONF_HOST,
+    CONF_LEAF_CERT_PEM,
+    CONF_LEAF_KEY_PEM,
+    CONF_PORT,
+    DOMAIN,
 )
 from custom_components.localthings.coordinator import LocalThingsCoordinator
 from custom_components.localthings.registry.entities import ClimateDesc
 from custom_components.localthings.registry.identity import DeviceIdentity
-
 from tests.conftest import FakeCoapSession, _load_device_full
 
 ENTRY_DATA = {
-    CONF_HOST: '10.0.0.177',
+    CONF_HOST: "10.0.0.177",
     CONF_PORT: 49154,
-    CONF_LEAF_CERT_PEM: '-----BEGIN CERTIFICATE-----\nTEST-LEAF\n-----END CERTIFICATE-----',
-    CONF_LEAF_KEY_PEM: '-----BEGIN PRIVATE KEY-----\nTEST-LEAF-KEY\n-----END PRIVATE KEY-----',
+    CONF_LEAF_CERT_PEM: "-----BEGIN CERTIFICATE-----\nTEST-LEAF\n-----END CERTIFICATE-----",
+    CONF_LEAF_KEY_PEM: "-----BEGIN PRIVATE KEY-----\nTEST-LEAF-KEY\n-----END PRIVATE KEY-----",
 }
 
 
 def _coordinator(hass: HomeAssistant) -> LocalThingsCoordinator:
     entry = MockConfigEntry(
-        domain=DOMAIN, data=ENTRY_DATA, unique_id='localthings_SUBDEVICE-TEST',
+        domain=DOMAIN,
+        data=ENTRY_DATA,
+        unique_id="localthings_SUBDEVICE-TEST",
     )
     entry.add_to_hass(hass)
     return LocalThingsCoordinator(hass, entry)
 
 
 async def _discover_with(
-    coordinator: LocalThingsCoordinator, resources: dict, oic_res, seeds: dict,
+    coordinator: LocalThingsCoordinator,
+    resources: dict,
+    oic_res,
+    seeds: dict,
 ) -> None:
     """Run the same two-step sequence _async_update_data's first cycle does
     (enumerate, then discover) against arbitrary resources/oic_res/seeds,
     without the polling/reconnect machinery around it -- see coordinator.py's
     _enumerate_subdevices_blocking/_run_discovery. `_discover` below is the
     fixture-file-backed convenience wrapper most tests want."""
-    coordinator._session = FakeCoapSession(seeds)
+    coordinator._session = cast(DtlsCoapSession, FakeCoapSession(seeds))
     # _connect_session (skipped here -- the session is pre-set) is what
     # normally populates _identity via read_identity; set it directly with
     # the fixture's real /oic/res so enumeration sees the same links a live
     # read_identity call would have captured.
     coordinator._identity = DeviceIdentity(
-        manufacturer='Samsung Electronics', model='', name='', serial=None,
-        device_types=(), raw={'/oic/p': {}, '/oic/d': {}, '/oic/res': oic_res},
+        manufacturer="Samsung Electronics",
+        model="",
+        name="",
+        serial=None,
+        device_types=(),
+        raw={"/oic/p": {}, "/oic/d": {}, "/oic/res": oic_res},
     )
     merged = await coordinator.hass.async_add_executor_job(
-        coordinator._enumerate_subdevices_blocking, resources,
+        coordinator._enumerate_subdevices_blocking,
+        resources,
     )
     # Mirror _async_update_data's first-cycle order exactly: discover, then
     # drop the candidates the liveness gate rejected, then apply what's left
@@ -66,7 +82,7 @@ async def _discover_with(
     # longer uses.
     coordinator._run_discovery(merged)
     for href, rep in coordinator._live_subdevice_resources(merged).items():
-        coordinator._observe.apply(href, rep, source='poll')
+        coordinator._observe.apply(href, rep, source="poll")
 
 
 async def _discover(coordinator: LocalThingsCoordinator, name: str) -> None:
@@ -75,8 +91,9 @@ async def _discover(coordinator: LocalThingsCoordinator, name: str) -> None:
     await _discover_with(coordinator, resources, oic_res, seeds)
 
 
-def _climate_bound(coordinator, subdevice_key: str):
+def _climate_bound(coordinator, subdevice_key: str | None):
     from custom_components.localthings.registry.subdevices import MAIN
+
     for b in coordinator.bound:
         if isinstance(b.desc, ClimateDesc):
             if subdevice_key is None and b.subdevice == MAIN:
@@ -90,18 +107,19 @@ def _climate_bound(coordinator, subdevice_key: str):
 # Pattern A reporter -- ARTIK051_DONGLE_FAC_18K, indexed siblings
 # ---------------------------------------------------------------------------
 
+
 async def test_pattern_a_materializes_master_and_bedroom_subdevice(hass: HomeAssistant):
     coordinator = _coordinator(hass)
-    await _discover(coordinator, 'airconditioner_artik051_dongle_fac_18k')
+    await _discover(coordinator, "airconditioner_artik051_dongle_fac_18k")
 
-    assert [su.key for su in coordinator.subdevices] == ['1']
+    assert [su.key for su in coordinator.subdevices] == ["1"]
 
     main_climate = _climate_bound(coordinator, None)
-    sub1_climate = _climate_bound(coordinator, '1')
+    sub1_climate = _climate_bound(coordinator, "1")
     assert main_climate is not None
     assert sub1_climate is not None
-    assert main_climate.href == '/mode/vs/0'
-    assert sub1_climate.href == '/mode/vs/1'
+    assert main_climate.href == "/mode/vs/0"
+    assert sub1_climate.href == "/mode/vs/1"
 
 
 async def test_pattern_a_device_2_produces_no_entities_at_all(hass: HomeAssistant):
@@ -110,37 +128,38 @@ async def test_pattern_a_device_2_produces_no_entities_at_all(hass: HomeAssistan
     batch, but every climate-state rep on it is empty. It must be recorded
     as skipped, not materialized, and must contribute zero bound entities."""
     coordinator = _coordinator(hass)
-    await _discover(coordinator, 'airconditioner_artik051_dongle_fac_18k')
+    await _discover(coordinator, "airconditioner_artik051_dongle_fac_18k")
 
-    assert '2' not in [su.key for su in coordinator.subdevices]
+    assert "2" not in [su.key for su in coordinator.subdevices]
     assert any(
-        skip.subdevice.kind == 'indexed' and skip.subdevice.key == '2'
+        skip.subdevice.kind == "indexed" and skip.subdevice.key == "2"
         for skip in coordinator._skipped_subdevices
     )
-    assert not any(b.subdevice.key == '2' for b in coordinator.bound)
-    assert not any(href.endswith('/2') for href in coordinator._hot_hrefs)
-    assert not any(href.endswith('/2') for href in coordinator._warm_hrefs)
+    assert not any(b.subdevice.key == "2" for b in coordinator.bound)
+    assert not any(href.endswith("/2") for href in coordinator._hot_hrefs)
+    assert not any(href.endswith("/2") for href in coordinator._warm_hrefs)
 
 
 async def test_pattern_a_sub1_device_info_links_via_device_to_master(hass: HomeAssistant):
     coordinator = _coordinator(hass)
-    await _discover(coordinator, 'airconditioner_artik051_dongle_fac_18k')
+    await _discover(coordinator, "airconditioner_artik051_dongle_fac_18k")
 
-    sub1 = next(su for su in coordinator.subdevices if su.key == '1')
+    sub1 = next(su for su in coordinator.subdevices if su.key == "1")
     info = coordinator.device_info_for(sub1)
 
     master_serial = coordinator.device_serial
-    assert info['identifiers'] == {(DOMAIN, f'{master_serial}_1')}
-    assert info['via_device'] == (DOMAIN, master_serial)
+    assert info["identifiers"] == {(DOMAIN, f"{master_serial}_1")}
+    assert info["via_device"] == (DOMAIN, master_serial)
     # The subdevice's own /information/vs/1 (real, ARTIK051_DONGLE_FAC_RAC_18K)
     # is what names/models this device, not the master's.
-    assert info['model'] == 'ARTIK051_DONGLE_FAC_RAC_18K'
+    assert info["model"] == "ARTIK051_DONGLE_FAC_RAC_18K"
 
 
 # ---------------------------------------------------------------------------
 # Issue #214 -- a *non-composite* board whose speculative /device/1 probe
 # answers with an unused slot that reports the appliance's energy counter.
 # ---------------------------------------------------------------------------
+
 
 async def test_krac_18k_energy_only_slot_is_not_materialized(hass: HomeAssistant):
     """The issue #214 reporter's single-split AR12NXWXCWKNEU (ARTIK051_KRAC_18K,
@@ -154,27 +173,31 @@ async def test_krac_18k_energy_only_slot_is_not_materialized(hass: HomeAssistant
     slot, so the candidate must now be recorded as skipped and contribute
     nothing: no bound entities, no HA device, no hot/warm hrefs."""
     coordinator = _coordinator(hass)
-    await _discover(coordinator, 'airconditioner_artik051_krac_18k_slot')
+    await _discover(coordinator, "airconditioner_artik051_krac_18k_slot")
 
     assert coordinator.subdevices == []
-    assert [s.subdevice.key for s in coordinator._skipped_subdevices] == ['1']
+    assert [s.subdevice.key for s in coordinator._skipped_subdevices] == ["1"]
     # The gate ran against real bindings, not against nothing -- these are the
     # six hrefs the reporter's own diagnostics reported for the (then
     # materialized) subdevice, /energy/consumption/vs/1 among them.
     assert coordinator._skipped_subdevices[0].hrefs == (
-        '/alarms/vs/1', '/diagnosis/vs/1', '/energy/consumption/vs/1',
-        '/humidity/vs/1', '/mode/vs/1', '/temperature/current/1',
+        "/alarms/vs/1",
+        "/diagnosis/vs/1",
+        "/energy/consumption/vs/1",
+        "/humidity/vs/1",
+        "/mode/vs/1",
+        "/temperature/current/1",
     )
-    assert coordinator._subdevice_probes['/device/1'] is True
+    assert coordinator._subdevice_probes["/device/1"] is True
 
-    assert not any(b.subdevice.key == '1' for b in coordinator.bound)
-    assert not any(href.endswith('/1') for href in coordinator._hot_hrefs)
-    assert not any(href.endswith('/1') for href in coordinator._warm_hrefs)
+    assert not any(b.subdevice.key == "1" for b in coordinator.bound)
+    assert not any(href.endswith("/1") for href in coordinator._hot_hrefs)
+    assert not any(href.endswith("/1") for href in coordinator._warm_hrefs)
 
     # The master is untouched -- one climate entity, on the master's own
     # device, exactly as this board behaved before subdevice support existed.
     assert _climate_bound(coordinator, None) is not None
-    assert _climate_bound(coordinator, '1') is None
+    assert _climate_bound(coordinator, "1") is None
 
 
 async def test_krac_18k_slot_state_never_reaches_the_cache(hass: HomeAssistant):
@@ -185,49 +208,49 @@ async def test_krac_18k_slot_state_never_reaches_the_cache(hass: HomeAssistant):
     from it -- at its first-discovery value forever, since nothing polls the
     slot again."""
     coordinator = _coordinator(hass)
-    await _discover(coordinator, 'airconditioner_artik051_krac_18k_slot')
+    await _discover(coordinator, "airconditioner_artik051_krac_18k_slot")
 
-    assert not any(href.endswith('/1') for href in coordinator.last_resources)
+    assert not any(href.endswith("/1") for href in coordinator.last_resources)
     # It's kept aside for diagnostics only, which is where a reader can still
     # check the gate's call for themselves.
-    assert '/energy/consumption/vs/1' in coordinator._skipped_subdevice_resources
+    assert "/energy/consumption/vs/1" in coordinator._skipped_subdevice_resources
 
 
 # ---------------------------------------------------------------------------
 # Issue #177's Pattern B reporter -- TP2X_FAC_BORA_21K, UUID-prefixed tree
 # ---------------------------------------------------------------------------
 
-_SUB_UUID = '6c2dff6d-ee5c-dad1-6a5e-000000000001'
+_SUB_UUID = "6c2dff6d-ee5c-dad1-6a5e-000000000001"
 
 
 async def test_fac_bora_2in1_materializes_prefixed_wall_subdevice(hass: HomeAssistant):
     coordinator = _coordinator(hass)
-    await _discover(coordinator, 'airconditioner_fac_bora_2in1')
+    await _discover(coordinator, "airconditioner_fac_bora_2in1")
 
     assert [su.key for su in coordinator.subdevices] == [_SUB_UUID]
-    assert coordinator.subdevices[0].kind == 'prefixed'
+    assert coordinator.subdevices[0].kind == "prefixed"
 
     main_climate = _climate_bound(coordinator, None)
     sub_climate = _climate_bound(coordinator, _SUB_UUID)
     assert main_climate is not None
     assert sub_climate is not None
-    assert main_climate.href == '/mode/vs/0'
-    assert sub_climate.href == f'/{_SUB_UUID}/mode/vs/0'
+    assert main_climate.href == "/mode/vs/0"
+    assert sub_climate.href == f"/{_SUB_UUID}/mode/vs/0"
 
 
 async def test_fac_bora_2in1_subdevice_device_info(hass: HomeAssistant):
     coordinator = _coordinator(hass)
-    await _discover(coordinator, 'airconditioner_fac_bora_2in1')
+    await _discover(coordinator, "airconditioner_fac_bora_2in1")
 
     subdevice = coordinator.subdevices[0]
     info = coordinator.device_info_for(subdevice)
 
     master_serial = coordinator.device_serial
-    assert info['identifiers'] == {(DOMAIN, f'{master_serial}_{_SUB_UUID}')}
-    assert info['via_device'] == (DOMAIN, master_serial)
+    assert info["identifiers"] == {(DOMAIN, f"{master_serial}_{_SUB_UUID}")}
+    assert info["via_device"] == (DOMAIN, master_serial)
     # Confirmed live by the reporter (DESIGN-177.md section 1): the wall
     # subdevice's own identity, distinct from the master's TP2X_FAC_BORA_21K.
-    assert info['model'] == 'TP2X_FAC_BORA_RAC_21K'
+    assert info["model"] == "TP2X_FAC_BORA_RAC_21K"
 
 
 async def test_fac_bora_2in1_unique_ids_include_subdevice_prefix(hass: HomeAssistant):
@@ -235,12 +258,13 @@ async def test_fac_bora_2in1_unique_ids_include_subdevice_prefix(hass: HomeAssis
     (non-alphanumerics stripped), not a truncation or an ordinal -- see
     Subdevice.key_prefix."""
     coordinator = _coordinator(hass)
-    await _discover(coordinator, 'airconditioner_fac_bora_2in1')
+    await _discover(coordinator, "airconditioner_fac_bora_2in1")
 
     from custom_components.localthings.entity import LocalThingsEntity
+
     sub_climate = _climate_bound(coordinator, _SUB_UUID)
     entity = LocalThingsEntity(coordinator, sub_climate)
-    expected_slug = _SUB_UUID.replace('-', '')
+    expected_slug = _SUB_UUID.replace("-", "")
     assert entity._attr_unique_id == (
         f"{DOMAIN}_{coordinator.device_serial}_subdevice_{expected_slug}_climate"
     )
@@ -253,21 +277,18 @@ async def test_fac_bora_2in1_unique_ids_include_subdevice_prefix(hass: HomeAssis
 # capture instead of the synthetic sessions test_subdevices.py uses.
 # ---------------------------------------------------------------------------
 
+
 async def test_flat_probe_priority_puts_live_climate_state_before_cold_metrics(
     hass: HomeAssistant,
 ):
     """Registry metadata drives fallback order without a model-specific list."""
-    resources, _oic_res, _seeds = _load_device_full(
-        'airconditioner_fac_bora_205_flat'
-    )
+    resources, _oic_res, _seeds = _load_device_full("airconditioner_fac_bora_205_flat")
     coordinator = _coordinator(hass)
 
     priority = coordinator._subdevice_probe_priority(resources)
 
-    assert '/mode/vs/0' in priority[:4]
-    assert priority.index('/mode/vs/0') < priority.index(
-        '/energy/consumption/vs/0'
-    )
+    assert "/mode/vs/0" in priority[:4]
+    assert priority.index("/mode/vs/0") < priority.index("/energy/consumption/vs/0")
 
 
 async def test_fac_bora_205_flat_fallback_finds_candidate_but_gate_holds_it_back(
@@ -283,17 +304,17 @@ async def test_fac_bora_205_flat_fallback_finds_candidate_but_gate_holds_it_back
     materializing a phantom climate card from unconfirmed hrefs. This is the
     honest current state of issue #205, not a guess at its resolution."""
     coordinator = _coordinator(hass)
-    await _discover(coordinator, 'airconditioner_fac_bora_205_flat')
+    await _discover(coordinator, "airconditioner_fac_bora_205_flat")
 
     assert coordinator.subdevices == []
     assert [s.subdevice.key for s in coordinator._skipped_subdevices] == [_SUB_UUID]
     skipped = coordinator._skipped_subdevices[0].subdevice
-    assert skipped.kind == 'prefixed'
+    assert skipped.kind == "prefixed"
     assert skipped.seed_path == ()
-    assert skipped.flat_hrefs == ('/information/vs/0',)
+    assert skipped.flat_hrefs == ("/information/vs/0",)
 
-    assert coordinator._subdevice_probes[f'/{_SUB_UUID}/device/0'] is False
-    assert coordinator._subdevice_probes[f'/{_SUB_UUID}/information/vs/0'] is True
+    assert coordinator._subdevice_probes[f"/{_SUB_UUID}/device/0"] is False
+    assert coordinator._subdevice_probes[f"/{_SUB_UUID}/information/vs/0"] is True
 
     # Confirms the master itself is completely unaffected by its sibling's
     # Collection endpoint not answering -- same guarantee every other
@@ -318,7 +339,7 @@ async def test_flat_subdevice_materializes_and_repolls_end_to_end(hass: HomeAssi
     add GETs, not freshness, so they're the ones this method must skip.
     /option/autoclean/vs/0 is cold-tier and is what actually needs this
     path."""
-    resources, oic_res, _real_seeds = _load_device_full('airconditioner_fac_bora_2in1')
+    resources, oic_res, _real_seeds = _load_device_full("airconditioner_fac_bora_2in1")
     seeds = {
         # No (_SUB_UUID, 'device', '0') entry -- forces the flat fallback,
         # same as the real issue #205 capture above, but this time with
@@ -327,23 +348,27 @@ async def test_flat_subdevice_materializes_and_repolls_end_to_end(hass: HomeAssi
         # Collection-batch seed, just served individually instead of
         # batched, to isolate "does flat mode produce the same result as
         # Collection mode" as the only variable.
-        f'/{_SUB_UUID}/power/vs/0': {'x.com.samsung.da.power': 'On'},
-        f'/{_SUB_UUID}/mode/vs/0': {
-            'x.com.samsung.da.supportedModes': ['Cool', 'Dry', 'Wind', 'Auto'],
-            'x.com.samsung.da.modes': ['Cool'],
-            'x.com.samsung.da.options': [],
+        f"/{_SUB_UUID}/power/vs/0": {"x.com.samsung.da.power": "On"},
+        f"/{_SUB_UUID}/mode/vs/0": {
+            "x.com.samsung.da.supportedModes": ["Cool", "Dry", "Wind", "Auto"],
+            "x.com.samsung.da.modes": ["Cool"],
+            "x.com.samsung.da.options": [],
         },
-        f'/{_SUB_UUID}/temperature/current/0': {
-            'range': [18.0, 30.0], 'units': 'C', 'temperature': 26.0,
+        f"/{_SUB_UUID}/temperature/current/0": {
+            "range": [18.0, 30.0],
+            "units": "C",
+            "temperature": 26.0,
         },
-        f'/{_SUB_UUID}/temperature/desired/0': {
-            'range': [18.0, 30.0], 'units': 'C', 'temperature': 24.0,
+        f"/{_SUB_UUID}/temperature/desired/0": {
+            "range": [18.0, 30.0],
+            "units": "C",
+            "temperature": 24.0,
         },
         # Cold-tier -- not covered by _run_subpolls, so this is the href
         # that actually depends on _poll_subdevice_flat_hrefs to ever
         # refresh at all.
-        f'/{_SUB_UUID}/option/autoclean/vs/0': {
-            'x.com.samsung.da.settingStatus': 'Off',
+        f"/{_SUB_UUID}/option/autoclean/vs/0": {
+            "x.com.samsung.da.settingStatus": "Off",
         },
     }
     coordinator = _coordinator(hass)
@@ -360,29 +385,35 @@ async def test_flat_subdevice_materializes_and_repolls_end_to_end(hass: HomeAssi
     # Re-poll: a fresh reading under the prefix should reach
     # canonical_resources through _poll_subdevice_seed's flat-mode branch,
     # not just sit frozen at the one-time enumeration snapshot.
-    coordinator._session.seeds[f'/{_SUB_UUID}/temperature/current/0'] = {
-        'range': [18.0, 30.0], 'units': 'C', 'temperature': 27.5,
+    # FakeCoapSession's `seeds` is typed `dict[str, list]` for the common
+    # batch-list shape, but (per its own docstring) also legitimately holds
+    # plain Property maps for probe-style hrefs like these two.
+    seeds_map = cast("dict[str, Any]", cast(FakeCoapSession, coordinator._session).seeds)
+    seeds_map[f"/{_SUB_UUID}/temperature/current/0"] = {
+        "range": [18.0, 30.0],
+        "units": "C",
+        "temperature": 27.5,
     }
-    coordinator._session.seeds[f'/{_SUB_UUID}/option/autoclean/vs/0'] = {
-        'x.com.samsung.da.settingStatus': 'On',
+    seeds_map[f"/{_SUB_UUID}/option/autoclean/vs/0"] = {
+        "x.com.samsung.da.settingStatus": "On",
     }
     refreshed = coordinator._poll_subdevice_seed(subdevice)
 
     # The warm-tier temperature href is skipped here -- already covered by
     # _run_subpolls at a faster cadence -- so it does NOT show up refreshed
     # through this path.
-    assert f'/{_SUB_UUID}/temperature/current/0' not in refreshed
+    assert f"/{_SUB_UUID}/temperature/current/0" not in refreshed
     assert refreshed == {
-        f'/{_SUB_UUID}/option/autoclean/vs/0': {'x.com.samsung.da.settingStatus': 'On'},
+        f"/{_SUB_UUID}/option/autoclean/vs/0": {"x.com.samsung.da.settingStatus": "On"},
     }
 
     for href, rep in refreshed.items():
-        coordinator._observe.apply(href, rep, source='poll')
+        coordinator._observe.apply(href, rep, source="poll")
     res = coordinator.canonical_resources(subdevice)
-    assert res['/option/autoclean/vs/0']['x.com.samsung.da.settingStatus'] == 'On'
+    assert res["/option/autoclean/vs/0"]["x.com.samsung.da.settingStatus"] == "On"
     # Confirms the skip is about redundant re-fetching, not stale data --
     # the warm-tier value from initial discovery is still there, untouched.
-    assert res['/temperature/current/0']['temperature'] == 26.0
+    assert res["/temperature/current/0"]["temperature"] == 26.0
 
 
 class _FakeCollectionSession:
@@ -399,8 +430,9 @@ class _FakeCollectionSession:
         self.calls.append(tuple(path))
         body = self.table.get(tuple(path))
         if body is None:
-            return 0x84, b''
+            return 0x84, b""
         import cbor2
+
         return 0x45, cbor2.dumps(body)
 
     def pace(self):
@@ -416,19 +448,22 @@ def test_poll_subdevice_seed_collection_mode_unaffected_by_flat_fallback(
     from custom_components.localthings.registry.subdevices import Subdevice
 
     coordinator = _coordinator(hass)
-    devcol_rep = {'rt': ['x.com.samsung.devcol', 'oic.wk.col']}
-    sess = _FakeCollectionSession({
-        (_SUB_UUID, 'device', '0'): [
-            devcol_rep, {'href': '/mode/vs/0', 'rep': {'mode': 'cool'}},
-        ],
-    })
-    coordinator._session = sess
-    subdevice = Subdevice(kind='prefixed', key=_SUB_UUID, seed_path=(_SUB_UUID, 'device', '0'))
+    devcol_rep = {"rt": ["x.com.samsung.devcol", "oic.wk.col"]}
+    sess = _FakeCollectionSession(
+        {
+            (_SUB_UUID, "device", "0"): [
+                devcol_rep,
+                {"href": "/mode/vs/0", "rep": {"mode": "cool"}},
+            ],
+        }
+    )
+    coordinator._session = cast(DtlsCoapSession, sess)
+    subdevice = Subdevice(kind="prefixed", key=_SUB_UUID, seed_path=(_SUB_UUID, "device", "0"))
 
     result = coordinator._poll_subdevice_seed(subdevice)
 
-    assert result == {f'/{_SUB_UUID}/mode/vs/0': {'mode': 'cool'}}
-    assert sess.calls == [(_SUB_UUID, 'device', '0')]
+    assert result == {f"/{_SUB_UUID}/mode/vs/0": {"mode": "cool"}}
+    assert sess.calls == [(_SUB_UUID, "device", "0")]
 
 
 def test_poll_subdevice_seed_flat_mode_polls_each_href_individually(
@@ -442,21 +477,26 @@ def test_poll_subdevice_seed_flat_mode_polls_each_href_individually(
     from custom_components.localthings.registry.subdevices import Subdevice
 
     coordinator = _coordinator(hass)
-    sess = _FakeCollectionSession({
-        (_SUB_UUID, 'mode', 'vs', '0'): {'mode': 'cool'},
-        # (_SUB_UUID, 'power', 'vs', '0') deliberately absent -> drops out.
-    })
-    coordinator._session = sess
+    sess = _FakeCollectionSession(
+        {
+            (_SUB_UUID, "mode", "vs", "0"): {"mode": "cool"},
+            # (_SUB_UUID, 'power', 'vs', '0') deliberately absent -> drops out.
+        }
+    )
+    coordinator._session = cast(DtlsCoapSession, sess)
     subdevice = Subdevice(
-        kind='prefixed', key=_SUB_UUID, seed_path=(),
-        flat_hrefs=('/mode/vs/0', '/power/vs/0'),
+        kind="prefixed",
+        key=_SUB_UUID,
+        seed_path=(),
+        flat_hrefs=("/mode/vs/0", "/power/vs/0"),
     )
 
     result = coordinator._poll_subdevice_seed(subdevice)
 
-    assert result == {f'/{_SUB_UUID}/mode/vs/0': {'mode': 'cool'}}
+    assert result == {f"/{_SUB_UUID}/mode/vs/0": {"mode": "cool"}}
     assert sess.calls == [
-        (_SUB_UUID, 'mode', 'vs', '0'), (_SUB_UUID, 'power', 'vs', '0'),
+        (_SUB_UUID, "mode", "vs", "0"),
+        (_SUB_UUID, "power", "vs", "0"),
     ]
 
 
@@ -470,21 +510,25 @@ def test_poll_subdevice_seed_flat_mode_skips_hrefs_covered_by_hot_warm_subpolls(
     from custom_components.localthings.registry.subdevices import Subdevice
 
     coordinator = _coordinator(hass)
-    sess = _FakeCollectionSession({
-        (_SUB_UUID, 'mode', 'vs', '0'): {'mode': 'cool'},
-        (_SUB_UUID, 'power', 'vs', '0'): {'power': 'On'},
-    })
-    coordinator._session = sess
-    coordinator._warm_hrefs = [f'/{_SUB_UUID}/mode/vs/0']
+    sess = _FakeCollectionSession(
+        {
+            (_SUB_UUID, "mode", "vs", "0"): {"mode": "cool"},
+            (_SUB_UUID, "power", "vs", "0"): {"power": "On"},
+        }
+    )
+    coordinator._session = cast(DtlsCoapSession, sess)
+    coordinator._warm_hrefs = [f"/{_SUB_UUID}/mode/vs/0"]
     subdevice = Subdevice(
-        kind='prefixed', key=_SUB_UUID, seed_path=(),
-        flat_hrefs=('/mode/vs/0', '/power/vs/0'),
+        kind="prefixed",
+        key=_SUB_UUID,
+        seed_path=(),
+        flat_hrefs=("/mode/vs/0", "/power/vs/0"),
     )
 
     result = coordinator._poll_subdevice_seed(subdevice)
 
-    assert result == {f'/{_SUB_UUID}/power/vs/0': {'power': 'On'}}
-    assert sess.calls == [(_SUB_UUID, 'power', 'vs', '0')]
+    assert result == {f"/{_SUB_UUID}/power/vs/0": {"power": "On"}}
+    assert sess.calls == [(_SUB_UUID, "power", "vs", "0")]
 
 
 async def test_multidevice_probe_never_reaches_discovery_or_the_cache(
@@ -502,24 +546,40 @@ async def test_multidevice_probe_never_reaches_discovery_or_the_cache(
     Driven with a washer fixture precisely because the AC registry's own
     ignore entry would mask the coverage half of this on an AC.
     """
-    resources, _oic, _seeds = _load_device_full('washer_flexwash')
+    resources, _oic, _seeds = _load_device_full("washer_flexwash")
     coordinator = _coordinator(hass)
-    coordinator._session = FakeCoapSession({
-        '/multidevice/vs/0': {'x.com.samsung.da.numofsubdevice': '2'},
-    })
+    # /multidevice/vs/0 here is a plain Property map, not a batch list -- see
+    # FakeCoapSession's own docstring on the two shapes its `seeds` values can
+    # take; its `seeds` param type only names the more common (list) shape.
+    coordinator._session = cast(
+        DtlsCoapSession,
+        FakeCoapSession(
+            cast(
+                "dict[str, list]",
+                {
+                    "/multidevice/vs/0": {"x.com.samsung.da.numofsubdevice": "2"},
+                },
+            )
+        ),
+    )
     coordinator._identity = DeviceIdentity(
-        manufacturer='Samsung Electronics', model='', name='', serial=None,
-        device_types=(), raw={'/oic/p': {}, '/oic/d': {}, '/oic/res': []},
+        manufacturer="Samsung Electronics",
+        model="",
+        name="",
+        serial=None,
+        device_types=(),
+        raw={"/oic/p": {}, "/oic/d": {}, "/oic/res": []},
     )
     merged = await hass.async_add_executor_job(
-        coordinator._enumerate_subdevices_blocking, resources,
+        coordinator._enumerate_subdevices_blocking,
+        resources,
     )
     coordinator._run_discovery(merged)
     for href, rep in coordinator._live_subdevice_resources(merged).items():
-        coordinator._observe.apply(href, rep, source='poll')
+        coordinator._observe.apply(href, rep, source="poll")
 
-    assert '/multidevice/vs/0' not in merged
-    assert '/multidevice/vs/0' not in coordinator._unbound_hrefs
-    assert '/multidevice/vs/0' not in coordinator.last_resources
+    assert "/multidevice/vs/0" not in merged
+    assert "/multidevice/vs/0" not in coordinator._unbound_hrefs
+    assert "/multidevice/vs/0" not in coordinator.last_resources
     # Still captured, just not as device state.
-    assert coordinator._multidevice == {'x.com.samsung.da.numofsubdevice': '2'}
+    assert coordinator._multidevice == {"x.com.samsung.da.numofsubdevice": "2"}

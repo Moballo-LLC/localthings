@@ -1,6 +1,9 @@
 {
   "entity": {
     "binary_sensor": {
+      "auto_clean_running": {
+        "name": "Automatické čištění probíhá"
+      },
       "after_run_active": {
         "name": "Dosoušení aktivní"
       },
@@ -114,6 +117,12 @@
       "diagnosis_start": {
         "name": "Spustit diagnostiku"
       },
+      "auto_clean_stop": {
+        "name": "Zastavit samočištění"
+      },
+      "filter_time_reset": {
+        "name": "Vynulovat počítadlo filtru"
+      },
       "pause": {
         "name": "Pozastavit"
       },
@@ -143,11 +152,13 @@
               "smart": "Chytrý",
               "speed": "Rychlý",
               "nano": "WindFree",
+              "sleep": "Spánek",
               "nanosleep": "WindFree spánek",
               "longwind": "Dlouhý vánek",
               "motionindirect": "Nepřímý vzduch při pohybu",
               "motiondirect": "Přímý vzduch při pohybu",
               "drycomfort": "Komfortní sušení",
+              "dlightcool": "d'light Cool",
               "2step": "2stupňový"
             }
           }
@@ -188,6 +199,9 @@
       "oven_setpoint": {
         "name": "Požadovaná teplota"
       },
+      "sensing_interval": {
+        "name": "Interval AI Purify"
+      },
       "setpoint": {
         "name": "Požadovaná teplota"
       },
@@ -199,6 +213,9 @@
       },
       "tropical_night_mode": {
         "name": "Tropický noční režim"
+      },
+      "zone_target_temperature": {
+        "name": "Požadovaná teplota zóny"
       }
     },
     "select": {
@@ -207,6 +224,9 @@
       },
       "air_filter_threshold": {
         "name": "Práh upozornění na filtr"
+      },
+      "auto_door_timer": {
+        "name": "Časovač automatického otevírání dvířek"
       },
       "beverage_zone_mode": {
         "name": "Režim zóny nápojů",
@@ -272,9 +292,9 @@
         "name": "Cyklus",
         "state": {
           "80": "Jemné",
-          "83": "Express 60",
+          "83": "Normální",
           "84": "Intenzivní",
-          "86": "Normální",
+          "86": "Express 60",
           "90": "Samočištění",
           "0e": "AI mytí",
           "07": "Předoplach",
@@ -286,7 +306,10 @@
           "a7": "Intenzivní",
           "a8": "Expresní",
           "8c": "Extra tichý",
-          "88": "Samočištění"
+          "88": "Samočištění",
+          "85": "Jemné",
+          "0c": "Express",
+          "0d": "Samočištění"
         }
       },
       "dispense_type": {
@@ -325,7 +348,12 @@
           "1e": "Outdoor",
           "1f": "Smíšená náplň",
           "2b": "Sušení bubnu",
-          "4c": "Osvěžení vzduchem"
+          "4c": "Osvěžení vzduchem",
+          "51": "Eko bavlna",
+          "53": "AI sušení+",
+          "4e": "Automatické sušení",
+          "26": "Provětrání",
+          "2a": "Hygienické sušení+"
         }
       },
       "favorite_capacity": {
@@ -447,9 +475,11 @@
           "kimchi_storage_crunfch": "Křupavé kimči",
           "kimchi_storage_buy": "Kupované kimči",
           "storage_fridge_normal": "Chlazení",
+          "storage_fridge": "Chlazení",
           "storage_fridge_cold": "Chlazení, silné",
           "storage_fridge_warm": "Chlazení, slabé",
           "storage_freezer_normal": "Mražení",
+          "storage_freezer": "Mražení",
           "storage_freezer_cold": "Mražení, silné",
           "storage_freezer_warm": "Mražení, slabé",
           "kimchi_ripe_low_temp": "Zrání kimči, nízká teplota",
@@ -462,7 +492,8 @@
           "storage_fresh_cereal": "Obiloviny",
           "storage_fridge_drink": "Nápoje",
           "storage_fresh_wine": "Víno",
-          "storage_fresh_potato_banana": "Brambory a banány"
+          "storage_fresh_potato_banana": "Brambory a banány",
+          "newmode_kimchi_0000": "Nový režim"
         }
       },
       "pantry_zone_mode": {
@@ -471,6 +502,16 @@
           "fdr_wine": "Víno",
           "fdr_deli": "Lahůdky",
           "fdr_drinks": "Nápoje"
+        }
+      },
+      "winecellar_pantry_zone_mode": {
+        "name": "Režim spíže",
+        "state": {
+          "processed_meat": "Zpracované maso",
+          "cheese": "Sýr",
+          "nuts": "Ořechy",
+          "fruit": "Ovoce",
+          "wine": "Víno"
         }
       },
       "range_burner_power_level": {
@@ -490,6 +531,14 @@
       },
       "rinse_cycles": {
         "name": "Počet máchání"
+      },
+      "sensing_mode": {
+        "name": "Akce AI Purify",
+        "state": {
+          "off": "Pouze měření",
+          "airpurify": "Automatické čištění",
+          "alarm": "Dostat upozornění"
+        }
       },
       "softener_concentration": {
         "name": "Koncentrace aviváže",
@@ -515,6 +564,9 @@
           "tone": "Tón",
           "mute": "Ztlumeno"
         }
+      },
+      "energy_saving_mode": {
+        "name": "Režim úspory energie"
       },
       "air_purifier_sound_mode": {
         "name": "Zvukový režim",
@@ -557,6 +609,8 @@
         "state": {
           "01": "Normální",
           "04": "Rychlé praní",
+          "06": "XXL prádlo",
+          "08": "Máchání+odstřeďování",
           "17": "Stažený program",
           "1b": "Bavlna",
           "1c": "Eco 40-60",
@@ -567,7 +621,7 @@
           "21": "Barevné prádlo",
           "22": "Vlna",
           "23": "Outdoor",
-          "24": "Ručníky",
+          "24": "Ložní prádlo",
           "25": "Syntetika",
           "26": "Jemné prádlo",
           "27": "Máchání+odstřeďování",
@@ -580,7 +634,7 @@
           "2f": "Sportovní oblečení",
           "30": "Zataženo",
           "32": "Košile",
-          "33": "Ložní prádlo",
+          "33": "Ručníky",
           "34": "Smíšené",
           "36": "Praní+sušení",
           "37": "Sušení vzduchem",
@@ -621,7 +675,9 @@
           "87": "Stažený program",
           "88": "Péče o domácí mazlíčky",
           "8f": "Intenzivní studená",
-          "96": "Méně mikrovláken"
+          "96": "Méně mikrovláken",
+          "a0": "15min rychlé praní",
+          "35": "Eko bavlna"
         }
       },
       "washer_dry_level": {
@@ -636,9 +692,69 @@
           "none": "Vypnuto",
           "cupboard": "Do skříně"
         }
+      },
+      "zone_mode": {
+        "name": "Režim zóny"
+      },
+      "watertank_light_color": {
+        "name": "Barva osvětlení nádržky na vodu",
+        "state": {
+          "warmwhite": "Teplá bílá",
+          "naturalwhite": "Přirozená bílá",
+          "coolwhite": "Studená bílá",
+          "green": "Zelená",
+          "purple": "Fialová",
+          "blue": "Modrá",
+          "orange": "Oranžová",
+          "pink": "Růžová"
+        }
+      },
+      "watertank_light_brightness": {
+        "name": "Jas osvětlení nádržky na vodu"
+      },
+      "air_filter_pm1_threshold": {
+        "name": "Práh alarmu PM1 filtru"
+      },
+      "freezer_temperature_setpoint": {
+        "name": "Teplota mrazicí zóny"
+      },
+      "edge_lighting_mode": {
+        "name": "Režim okrajového osvětlení",
+        "state": {
+          "smart": "Chytrý",
+          "high": "Vysoký",
+          "low": "Nízký"
+        }
+      },
+      "edge_lighting_color": {
+        "name": "Barva okrajového osvětlení",
+        "state": {
+          "3000k": "3000 K",
+          "4000k": "4000 K",
+          "6500k": "6500 K"
+        }
+      },
+      "indicator_light_mode": {
+        "name": "Režim kontrolky",
+        "state": {
+          "smart": "Chytrý",
+          "high": "Vysoký",
+          "low": "Nízký"
+        }
+      },
+      "ventilation_mode": {
+        "name": "Režim",
+        "state": {
+          "purification": "Čištění",
+          "ventilation": "Větrání",
+          "smartventilation": "Chytré větrání"
+        }
       }
     },
     "sensor": {
+      "auto_clean_progress": {
+        "name": "Průběh automatického čištění"
+      },
       "after_run_progress": {
         "name": "Průběh dosoušení"
       },
@@ -647,6 +763,9 @@
       },
       "air_filter_usage_hours": {
         "name": "Hodiny využití filtru"
+      },
+      "deodor_filter_usage": {
+        "name": "Využití filtru"
       },
       "air_quality_standard": {
         "name": "Norma kvality vzduchu"
@@ -754,6 +873,12 @@
           "direct": "Přímý",
           "indirect": "Nepřímý"
         }
+      },
+      "energy_saving_state": {
+        "name": "Stav úspory energie"
+      },
+      "energy_saving_operating_status": {
+        "name": "Provozní stav úspory energie"
       },
       "current_temp_c": {
         "name": "Teplota"
@@ -978,6 +1103,18 @@
           "icestatus_stop": "Nečinný",
           "icestatus_run": "Vyrábí led"
         }
+      },
+      "zone_temperature": {
+        "name": "Teplota zóny"
+      },
+      "watertank_full_alarm_status": {
+        "name": "Stav alarmu plné nádržky na vodu"
+      },
+      "air_filter_pm1_usage": {
+        "name": "Využití PM1 filtru"
+      },
+      "air_filter_pm1_usage_hours": {
+        "name": "Hodiny využití PM1 filtru"
       }
     },
     "switch": {
@@ -996,6 +1133,9 @@
       "absence_power_saving_active": {
         "name": "Úspora energie při nepřítomnosti aktivní"
       },
+      "absence_clean": {
+        "name": "Čištění při nepřítomnosti"
+      },
       "motion_detect_wind_active": {
         "name": "Vyhýbání se proudu vzduchu při pohybu aktivní"
       },
@@ -1004,6 +1144,12 @@
       },
       "display": {
         "name": "Displej"
+      },
+      "periodic_air_sensing": {
+        "name": "AI Purify"
+      },
+      "periodic_sensing_skip_status": {
+        "name": "Přeskočení měření AI Purify"
       },
       "pet_filter_activation": {
         "name": "Aktivace filtru pro domácí mazlíčky"
@@ -1022,6 +1168,12 @@
       },
       "auto_door_opener": {
         "name": "Automatické otevírání dvířek"
+      },
+      "auto_door_sound_control": {
+        "name": "Zvuk automatického otevírání dvířek"
+      },
+      "auto_door_voice_control": {
+        "name": "Hlasové ovládání automatického otevírání dvířek"
       },
       "auto_release_dry": {
         "name": "Automatické uvolnění při sušení"
@@ -1139,6 +1291,33 @@
       },
       "wrinkle_prevent": {
         "name": "Ochrana proti pomačkání"
+      },
+      "zone_power": {
+        "name": "Napájení zóny"
+      },
+      "away_mode": {
+        "name": "Režim nepřítomnosti"
+      },
+      "watertank_light": {
+        "name": "Osvětlení nádržky na vodu"
+      },
+      "uv_led": {
+        "name": "UV LED"
+      },
+      "ventilation_alarm": {
+        "name": "Alarm větrání"
+      },
+      "edge_lighting": {
+        "name": "Okrajové osvětlení"
+      },
+      "indicator_light": {
+        "name": "Kontrolka"
+      },
+      "windfree": {
+        "name": "Režim Wind-Free"
+      },
+      "windsleep": {
+        "name": "Noční režim"
       }
     },
     "time": {
@@ -1159,6 +1338,17 @@
       },
       "night_start": {
         "name": "Začátek nočního osvětlení"
+      },
+      "sensing_skip_end": {
+        "name": "Konec přeskočení měření AI Purify"
+      },
+      "sensing_skip_start": {
+        "name": "Začátek přeskočení měření AI Purify"
+      }
+    },
+    "water_heater": {
+      "dhw": {
+        "name": "Teplá voda"
       }
     }
   },
@@ -1190,10 +1380,18 @@
       },
       "confirm_unknown_type": {
         "title": "Typ spotřebiče nebyl rozpoznán",
-        "description": "Typ tohoto spotřebiče se nepodařilo rozpoznat. Přesto bude přidán, ale pouze se společnými funkcemi (napájení, alarmy atd., pokud jsou k dispozici), nikoli s plnou sadou funkcí pro danou rodinu spotřebičů. Podporu můžete později pomoci rozšířit stažením diagnostiky pro toto zařízení (Nastavení > Zařízení a služby > toto zařízení > nabídka > Stáhnout diagnostiku) a jejím vložením do nového issue. Odesláním zařízení přidáte i tak."
+        "description": "Tento spotřebič hlásí model „{model}“, což je typ, který LocalThings zatím nerozpoznává. Přesto bude přidán, ale pouze se společnými funkcemi (napájení, alarmy atd., pokud jsou k dispozici), nikoli s plnou sadou funkcí pro danou rodinu spotřebičů. Podporu můžete později pomoci rozšířit stažením diagnostiky pro toto zařízení (Nastavení > Zařízení a služby > toto zařízení > nabídka > Stáhnout diagnostiku) a jejím vložením do nového issue. Odesláním zařízení přidáte i tak."
       }
     },
     "error": {
+      "no_response": "Z této IP adresy nepřišla žádná odpověď — na žádném portu v rozsahu lokálního API spotřebiče (UDP 49152-49160) se nic neozvalo. Zkontrolujte, že je IP adresa správná, že je spotřebič zapnutý a ve stejné síti jako Home Assistant a že firewall neblokuje UDP provoz k němu.",
+      "ports_closed": "Tato IP adresa je dostupná, ale aktivně odmítla všechny porty v rozsahu lokálního API (UDP 49152-49160). Buď nejde o spotřebič Samsung, nebo má starší firmware, který komunikuje pouze s cloudem Samsung přes TCP 8888, což tato integrace neumí použít.",
+      "no_dtls_server": "Porty v rozsahu lokálního API jsou na této adrese dostupné, ale nic na nich neodpovědělo na DTLS handshake. Ověřte, že IP adresa patří spotřebiči, a ne jinému zařízení ve vaší síti.",
+      "handshake_timeout": "Spotřebič odpověděl na portu lokálního API, ale nedokončil DTLS handshake. Obvykle stále drží relaci z předchozího pokusu — počkejte přibližně minutu a zkuste to znovu.",
+      "cert_rejected": "Spotřebič odmítl certifikát. Certifikát CA a klíč pravděpodobně nepatří CA AC14K_M, které spotřebič důvěřuje, nebo k sobě nepasují. Přesný alert, který spotřebič odeslal, najdete v logu Home Assistanta.",
+      "handshake_failed": "Spotřebič odmítl DTLS handshake z důvodu, který nesouvisí s certifikátem — nejspíše kvůli neshodě protokolu nebo šifry. Přesný alert najdete v logu Home Assistanta.",
+      "cloud_unreachable": "Nepodařilo se spojit s cloudovou bránou Samsung a získat UUID potřebné k vystavení certifikátu tohoto zařízení. Zkontrolujte přístup Home Assistanta k internetu a zkuste to znovu.",
+      "unexpected_response": "Připojení k zařízení proběhlo úspěšně, ale nevrátilo použitelný popis zařízení. Nemusí jít o spotřebič, který tato integrace podporuje. Co zařízení odeslalo, najdete v logu Home Assistanta.",
       "cannot_connect": "Nelze se připojit k zařízení. Ověřte, že je IP adresa dostupná a že jsou přihlašovací údaje CA správné.",
       "invalid_ca": "Certifikát CA nebo privátní klíč se nepodařilo načíst. Ověřte, že obsah PEM je správný a že klíč odpovídá certifikátu.",
       "unknown": "Neočekávaná chyba. Podrobnosti najdete v protokolech Home Assistant."
@@ -1208,16 +1406,22 @@
         "title": "Možnosti LocalThings",
         "menu_options": {
           "settings": "Nastavení zápisu pro dálkové ovládání",
+          "forget_learned_modes": "Zapomenout zapamatované režimy",
           "debug_write": "Ladění: zápis do prostředku"
         }
       },
       "settings": {
         "title": "Nastavení zápisu pro dálkové ovládání",
-        "description": "Některá zařízení přijímají určité zápisy (např. výchozí dávkování pracího prostředku/aviváže v pračce) i když hlásí vypnuté dálkové ovládání. LocalThings ve výchozím nastavení blokuje každý zápis srozumitelnou chybou, kdykoli zařízení hlásí vypnuté dálkové ovládání, místo aby jej zařízení tiše odmítlo. Povolte toto pouze tehdy, pokud jste ověřili, že zápisy na tomto zařízení skutečně fungují i s vypnutým dálkovým ovládáním – jinak tuto srozumitelnou chybu vyměníte za tiché selhání.",
+        "description": "Některá zařízení přijímají určité zápisy (např. výchozí dávkování pracího prostředku/aviváže v pračce) i když hlásí vypnuté dálkové ovládání. LocalThings ve výchozím nastavení blokuje každý zápis srozumitelnou chybou, kdykoli zařízení hlásí vypnuté dálkové ovládání, místo aby jej zařízení tiše odmítlo. Povolte toto pouze tehdy, pokud jste ověřili, že zápisy na tomto zařízení skutečně fungují i s vypnutým dálkovým ovládáním – jinak tuto srozumitelnou chybu vyměníte za tiché selhání.\n\nNěkterá zařízení hlásí režim, který nikdy neuvedou mezi podporovanými – například klimatizace běžící v režimu Quiet, která nabízí pouze Off/Sleep/Speed. LocalThings si každý takový režim zapamatuje a dál jej nabízí, takže zůstane volitelný, jakmile v něm zařízení alespoň jednou bylo. Vypnutím této volby se budou nabízet pouze režimy, které zařízení samo uvádí; k vymazání již zapamatovaných použijte „Zapomenout zapamatované režimy“ v předchozí nabídce.",
         "data": {
           "bypass_remote_control_lock": "Povolit zápis i když je dálkové ovládání hlášeno jako vypnuté",
-          "finish_time_hysteresis_minutes": "Odhadovaný konec -- minimální změna (minuty)"
+          "finish_time_hysteresis_minutes": "Odhadovaný konec -- minimální změna (minuty)",
+          "learn_device_modes": "Pamatovat si režimy, které zařízení hlásí, ale neuvádí jako podporované"
         }
+      },
+      "forget_learned_modes": {
+        "title": "Zapomenout zapamatované režimy",
+        "description": "Aktuálně zapamatováno: {codes}\n\nJde o režimy, ve kterých se toto zařízení samo hlásilo, aniž by je uvádělo mezi podporovanými; jsou uchovány, aby zůstaly volitelné. Zapomenutí je řešením, pokud se některý ukázal jako chybný – cokoli, co zařízení skutečně znovu nahlásí, si systém opět zapamatuje, pokud zároveň nevypnete volbu „Pamatovat si režimy, které zařízení hlásí, ale neuvádí jako podporované“ v nastavení."
       },
       "debug_write": {
         "title": "Ladění: zápis do prostředku",
@@ -1274,6 +1478,27 @@
     },
     "intensive_unavailable_for_cycle": {
       "message": "Intenzivní není u vybraného cyklu k dispozici."
+    },
+    "command_failed": {
+      "message": "Příkaz pro {href} selhal i po opětovném připojení: {error}"
+    },
+    "debug_too_many_writes": {
+      "message": "Zadejte 1 až 10 zápisů."
+    },
+    "debug_settle_out_of_range": {
+      "message": "Hodnota settle musí být mezi 0 a 30 sekundami."
+    },
+    "debug_verify_after_out_of_range": {
+      "message": "Hodnota verify_after musí být mezi 0 a 60 sekundami."
+    },
+    "service_device_target_invalid": {
+      "message": "Tato služba vyžaduje přesně jedno cílové zařízení."
+    },
+    "service_device_not_found": {
+      "message": "Pro tento cíl nebylo nalezeno žádné odpovídající zařízení."
+    },
+    "service_device_not_loaded": {
+      "message": "Toto zařízení ještě není připojeno. Zkuste to znovu, až se načte."
     }
   }
 }

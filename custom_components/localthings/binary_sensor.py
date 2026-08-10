@@ -1,16 +1,16 @@
 """Binary sensor platform for Local Things."""
+
 from __future__ import annotations
 
-from homeassistant.components.binary_sensor import BinarySensorEntity
+from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .registry.entities import BinarySensorDesc
-
 from .const import DOMAIN
 from .coordinator import LocalThingsCoordinator
 from .entity import LocalThingsEntity, _is_included
+from .registry.entities import BinarySensorDesc
 
 
 async def async_setup_entry(
@@ -27,11 +27,12 @@ async def async_setup_entry(
 
 
 class LocalThingsBinarySensor(LocalThingsEntity, BinarySensorEntity):
-
     def __init__(self, coordinator: LocalThingsCoordinator, bound) -> None:
         super().__init__(coordinator, bound)
         desc: BinarySensorDesc = bound.desc
-        self._attr_device_class = desc.device_class
+        self._attr_device_class = (
+            BinarySensorDeviceClass(desc.device_class) if desc.device_class else None
+        )
 
     @property
     def is_on(self):

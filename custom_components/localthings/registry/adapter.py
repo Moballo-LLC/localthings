@@ -1,4 +1,5 @@
 """Adapter: BoundEntity list → flat state dict and command dispatch."""
+
 from __future__ import annotations
 
 from typing import Any

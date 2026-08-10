@@ -1,4 +1,5 @@
 """Time platform for Local Things."""
+
 from __future__ import annotations
 
 import datetime
@@ -8,11 +9,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .registry.entities import TimeDesc
-
 from .const import DOMAIN
 from .coordinator import LocalThingsCoordinator
 from .entity import LocalThingsEntity, _is_included
+from .registry.entities import TimeDesc
 
 
 async def async_setup_entry(
@@ -29,7 +29,6 @@ async def async_setup_entry(
 
 
 class LocalThingsTime(LocalThingsEntity, TimeEntity):
-
     @property
     def native_value(self) -> datetime.time | None:
         return (self.coordinator.data or {}).get(self._state_key)
