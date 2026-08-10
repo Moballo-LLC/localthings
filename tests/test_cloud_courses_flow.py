@@ -13,6 +13,7 @@ import asyncio
 import contextlib
 import json
 from typing import Any, cast
+from unittest.mock import AsyncMock
 
 import cbor2
 import pytest
@@ -164,7 +165,14 @@ async def test_selecting_a_named_program_writes_both_tokens(hass: HomeAssistant)
             sent.append((path_segs, payload))
             return 0x44, b""
 
+        def pace(self):
+            pass
+
     coordinator._session = cast(Any, _FakeSession())
+    # Same shape as test_coordinator_send_command's fixture: a write schedules
+    # a debounced refresh, which would poll through this fake and leave its
+    # timer behind after the test.
+    coordinator.async_request_refresh = AsyncMock()
     bound = next(b for b in coordinator.bound if b.desc.key == "cycle")
     await coordinator.async_send_command(bound, "cloud:55")
 
