@@ -207,6 +207,27 @@ class TestStoreRules:
         assert store.observe(rep) is True
         assert store.observe(rep) is False
 
+    def test_candidates_rank_by_program_loads_not_by_dwell_time(self):
+        """A stale OneTimeCloudCourse_ token outlives the run it belonged to,
+        so it is still reported through every poll the appliance spends on
+        whatever ordinary course comes next. Counting polls would rank that
+        course first and suggest it as the Download course -- and accepting
+        the suggestion would start a real wash cycle. Only the poll where the
+        payload actually changed is evidence."""
+        store = cloudcourse.CloudCourses()
+        loaded = _rep(["CloudExtraCourse_55", "Course_87", f"OneTimeCloudCourse_{SPORTS}"])
+        stale = _rep(["CloudExtraCourse_55", "Course_1B", f"OneTimeCloudCourse_{SPORTS}"])
+        store.observe(loaded)
+        for _ in range(200):  # ~100 minutes sitting on a cotton cycle
+            store.observe(stale)
+        assert store.download_candidates() == ["87"]
+
+    def test_a_second_distinct_load_is_counted(self):
+        store = cloudcourse.CloudCourses()
+        store.observe(_rep(["CloudExtraCourse_556B", "Course_87", f"OneTimeCloudCourse_{SPORTS}"]))
+        store.observe(_rep(["CloudExtraCourse_556B", "Course_87", f"OneTimeCloudCourse_{JEANS}"]))
+        assert store.download_candidates() == ["87"]
+
     def test_view_is_empty_until_a_download_course_is_confirmed(self):
         """Both halves are required: without the course code there is no
         write to build, so nothing should reach the select."""

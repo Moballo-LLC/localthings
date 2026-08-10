@@ -64,7 +64,7 @@ from .const import (
 )
 from .learned import persist as learned_persist
 from .learned import stored as learned_stored
-from .registry.capabilities.laundry import cycle_options
+from .registry.capabilities.laundry import cycle_options, personal_course_labels
 from .registry.subdevices import MAIN
 
 _TEXT = TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT))
@@ -967,17 +967,27 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
                 return {"base": "cloud_course_name_duplicate"}
             taken.add(name.casefold())
 
+        # Belt and braces over the selector's own custom_value=False: this
+        # value becomes the Course_ token of a real write, so it is checked
+        # against the appliance's own course list here too, where the store
+        # is actually updated.
+        course = user_input.get("download_course") or None
+        if course is not None and course not in cycle_options(coord.canonical_resources(MAIN)):
+            return {"base": "cloud_course_unknown_course"}
+
         for slot, name in names.items():
             coord.cloud_courses.set_name(slot, name)
-        coord.set_cloud_download_course(user_input.get("download_course") or None)
+        coord.set_cloud_download_course(course)
         return {}
 
     def _local_course_names(self, coord) -> set[str]:
-        """Translated display names of this appliance's own local courses.
+        """Display names of this appliance's own local courses.
 
-        Read through the same catalog the select renders from, so the check
-        matches what the user will actually see side by side in the dropdown.
-        An untranslated code has no display name to collide with.
+        Read through the same two sources the select renders from -- the
+        translation catalog, and the device's own personal-course labels
+        (laundry.washer_cycle_fallback) -- so the check matches what the user
+        will actually see side by side in the dropdown. A code neither source
+        names has no display name to collide with.
         """
         bound = next(
             (b for b in coord.bound if b.desc.key == "cycle" and b.href == cloudcourse.COURSE_HREF),
@@ -990,7 +1000,14 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
         if callable(key):
             key = key(resources)
         labels = translated_state_labels("select", key) if key else {}
-        return {labels[code.lower()] for code in cycle_options(resources) if code.lower() in labels}
+        personal = personal_course_labels(resources)
+        names = set()
+        for code in cycle_options(resources):
+            if (catalogued := labels.get(code.lower())) is not None:
+                names.add(catalogued)
+            if (own := personal.get(code.upper())) is not None:
+                names.add(own)
+        return names
 
     def _cloud_courses_form(
         self, coord, rep, known, advertised, errors: dict[str, str] | None = None
@@ -1007,7 +1024,10 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
 
         # Course codes this device actually offers, so the Download course
         # can only ever be set to one of them. Auto-detected candidates come
-        # first -- see CloudCourses.download_candidates.
+        # first -- see CloudCourses.download_candidates. custom_value stays
+        # off deliberately: whatever lands here becomes the Course_ token of a
+        # real write, and a typed-in code the appliance doesn't offer would
+        # start something nobody chose.
         available = cycle_options(coord.canonical_resources(MAIN))
         candidates = [c for c in store.download_candidates() if c in available]
         ordered = candidates + [c for c in available if c not in candidates]
@@ -1016,7 +1036,7 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
             SelectSelector(
                 SelectSelectorConfig(
                     options=ordered,
-                    custom_value=True,
+                    custom_value=False,
                     mode=SelectSelectorMode.DROPDOWN,
                 )
             )

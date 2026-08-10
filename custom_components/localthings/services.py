@@ -24,6 +24,7 @@ from homeassistant.helpers import device_registry as dr
 
 from .const import DOMAIN, SERVICE_READ_RESOURCE, SERVICE_WRITE_RESOURCE
 from .coordinator import LocalThingsCoordinator, normalize_href
+from .registry.redact import strip_synthetic
 from .registry.subdevices import MAIN, Subdevice
 
 ATTR_HREF = "href"
@@ -170,7 +171,13 @@ async def _async_read_resource(hass: HomeAssistant, call: ServiceCall) -> Servic
         # href: lets a user enumerate what exists without hammering the
         # device (see this module's docstring and the coordinator's
         # canonical_resources).
-        snapshot: dict[str, Any] = {"resources": coordinator.canonical_resources(subdevice)}
+        # Stripped, not redacted: this response is meant to be what the
+        # appliance reported (unredacted -- that is the point of a debug
+        # read), but canonical_resources also carries fields this integration
+        # merged on for its own use (see entity_resources).
+        snapshot: dict[str, Any] = {
+            "resources": strip_synthetic(coordinator.canonical_resources(subdevice))
+        }
         return cast(ServiceResponse, snapshot)
 
     # Same normalize-before-translate order as the write path above.

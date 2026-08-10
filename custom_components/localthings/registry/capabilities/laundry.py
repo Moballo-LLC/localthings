@@ -335,11 +335,15 @@ def option_write(prefix, new_value):
 # receive.
 #
 # They ride in the cycle select rather than a select of their own because
-# that is what they are to a user -- on the appliance's own dial, "Download"
-# occupies one position among the ordinary courses, and picking a downloaded
-# program is picking a cycle. Their raw values are namespaced
+# that is what they are to a user -- on the appliance's own controls,
+# "Download" occupies one position among the ordinary courses, and picking a
+# downloaded program is picking a cycle. Their raw values are namespaced
 # ('cloud:<slot>') so they can never be confused with, or collide with, a
 # two-hex-char local course code.
+#
+# Bound by whichever families declare it. Washers are where this was worked
+# out, but a DW5000C dishwasher advertises the same token (see
+# cloudcourse.py), so nothing below is washer-specific.
 #
 # Confirmed on hardware before any of this was written (issue #342): writing
 # the program token alone, while some other course is selected, is silently

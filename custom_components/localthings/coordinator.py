@@ -496,12 +496,22 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         has, so the gap between that and what's usable is knowable -- and
         it can only be closed by the user walking the appliance through its
         own Download list, which is exactly what a Repair is for.
+
+        Gated on having seen at least one payload, which is the only
+        available evidence that this household uses downloaded programs at
+        all. Without it, an appliance that merely advertises slots -- the
+        DW5000C fixture reports four and has never loaded any -- would carry
+        a permanent warning about a feature its owner may never touch, and
+        nothing they do in Home Assistant could clear it. Running one
+        downloaded program is what turns the nudge on, and naming them is
+        what turns it off.
         """
         issue_id = f"cloud_courses_{self._entry.entry_id}"
         rep = self.cloud_course_rep()
-        pending = cloudcourse.undiscovered(rep, self._cloud.snapshot())
-        needs_course = bool(cloudcourse.advertised_slots(rep)) and not self._cloud.download_course()
-        if pending or needs_course:
+        record = self._cloud.snapshot()
+        pending = cloudcourse.undiscovered(rep, record)
+        needs_course = bool(cloudcourse.advertised_slots(rep)) and not record["download_course"]
+        if record["slots"] and (pending or needs_course):
             ir.async_create_issue(
                 self.hass,
                 DOMAIN,

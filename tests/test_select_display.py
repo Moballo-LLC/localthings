@@ -50,3 +50,19 @@ def test_display_passes_through_non_string_values():
 
 def test_display_uses_fallback_when_translation_has_no_state_table():
     assert _display("69", "cycle", lambda value: f"Unknown (0x{value})") == ("Unknown (0x69)")
+
+
+def test_uncatalogued_value_stays_raw_when_the_fallback_declines_it():
+    """The "no state table" escape hatch keys off whether anything actually
+    named the value, not off whether a fallback was supplied.
+
+    laundry.cycle_select always supplies one now (it labels cloud "Download"
+    programs) and returns None for everything else. Keyed on the fallback's
+    presence instead, every dryer/dishwasher/air-dresser on an unrecognized
+    course table would have its options and state cosmetically reshaped --
+    course '0E' rendered '0 E' -- silently breaking automations and recorder
+    history."""
+    assert _display("0E", "cycle", None) == "0E"
+    assert _display("0E", "cycle", lambda value: None) == "0E"
+    # A fallback that does name the value still wins.
+    assert _display("0E", "cycle", lambda value: f"Course {value}") == "Course 0E"

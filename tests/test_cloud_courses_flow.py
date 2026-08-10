@@ -10,6 +10,7 @@ flow that supplies the names.
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any, cast
 
 import cbor2
@@ -21,6 +22,7 @@ from custom_components.localthings import cloudcourse
 from custom_components.localthings.const import CONF_CLOUD_COURSES, DOMAIN
 from custom_components.localthings.coordinator import LocalThingsCoordinator
 from custom_components.localthings.registry.entities import SelectDesc
+from custom_components.localthings.registry.subdevices import MAIN
 from tests.conftest import _load_device
 from tests.test_subdevice_discovery import ENTRY_DATA
 
@@ -320,3 +322,90 @@ async def test_the_form_proposes_the_observed_download_course(hass: HomeAssistan
     # Two learned so far, seven still to walk through on the appliance.
     assert result["description_placeholders"]["found"] == "2"
     assert coordinator.cloud_courses.download_candidates() == ["87"]
+
+
+async def test_no_repair_until_a_program_has_actually_been_seen(hass: HomeAssistant):
+    """The DW5000C advertises four downloaded programs and has never loaded
+    one, so nothing about them is learnable and no name field can be offered.
+    Warning its owner about a feature they may never use -- with no action
+    that could clear it -- is worse than staying quiet until they run one."""
+    entry = _entry(hass)
+    coordinator = LocalThingsCoordinator(hass, entry)
+    resources = _load_device("dishwasher_dw5000c_cloud")
+    coordinator._run_discovery(resources)
+    for href, rep in resources.items():
+        coordinator._observe.apply(href, rep, source="poll")
+    coordinator._refresh_cloud_course_issue()
+    await _flush(hass)
+
+    assert cloudcourse.advertised_slots(coordinator.cloud_course_rep()) == ["8E", "8D", "8F", "02"]
+    assert coordinator.cloud_courses.snapshot()["slots"] == {}
+    registry = ir.async_get(hass)
+    assert registry.async_get_issue(DOMAIN, f"cloud_courses_{entry.entry_id}") is None
+
+
+async def test_the_synthetic_field_never_reaches_diagnostics(
+    hass: HomeAssistant,
+    enable_custom_integrations,
+):
+    """canonical_resources carries it so entity descriptors can read it, and
+    diagnostics reads canonical_resources -- so the drop has to happen at the
+    redaction boundary. A dump is meant to be what the appliance said, and
+    cloud program names are text the user typed."""
+    from custom_components.localthings.diagnostics import (
+        async_get_config_entry_diagnostics,
+    )
+
+    entry = _entry(hass)
+    coordinator = await _coordinator(hass, entry)
+    coordinator.set_cloud_download_course("87")
+    coordinator.set_cloud_course_name("55", "Marc's weekend towels")
+    await _flush(hass)
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
+
+    dump = json.dumps(await async_get_config_entry_diagnostics(hass, entry))
+    assert cloudcourse.FIELD not in dump
+    assert "Marc's weekend towels" not in dump
+    # The device's own tokens are still there -- only our field is dropped.
+    assert "CloudExtraCourse_0A5C286B2D0C55301A" in dump
+
+
+async def test_the_debug_read_service_reports_only_device_state(hass: HomeAssistant):
+    from custom_components.localthings.registry.redact import strip_synthetic
+
+    coordinator = await _coordinator(hass)
+    coordinator.set_cloud_download_course("87")
+    coordinator.set_cloud_course_name("55", "Sports")
+    await _flush(hass)
+
+    stripped = strip_synthetic(coordinator.canonical_resources(MAIN))
+    assert cloudcourse.FIELD not in stripped[COURSE]
+    assert "x.com.samsung.da.options" in stripped[COURSE]
+
+
+async def test_the_flow_rejects_a_download_course_the_device_does_not_offer(
+    hass: HomeAssistant,
+):
+    """Whatever lands here becomes the Course_ token of a real write."""
+    coordinator = await _coordinator(hass)
+    handler = await _options_handler(hass, coordinator)
+
+    result = await handler.async_step_cloud_courses({"name_55": "Sports", "download_course": "FF"})
+    assert result["errors"] == {"base": "cloud_course_unknown_course"}
+    assert coordinator.cloud_courses.download_course() is None
+    assert coordinator.cloud_courses.named() == {}
+
+
+async def test_the_flow_rejects_a_name_shadowing_a_personal_course(hass: HomeAssistant):
+    """Personal course names come from the device, not the catalog, and the
+    select renders them the same way -- so they collide the same way."""
+    coordinator = await _coordinator(hass)
+    # 'MyCo' as a personal course label on a code the device offers.
+    rep = dict(coordinator.resource("/wm/personalcourse/vs/0") or {})
+    rep["x.com.samsung.da.courses"] = ["1C_01044D79436F"]
+    coordinator._observe.apply("/wm/personalcourse/vs/0", rep, source="poll")
+    await _flush(hass)
+
+    handler = await _options_handler(hass, coordinator)
+    result = await handler.async_step_cloud_courses({"name_55": "MyCo", "download_course": "87"})
+    assert result["errors"] == {"base": "cloud_course_name_duplicate"}

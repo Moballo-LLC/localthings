@@ -20,6 +20,13 @@ and the WA55A7700AV dump in ``tests/fixtures``, whose two-slot
 2. Blob width is *not* fixed across boards (20 bytes vs 16), which is one
 reason nothing here ever synthesizes one.
 
+This is not washer-only, and nothing here assumes an appliance type: the
+DW5000C dishwasher in ``tests/fixtures`` advertises four slots on the same
+token. It also carries no payload token at all, so a device can name
+programs whose payloads have never been observed -- ``advertised_slots``
+answers "which exist", the store answers "which are usable", and the two
+are deliberately allowed to disagree.
+
 What this module does and deliberately does not do
 --------------------------------------------------
 The device advertises *which* slots exist but never what any of them is
@@ -189,10 +196,13 @@ class CloudCourses:
         download, slots = _coerce(stored_record)
         self._download_course = download
         self._slots = slots
-        # Course codes seen while a one-time override was actually loaded --
+        # Course codes seen at the moment a one-time override was *loaded* --
         # candidates for "which course means Download on this board", pending
         # user confirmation (see download_candidates).
         self._candidates: dict[str, int] = {}
+        # Last one-time payload seen, so a load can be told from a poll that
+        # merely re-reports one. None means "nothing observed yet".
+        self._last_oneshot: str | None = None
 
     # -- learning ---------------------------------------------------------
 
@@ -201,13 +211,20 @@ class CloudCourses:
 
         Two facts are learnable here. A blob is recorded against the slot its
         own byte 2 names, so a program only has to be sitting loaded once --
-        on either token -- to be replayable forever after. The Download course
-        code is only ever taken as a *candidate*: tokens in this array are
-        replaced by prefix and never evicted, so a stale
-        OneTimeCloudCourse_ can outlive the run it belonged to and be
-        reported alongside an unrelated local course. Confirming the code is
-        the user's call in the options flow -- a wrong one would write a real
-        wash cycle when someone picked a download program.
+        on either token -- to be replayable forever after.
+
+        The Download course code is only ever taken as a *candidate*, and
+        only at the moment the one-time payload actually *changes* to a
+        loaded value. That instant is the one the device is known to accept a
+        program on, so the course selected then is real evidence. Counting
+        every poll instead would rank by dwell time: tokens in this array are
+        replaced by prefix and never evicted, so a stale OneTimeCloudCourse_
+        outlives its run and sits there through however many polls the
+        appliance spends on some ordinary course afterwards -- which is
+        exactly the course that would then be suggested. A candidate is still
+        never applied without confirmation in the options flow, but a
+        confident wrong suggestion is most of the way to a wrong write, and a
+        wrong write here starts a real wash cycle.
         """
         options = rep.get("x.com.samsung.da.options")
         if not options:
@@ -231,8 +248,9 @@ class CloudCourses:
                     changed = True
             oneshot = option_value(options, ONESHOT_PREFIX)
             course = option_value(options, COURSE_PREFIX)
-            if course and is_loaded(oneshot):
+            if course and is_loaded(oneshot) and oneshot != self._last_oneshot:
                 self._candidates[course] = self._candidates.get(course, 0) + 1
+            self._last_oneshot = oneshot
         return changed
 
     # -- reads ------------------------------------------------------------
@@ -242,9 +260,9 @@ class CloudCourses:
             return self._download_course
 
     def download_candidates(self) -> list[str]:
-        """Course codes seen alongside a loaded one-time override, most
-        frequent first -- what the options flow offers as the likely Download
-        course. Never used for a write on its own."""
+        """Course codes seen at the moment a one-time program was loaded,
+        most-observed first -- what the options flow offers as the likely
+        Download course. Never used for a write on its own."""
         with self._lock:
             ranked = sorted(self._candidates.items(), key=lambda kv: (-kv[1], kv[0]))
         return [code for code, _ in ranked]
