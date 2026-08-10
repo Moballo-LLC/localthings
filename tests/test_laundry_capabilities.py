@@ -226,6 +226,37 @@ class TestCourseCodesFromSupportedOptions:
             "8F",
         ]
 
+    def test_decodes_reported_dishwasher_course_table_without_editcourse(self):
+        """Real DA_DW_A51_20_COMMON diagnostics: the board has no
+        /wm/editcourse/vs/0, so every selectable code must come from its
+        packed supportedOptions table, including the newer 82/8A/A7/A8/8C
+        family that previously appeared as raw UI text.
+        """
+        resources = {
+            "/course/vs/0": {
+                "x.com.samsung.da.options": ["Course_82"],
+                "x.com.samsung.da.supportedOptions": [
+                    "482E0026002F00270028AE0026002F0027002A7E0026002F00270028"
+                    "0E0006000F0027000A8E0026002F002700288E0006000F00070008C"
+                    "E0026002F00270028DE0026002F00270028EE0006000F00270028FE"
+                    "0006002F0027002"
+                ],
+            },
+        }
+
+        assert laundry.cycle_options(resources) == [
+            "82",
+            "8A",
+            "A7",
+            "80",
+            "A8",
+            "88",
+            "8C",
+            "8D",
+            "8E",
+            "8F",
+        ]
+
 
 class TestCycleSelect:
     def test_builds_labelled_cycle_select(self):

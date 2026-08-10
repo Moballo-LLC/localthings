@@ -625,7 +625,10 @@ def test_enumerate_prefixed_id_named_by_both_subdevice_id_list_and_oic_res_is_no
         {
             "di": "a",
             "links": [
-                {"href": f"/{_UUID}/multidevice/vs/0"},
+                {
+                    "href": f"/{_UUID}/multidevice/vs/0",
+                    "rt": ["x.com.samsung.da.multidevice"],
+                },
             ],
         }
     ]
@@ -650,7 +653,10 @@ def test_enumerate_prefixed_id_case_mismatch_between_sources_is_not_duplicated()
         {
             "di": "a",
             "links": [
-                {"href": f"/{_UUID}/multidevice/vs/0"},
+                {
+                    "href": f"/{_UUID}/multidevice/vs/0",
+                    "rt": ["x.com.samsung.da.multidevice"],
+                },
             ],
         }
     ]
@@ -664,6 +670,39 @@ def test_enumerate_prefixed_id_case_mismatch_between_sources_is_not_duplicated()
     assert len(subdevices) == 1
     assert subdevices[0].kind == "prefixed"
     assert subdevices[0].key.lower() == _UUID
+
+
+def test_uuid_prefixed_file_links_do_not_trigger_flat_subdevice_probe():
+    """A single-unit AC can advertise UUID-prefixed file-transfer links.
+
+    They identify a transfer namespace, not a sibling indoor unit. Treating
+    the prefix as Pattern C makes setup probe every master href under a UUID
+    that never answers, consuming the whole enumeration timeout budget.
+    """
+    oic_res = [
+        {
+            "di": "a",
+            "links": [
+                {
+                    "href": f"/{_UUID}/file/transfer/vs/0",
+                    "rt": ["x.com.samsung.file.transfer"],
+                },
+                {
+                    "href": f"/{_UUID}/file/list/vs/0",
+                    "rt": ["x.com.samsung.file.list"],
+                },
+            ],
+        }
+    ]
+    sess = _FakeSession({})
+    probes: dict[str, bool] = {}
+
+    subdevices, _extra = enumerate_subdevices(
+        sess, {}, oic_res, probe_log=probes.__setitem__
+    )
+
+    assert subdevices == []
+    assert not any(href.startswith(f"/{_UUID}/") for href in probes)
 
 
 # ---------------------------------------------------------------------------

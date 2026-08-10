@@ -416,8 +416,12 @@ def enumerate_subdevices(
     # /subdevices/vs/0 and /device/<n> 404s; the only trace of the sibling
     # is a UUID-prefixed link in /oic/res (the x.com.samsung.da.multidevice
     # link). Its own tree answers a full Collection at /<uuid>/device/0,
-    # exactly Pattern B's transform, so every UUID path prefix seen in
-    # /oic/res is treated as a candidate. _probe_prefixed's probed_ids
+    # exactly Pattern B's transform, so a UUID prefix attached to that
+    # resource type is treated as a candidate. Other UUID-prefixed links are
+    # not evidence of a sibling: some single-unit AC boards advertise only
+    # per-prefix file-transfer resources, and probing those prefixes against
+    # every master href needlessly burns the setup timeout budget.
+    # _probe_prefixed's probed_ids
     # guard (not a set difference against `listed`) is what keeps an id
     # already named by subdeviceIdList from being probed twice, since the
     # two sources can disagree on case.
@@ -426,7 +430,7 @@ def enumerate_subdevices(
             m.group(1)
             for link in _iter_oic_res_hrefs(oic_res_links)
             for m in [_UUID_PREFIX_RE.match(link.get("href", ""))]
-            if m
+            if m and "x.com.samsung.da.multidevice" in (link.get("rt") or ())
         }
     )
     for sub_id in linked:
