@@ -111,12 +111,22 @@ one of the only two devices available to check it against, which is why the
 code is learned by observation and confirmed by the user in the options flow
 instead of tabled.
 
-The observation signal is "whatever `Course_` reads while a non-sentinel
-`OneTimeCloudCourse_` is loaded." That is a *candidate*, never applied
-directly: tokens in this array are replaced by prefix and never evicted, so
-a stale program token outlives the run it belonged to and can be reported
-next to an unrelated local course. Acting on that unconfirmed would start
-the wrong wash cycle.
+The observation signal is "whatever `Course_` reads at the moment a
+non-sentinel `OneTimeCloudCourse_` *appears or changes*" — a transition that
+was actually watched, not a state. Tokens in this array are replaced by
+prefix and never evicted, so a payload merely sitting there says nothing
+about when it got there; on the first rep after a restart it is equally
+consistent with "just loaded" and "left over from last week". Believing it
+would propose whatever ordinary course the appliance happens to be sitting
+on, and accepting that prefill starts a real wash cycle. Even a genuine
+transition is only ever a *candidate*, confirmed by the user before use.
+
+Both dumps in the corpus taken while off the Download course
+(`washer_wa55a7700av` on `Course_01`, the `_B048` washer on `Course_1C`)
+show the appliance clearing its one-time token to the `FFFF` sentinel, so
+the saved default persists but the one-shot does not. That makes the stale
+case unlikely on these boards — which is a reason to expect it to behave,
+not a reason to depend on it.
 
 ## The dead end: bytes 5/7/9 do not decode portably
 

@@ -318,6 +318,7 @@ async def test_the_form_proposes_the_observed_download_course(hass: HomeAssistan
     assert result["description_placeholders"]["total"] == "9"
     # Two learned so far, seven still to walk through on the appliance.
     assert result["description_placeholders"]["found"] == "2"
+    _observe_program_load(coordinator, SPORTS)
     assert coordinator.cloud_courses.download_candidates() == ["87"]
 
 
@@ -418,6 +419,23 @@ async def test_the_flow_rejects_a_name_shadowing_a_personal_course(hass: HomeAss
 # ---------------------------------------------------------------------------
 # Guided setup
 # ---------------------------------------------------------------------------
+
+
+def _observe_program_load(coordinator, blob, course="87"):
+    """Stand in for the user loading a program while Home Assistant watches.
+    A candidate Download course comes only from a transition that was
+    actually observed, so tests that expect one have to produce it."""
+    coordinator._observe.apply(
+        COURSE,
+        {
+            "x.com.samsung.da.options": [
+                "CloudExtraCourse_0A5C286B2D0C55301A",
+                f"Course_{course}",
+                f"OneTimeCloudCourse_{blob}",
+            ]
+        },
+        source="poll",
+    )
 
 
 def _stub_probe(coordinator, sequence):
@@ -658,7 +676,9 @@ async def test_guided_setup_alone_produces_a_selectable_cycle(hass: HomeAssistan
 
     first = await handler.async_step_cloud_name()
     assert "download_course" in str(first["data_schema"].schema)
-    # Prefilled from the observation the fixture already carries.
+    # Prefilled once a load has actually been watched -- in real use the
+    # guided probe loop feeds observe() and produces exactly this.
+    _observe_program_load(coordinator, SPORTS)
     assert handler._cloud_course == "87"
 
     await handler.async_step_cloud_name({"name": "Sports", "download_course": "87"})

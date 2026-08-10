@@ -83,6 +83,11 @@ RAW_PREFIX = "cloud:"
 # its own CloudExtraCourse_ advertises.
 _SENTINEL_PREFIX = "FFFF"
 
+# Distinct from None, which is a real observation that carried no payload.
+# Only "never observed" suppresses a candidate; absent-then-loaded is a
+# genuine transition and should count.
+_UNOBSERVED = object()
+
 # Byte offset within a blob that carries its slot id.
 _SLOT_BYTE = 2
 _MIN_BLOB_BYTES = 4
@@ -226,8 +231,8 @@ class CloudCourses:
         # user confirmation (see download_candidates).
         self._candidates: dict[str, int] = {}
         # Last one-time payload seen, so a load can be told from a poll that
-        # merely re-reports one. None means "nothing observed yet".
-        self._last_oneshot: str | None = None
+        # merely re-reports one. _UNOBSERVED until the first rep arrives.
+        self._last_oneshot: object = _UNOBSERVED
 
     # -- learning ---------------------------------------------------------
 
@@ -284,7 +289,20 @@ class CloudCourses:
             changed = before != {slot: rec["blob"] for slot, rec in self._slots.items()}
 
             course = option_value(options, COURSE_PREFIX)
-            if course and is_loaded(oneshot) and oneshot != self._last_oneshot:
+            # Only a transition we actually watched happen counts. On the
+            # first observation there is nothing to compare against, so a
+            # payload sitting there is equally consistent with "just loaded"
+            # and "left over from last week" -- and on a board that doesn't
+            # clear the token when leaving Download, believing the former
+            # proposes whatever ordinary course the appliance happens to be
+            # on. Accepting that prefill would start a real wash cycle.
+            # (The two dumps in the corpus taken off the Download course both
+            # show the appliance clearing it to the FFFF sentinel, so this
+            # may never fire in practice -- which is not a reason to rely on
+            # it.) Restores don't persist _last_oneshot, so every restart
+            # re-enters this first-observation state deliberately.
+            first_ever = self._last_oneshot is _UNOBSERVED
+            if course and is_loaded(oneshot) and not first_ever and oneshot != self._last_oneshot:
                 self._candidates[course] = self._candidates.get(course, 0) + 1
             self._last_oneshot = oneshot
         return changed

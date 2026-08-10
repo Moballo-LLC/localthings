@@ -97,12 +97,28 @@ class TestRealDumps:
         assert store.view() == {}
 
     def test_reporter_dump_proposes_its_download_course(self):
+        """Only once a load has actually been watched. A single observation
+        can't tell "just loaded" from "left over", so the dump alone proposes
+        nothing -- see test_a_single_observation_proposes_nothing."""
         rep = _load_device("washer_ww5000c_cloud")["/course/vs/0"]
         store = cloudcourse.CloudCourses()
-        store.observe(rep)
+        store.observe(_rep(["CloudExtraCourse_556B", "Course_87", f"OneTimeCloudCourse_{SPORTS}"]))
+        store.observe(rep)  # one-time token moves to Jeans while on Course_87
         assert store.download_candidates() == ["87"]
         # A candidate is never used until confirmed.
         assert store.snapshot()["download_course"] is None
+
+    def test_a_single_observation_proposes_nothing(self):
+        """The case a user hits after any restart: the appliance has cloud
+        payloads from previous runs and is sitting on an ordinary course. If
+        the board doesn't clear its one-time token, believing the first
+        observation would propose that ordinary course as the Download one --
+        and accepting the prefill would start a real wash cycle."""
+        store = cloudcourse.CloudCourses()
+        store.observe(_rep(["CloudExtraCourse_55", "Course_1B", f"OneTimeCloudCourse_{SPORTS}"]))
+        assert store.download_candidates() == []
+        # The payload is still learned -- that part is device fact.
+        assert store.snapshot()["slots"]["55"]["blob"] == SPORTS
 
     def test_wa55_learns_its_saved_program_but_not_the_sentinel(self):
         rep = _load_device("washer_wa55a7700av")["/course/vs/0"]
@@ -234,6 +250,7 @@ class TestStoreRules:
         store = cloudcourse.CloudCourses()
         loaded = _rep(["CloudExtraCourse_55", "Course_87", f"OneTimeCloudCourse_{SPORTS}"])
         stale = _rep(["CloudExtraCourse_55", "Course_1B", f"OneTimeCloudCourse_{SPORTS}"])
+        store.observe(_rep(["CloudExtraCourse_55", "Course_87"]))  # baseline
         store.observe(loaded)
         for _ in range(200):  # ~100 minutes sitting on a cotton cycle
             store.observe(stale)
@@ -241,6 +258,7 @@ class TestStoreRules:
 
     def test_a_second_distinct_load_is_counted(self):
         store = cloudcourse.CloudCourses()
+        store.observe(_rep(["CloudExtraCourse_556B", "Course_87"]))  # baseline
         store.observe(_rep(["CloudExtraCourse_556B", "Course_87", f"OneTimeCloudCourse_{SPORTS}"]))
         store.observe(_rep(["CloudExtraCourse_556B", "Course_87", f"OneTimeCloudCourse_{JEANS}"]))
         assert store.download_candidates() == ["87"]
@@ -401,3 +419,21 @@ class TestOptionsMergePreservesSiblingTokens:
         options = [f"CloudCourse_{SPORTS}", f"OneTimeCloudCourse_{JEANS}", "Course_1C"]
         assert laundry.option_value(options, "Course") == "1C"
         assert cloudcourse.option_value(options, "Course") == "1C"
+
+    def test_a_payload_appearing_while_watching_is_a_real_transition(self):
+        """Absent-then-loaded is the user selecting a program, and must count
+        -- only "never observed at all" suppresses a candidate."""
+        store = cloudcourse.CloudCourses()
+        store.observe(_rep(["CloudExtraCourse_55", "Course_87"]))
+        store.observe(_rep(["CloudExtraCourse_55", "Course_87", f"OneTimeCloudCourse_{SPORTS}"]))
+        assert store.download_candidates() == ["87"]
+
+    def test_a_stale_payload_across_a_restart_proposes_nothing(self):
+        """A restored store starts unobserved again on purpose: the first rep
+        after a restart is indistinguishable from a stale one, whatever was
+        persisted."""
+        seeded = cloudcourse.CloudCourses()
+        seeded.observe(_rep(["CloudExtraCourse_55", "Course_87", f"OneTimeCloudCourse_{SPORTS}"]))
+        restored = cloudcourse.CloudCourses(seeded.snapshot())
+        restored.observe(_rep(["CloudExtraCourse_55", "Course_1B", f"OneTimeCloudCourse_{SPORTS}"]))
+        assert restored.download_candidates() == []
