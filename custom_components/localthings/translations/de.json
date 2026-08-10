@@ -1446,11 +1446,37 @@
         "title": "Gemerkte Modi vergessen",
         "description": "Aktuell gemerkt: {codes}\n\nDies sind Modi, in denen sich dieses Gerät selbst gemeldet hat, ohne sie als unterstützt anzugeben; sie werden aufbewahrt, damit sie auswählbar bleiben. Das Vergessen ist die Lösung, wenn sich einer davon als falsch herausgestellt hat -- alles, was das Gerät tatsächlich erneut meldet, wird einfach erneut gemerkt, es sei denn, Sie schalten auch „Vom Gerät gemeldete, aber nicht angegebene Modi merken“ in den Geräteeinstellungen aus."
       },
-      "cloud_courses": {
+      "cloud_manual": {
         "title": "Download-Programme",
         "description": "Dieses Gerät meldet {total} heruntergeladene Programme; {found} davon wurden bisher erkannt.\n\nDie Einstellungen eines heruntergeladenen Programms sind nur sichtbar, während dieses Programm geladen ist, und das Gerät meldet nie deren Namen. Um die fehlenden ({pending}) hinzuzufügen: Wählen Sie am Gerät das Download-Programm aus, gehen Sie dann nacheinander jedes heruntergeladene Programm durch, halten Sie bei jedem ein paar Sekunden inne, und kommen Sie danach hierher zurück.\n\nGeben Sie jedem den Namen, den Sie in Home Assistant sehen möchten. Lassen Sie einen Namen leer, um das Programm aus der Programmliste auszuschließen. Namen müssen eindeutig sein.\n\nDas Download-Programm ist das Programm auf diesem Gerät, das ein heruntergeladenes Programm ausführt. Es wird automatisch erkannt, bestätigen Sie es aber hier vor der Verwendung: Die Auswahl eines heruntergeladenen Programms schreibt diesen Programmcode auf das Gerät.",
         "data": {
           "download_course": "Programmcode des Download-Programms"
+        }
+      },
+      "cloud_courses": {
+        "title": "Download cycles",
+        "description": "Guided setup walks the appliance with you: select a downloaded cycle on the appliance and name it as it's found, one at a time.\n\nEdit names shows everything found so far at once — use it to rename or correct something later.",
+        "menu_options": {
+          "cloud_guided": "Guided setup",
+          "cloud_manual": "Edit names"
+        }
+      },
+      "cloud_wait": {
+        "title": "Download cycles"
+      },
+      "cloud_name": {
+        "title": "Name this cycle",
+        "description": "The appliance switched to a downloaded cycle (slot {slot}) and reports {remaining} remaining.\n\nGive it the name you want to see in Home Assistant, then select the next one on the appliance. Leave it blank to keep this cycle out of the list.\n\n{named} of {total} named — you can close this dialog whenever you like, names are saved as you go.",
+        "data": {
+          "name": "Name"
+        }
+      },
+      "cloud_timeout": {
+        "title": "No cycle selected",
+        "description": "Nothing was selected on the appliance. Make sure it's set to the Download cycle, then step through the downloaded programs.\n\n{named} of {total} named — everything named so far is already saved.",
+        "menu_options": {
+          "cloud_guided": "Wait again",
+          "cloud_finish": "Finish"
         }
       }
     },
@@ -1462,6 +1488,9 @@
     },
     "abort": {
       "not_loaded": "Dieses Gerät ist noch nicht verbunden. Versuchen Sie es erneut, sobald es geladen wurde."
+    },
+    "progress": {
+      "cloud_wait": "Select a downloaded cycle on the appliance now.\n\n{named} of {total} named — you can close this dialog at any time, names are saved as you go."
     }
   },
   "issues": {

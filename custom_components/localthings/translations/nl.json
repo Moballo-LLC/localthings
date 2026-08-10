@@ -1446,11 +1446,37 @@
           "finish": "Voltooien"
         }
       },
-      "cloud_courses": {
+      "cloud_manual": {
         "title": "Gedownloade programma's",
         "description": "Dit apparaat meldt {total} gedownloade programma's; {found} daarvan zijn tot nu toe gezien.\n\nDe instellingen van een gedownload programma zijn alleen zichtbaar zolang dat programma geladen is, en het apparaat meldt nooit de naam ervan. Om de ontbrekende ({pending}) toe te voegen: selecteer op het apparaat het programma \"Gedownload\", doorloop dan elk gedownload programma na elkaar, pauzeer bij elk een paar seconden, en kom hierna terug.\n\nGeef elk programma de naam die je in Home Assistant wilt zien. Laat een naam leeg om dat programma buiten de programmalijst te houden. Namen moeten uniek zijn.\n\nHet programma \"Gedownload\" is het programma op dit apparaat dat een gedownload programma uitvoert. Het wordt automatisch gedetecteerd, maar bevestig dit hier voor gebruik: als je een gedownload programma selecteert, wordt deze programmacode naar het apparaat geschreven.",
         "data": {
           "download_course": "Programmacode van \"Gedownload\""
+        }
+      },
+      "cloud_courses": {
+        "title": "Download cycles",
+        "description": "Guided setup walks the appliance with you: select a downloaded cycle on the appliance and name it as it's found, one at a time.\n\nEdit names shows everything found so far at once — use it to rename or correct something later.",
+        "menu_options": {
+          "cloud_guided": "Guided setup",
+          "cloud_manual": "Edit names"
+        }
+      },
+      "cloud_wait": {
+        "title": "Download cycles"
+      },
+      "cloud_name": {
+        "title": "Name this cycle",
+        "description": "The appliance switched to a downloaded cycle (slot {slot}) and reports {remaining} remaining.\n\nGive it the name you want to see in Home Assistant, then select the next one on the appliance. Leave it blank to keep this cycle out of the list.\n\n{named} of {total} named — you can close this dialog whenever you like, names are saved as you go.",
+        "data": {
+          "name": "Name"
+        }
+      },
+      "cloud_timeout": {
+        "title": "No cycle selected",
+        "description": "Nothing was selected on the appliance. Make sure it's set to the Download cycle, then step through the downloaded programs.\n\n{named} of {total} named — everything named so far is already saved.",
+        "menu_options": {
+          "cloud_guided": "Wait again",
+          "cloud_finish": "Finish"
         }
       }
     },
@@ -1462,6 +1488,9 @@
     },
     "abort": {
       "not_loaded": "Dit apparaat is nog niet verbonden. Probeer het opnieuw zodra het is geladen."
+    },
+    "progress": {
+      "cloud_wait": "Select a downloaded cycle on the appliance now.\n\n{named} of {total} named — you can close this dialog at any time, names are saved as you go."
     }
   },
   "issues": {

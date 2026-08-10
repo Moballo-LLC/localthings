@@ -158,6 +158,22 @@ def supports_cloud_courses(rep, courses) -> bool:
     return bool(cloud_slots(rep, courses))
 
 
+def loaded_slot(rep) -> str | None:
+    """The slot whose payload the appliance currently holds -- the one-time
+    override when one is set, else the saved default.
+
+    Deliberately not gated on the course being Download: the guided setup
+    flow watches this before the Download course has been confirmed, and
+    during that walk a change here *is* the signal that the user selected a
+    different program. A stale token can't produce a false positive because
+    the flow waits for a change from its own baseline, not for a value.
+    """
+    options = rep.get("x.com.samsung.da.options")
+    return slot_of(option_value(options, ONESHOT_PREFIX)) or slot_of(
+        option_value(options, DEFAULT_PREFIX)
+    )
+
+
 def _coerce(stored) -> tuple[str | None, dict[str, dict[str, str]]]:
     """Restore the persisted record, dropping anything not the shape this
     module writes -- it round-trips through the config entry as plain JSON

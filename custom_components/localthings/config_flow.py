@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import datetime
 import errno
@@ -76,6 +77,14 @@ _HYSTERESIS_MINUTES = NumberSelector(
         mode=NumberSelectorMode.BOX,
     )
 )
+
+# Guided download-cycle setup: how long a round waits for the user to
+# select a program, and how often it live-reads /course/vs/0 while doing
+# so. The read takes the session lock, so the interval is a few seconds
+# rather than sub-second -- fast enough to feel immediate to someone
+# standing at the appliance, slow enough not to starve polling.
+_CLOUD_WAIT_TIMEOUT_S = 180.0
+_CLOUD_PROBE_INTERVAL_S = 3.0
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -830,6 +839,12 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
     def __init__(self) -> None:
         self._debug_href: str = ""
         self._debug_result: tuple[int, dict] | None = None
+        # Guided download-cycle setup. `_cloud_task` is created once per
+        # round and reused across re-entries (Home Assistant re-enters a
+        # progress step while its spinner is up).
+        self._cloud_task: asyncio.Task[str | None] | None = None
+        self._cloud_slot: str | None = None
+        self._cloud_baseline: str | None = None
 
     def _coordinator(self):
         return self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
@@ -911,6 +926,163 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
         )
 
     async def async_step_cloud_courses(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Entry point for download-cycle setup (issue #342).
+
+        Guided setup is offered first because it is the only version of this
+        that a first-time user can complete confidently: it asks about a
+        program in the moment they select it, rather than about a list of hex
+        ids some time later. The bulk form stays for renaming afterwards,
+        which guided setup is bad at.
+        """
+        return self.async_show_menu(
+            step_id="cloud_courses",
+            menu_options=["cloud_guided", "cloud_manual"],
+        )
+
+    @callback
+    def async_remove(self) -> None:
+        """Stop probing when the flow goes away.
+
+        Closing the dialog is the documented way to leave guided setup, so it
+        has to actually stop: an abandoned round would otherwise go on
+        live-reading /course/vs/0 every few seconds until its timeout, taking
+        the session lock each time, for a user who has walked away.
+        """
+        if self._cloud_task is not None and not self._cloud_task.done():
+            self._cloud_task.cancel()
+        self._cloud_task = None
+
+    async def async_step_cloud_guided(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Start (or restart) a guided discovery round."""
+        coord = self._coordinator()
+        if coord is None:
+            return self.async_abort(reason="not_loaded")
+        self._cloud_task = None
+        self._cloud_slot = None
+        # Baseline: whatever is loaded right now. The round completes when
+        # the appliance moves off it, so the program the user has *already*
+        # selected can't immediately re-trigger and loop the flow.
+        self._cloud_baseline = cloudcourse.loaded_slot(coord.cloud_course_rep())
+        return await self.async_step_cloud_wait()
+
+    async def async_step_cloud_wait(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Wait for the user to select a different downloaded program.
+
+        The task is created once and reused across re-entries -- Home
+        Assistant polls this step while the spinner is up, and building a
+        fresh task each time would restart the wait forever.
+        """
+        coord = self._coordinator()
+        if coord is None:
+            return self.async_abort(reason="not_loaded")
+
+        if self._cloud_task is None:
+            self._cloud_task = self.hass.async_create_task(
+                self._await_cloud_selection(coord), eager_start=False
+            )
+        if not self._cloud_task.done():
+            return self.async_show_progress(
+                step_id="cloud_wait",
+                progress_action="cloud_wait",
+                progress_task=self._cloud_task,
+                description_placeholders=self._cloud_progress_placeholders(coord),
+            )
+
+        self._cloud_slot = self._cloud_task.result()
+        self._cloud_task = None
+        if self._cloud_slot is None:
+            return self.async_show_progress_done(next_step_id="cloud_timeout")
+        return self.async_show_progress_done(next_step_id="cloud_name")
+
+    async def _await_cloud_selection(self, coord) -> str | None:
+        """Poll until the loaded program changes; None on timeout."""
+        deadline = time.monotonic() + _CLOUD_WAIT_TIMEOUT_S
+        while time.monotonic() < deadline:
+            slot = await coord.async_probe_cloud_courses()
+            if slot is not None and slot != self._cloud_baseline:
+                return slot
+            await asyncio.sleep(_CLOUD_PROBE_INTERVAL_S)
+        return None
+
+    def _cloud_progress_placeholders(self, coord) -> dict[str, str]:
+        rep = coord.cloud_course_rep()
+        courses = cycle_options(coord.canonical_resources(MAIN))
+        record = coord.cloud_courses.snapshot()
+        slots = cloudcourse.cloud_slots(rep, courses)
+        named = sum(1 for s in slots if (record["slots"].get(s) or {}).get("name"))
+        return {"named": str(named), "total": str(len(slots))}
+
+    async def async_step_cloud_name(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Name the program the user just selected.
+
+        Persists immediately rather than batching to the end of the flow, so
+        closing the dialog at any point is a clean "save and exit" -- there is
+        no pending work to lose, and reopening resumes from the store.
+        """
+        coord = self._coordinator()
+        if coord is None or self._cloud_slot is None:
+            return self.async_abort(reason="not_loaded")
+        slot = self._cloud_slot
+        existing = (coord.cloud_courses.snapshot()["slots"].get(slot) or {}).get("name", "")
+
+        if user_input is not None:
+            name = str(user_input.get("name", "")).strip()
+            errors = self._apply_cloud_course_names(coord, [slot], {f"name_{slot}": name})
+            if errors:
+                return self._cloud_name_form(coord, slot, existing, errors=errors)
+            # Straight back to waiting: the appliance is still sitting on this
+            # program, and the next round baselines on it, so there is nothing
+            # to click through.
+            self._cloud_baseline = slot
+            return await self.async_step_cloud_wait()
+
+        return self._cloud_name_form(coord, slot, existing)
+
+    def _cloud_name_form(
+        self, coord, slot: str, existing: str, errors: dict[str, str] | None = None
+    ) -> ConfigFlowResult:
+        """One text field, with the copy switched on whether this program is
+        already set up. Re-selecting one is not an error -- it is how someone
+        checks their work -- so it gets an edit form rather than a rejection,
+        and the counter deliberately does not move."""
+        placeholders = self._cloud_progress_placeholders(coord)
+        placeholders["slot"] = slot
+        placeholders["remaining"] = (
+            coord.resource("/operational/state/vs/0").get("x.com.samsung.da.remainingTime") or "--"
+        )
+        return self.async_show_form(
+            step_id="cloud_name",
+            data_schema=vol.Schema({vol.Optional("name", default=existing): _TEXT}),
+            errors=errors or {},
+            description_placeholders=placeholders,
+            last_step=False,
+        )
+
+    async def async_step_cloud_timeout(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Nothing was selected in time. Offer another round rather than
+        dropping the user out of the flow -- and an explicit finish, for
+        anyone who doesn't think to close the dialog."""
+        return self.async_show_menu(
+            step_id="cloud_timeout",
+            menu_options=["cloud_guided", "cloud_finish"],
+        )
+
+    async def async_step_cloud_finish(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        return self.async_create_entry(data=dict(self.config_entry.options))
+
+    async def async_step_cloud_manual(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Name the cloud "Download" programs this appliance has (issue #342).
@@ -1036,7 +1208,7 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
 
         pending = [s for s in advertised if s not in slots]
         return self.async_show_form(
-            step_id="cloud_courses",
+            step_id="cloud_manual",
             data_schema=vol.Schema(fields),
             errors=errors or {},
             description_placeholders={

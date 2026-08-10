@@ -10,10 +10,12 @@ flow that supplies the names.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 from typing import Any, cast
 
 import cbor2
+import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -25,6 +27,18 @@ from custom_components.localthings.registry.entities import SelectDesc
 from custom_components.localthings.registry.subdevices import MAIN
 from tests.conftest import _load_device
 from tests.test_subdevice_discovery import ENTRY_DATA
+
+
+@pytest.fixture(autouse=True)
+def _fast_guided_waits(monkeypatch):
+    """Guided setup polls the appliance on a human timescale. Left at its
+    real values a single lingering round would hold the suite for its whole
+    timeout, since async_block_till_done waits on the task."""
+    from custom_components.localthings import config_flow as cf
+
+    monkeypatch.setattr(cf, "_CLOUD_PROBE_INTERVAL_S", 0.01)
+    monkeypatch.setattr(cf, "_CLOUD_WAIT_TIMEOUT_S", 0.5)
+
 
 FIXTURE = "washer_ww5000c_cloud"
 COURSE = cloudcourse.COURSE_HREF
@@ -251,8 +265,8 @@ async def test_naming_through_the_flow_persists(hass: HomeAssistant):
     coordinator = await _coordinator(hass, entry)
     handler = await _options_handler(hass, coordinator)
 
-    await handler.async_step_cloud_courses()
-    await handler.async_step_cloud_courses(
+    await handler.async_step_cloud_manual()
+    await handler.async_step_cloud_manual(
         {"name_55": "Sports", "name_6B": "Jeans", "download_course": "87"}
     )
     await _flush(hass)
@@ -265,7 +279,7 @@ async def test_the_flow_rejects_two_programs_sharing_a_name(hass: HomeAssistant)
     coordinator = await _coordinator(hass)
     handler = await _options_handler(hass, coordinator)
 
-    result = await handler.async_step_cloud_courses(
+    result = await handler.async_step_cloud_manual(
         {"name_55": "Sports", "name_6B": "sports", "download_course": "87"}
     )
     assert result["errors"] == {"base": "cloud_course_name_duplicate"}
@@ -275,11 +289,11 @@ async def test_the_flow_rejects_two_programs_sharing_a_name(hass: HomeAssistant)
 async def test_clearing_a_name_removes_the_program_from_the_select(hass: HomeAssistant):
     coordinator = await _coordinator(hass)
     handler = await _options_handler(hass, coordinator)
-    await handler.async_step_cloud_courses({"name_55": "Sports", "download_course": "87"})
+    await handler.async_step_cloud_manual({"name_55": "Sports", "download_course": "87"})
     await _flush(hass)
     assert "cloud:55" in _cycle_options(coordinator)
 
-    await handler.async_step_cloud_courses({"name_55": "", "download_course": "87"})
+    await handler.async_step_cloud_manual({"name_55": "", "download_course": "87"})
     await _flush(hass)
     assert "cloud:55" not in _cycle_options(coordinator)
 
@@ -288,7 +302,7 @@ async def test_without_a_confirmed_download_course_nothing_is_offered(hass: Home
     """Names alone aren't enough -- there'd be no course code to write."""
     coordinator = await _coordinator(hass)
     handler = await _options_handler(hass, coordinator)
-    await handler.async_step_cloud_courses({"name_55": "Sports", "download_course": ""})
+    await handler.async_step_cloud_manual({"name_55": "Sports", "download_course": ""})
     await _flush(hass)
 
     assert coordinator.cloud_courses.named() == {"55": "Sports"}
@@ -298,9 +312,9 @@ async def test_without_a_confirmed_download_course_nothing_is_offered(hass: Home
 async def test_the_form_proposes_the_observed_download_course(hass: HomeAssistant):
     coordinator = await _coordinator(hass)
     handler = await _options_handler(hass, coordinator)
-    result = await handler.async_step_cloud_courses()
+    result = await handler.async_step_cloud_manual()
 
-    assert result["step_id"] == "cloud_courses"
+    assert result["step_id"] == "cloud_manual"
     assert result["description_placeholders"]["total"] == "9"
     # Two learned so far, seven still to walk through on the appliance.
     assert result["description_placeholders"]["found"] == "2"
@@ -380,7 +394,7 @@ async def test_the_flow_rejects_a_download_course_the_device_does_not_offer(
     coordinator = await _coordinator(hass)
     handler = await _options_handler(hass, coordinator)
 
-    result = await handler.async_step_cloud_courses({"name_55": "Sports", "download_course": "FF"})
+    result = await handler.async_step_cloud_manual({"name_55": "Sports", "download_course": "FF"})
     assert result["errors"] == {"base": "cloud_course_unknown_course"}
     assert coordinator.cloud_courses.snapshot()["download_course"] is None
     assert coordinator.cloud_courses.named() == {}
@@ -397,5 +411,181 @@ async def test_the_flow_rejects_a_name_shadowing_a_personal_course(hass: HomeAss
     await _flush(hass)
 
     handler = await _options_handler(hass, coordinator)
-    result = await handler.async_step_cloud_courses({"name_55": "MyCo", "download_course": "87"})
+    result = await handler.async_step_cloud_manual({"name_55": "MyCo", "download_course": "87"})
     assert result["errors"] == {"base": "cloud_course_name_duplicate"}
+
+
+# ---------------------------------------------------------------------------
+# Guided setup
+# ---------------------------------------------------------------------------
+
+
+def _stub_probe(coordinator, sequence):
+    """Drive async_probe_cloud_courses from a scripted list of loaded slots,
+    standing in for the user turning the dial. The last entry repeats."""
+    seq = list(sequence)
+
+    async def probe() -> str | None:
+        return seq.pop(0) if len(seq) > 1 else seq[0]
+
+    # setattr, not assignment: the stub stands in for a bound method.
+    setattr(coordinator, "async_probe_cloud_courses", probe)  # noqa: B010
+
+
+async def _run_wait(handler):
+    """Re-enter the progress step the way Home Assistant does until its task
+    settles, then follow the completion through."""
+    result = await handler.async_step_cloud_wait()
+    for _ in range(200):
+        if result["type"] != "progress":
+            return result
+        if handler._cloud_task is not None:
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(asyncio.shield(handler._cloud_task), 5)
+        result = await handler.async_step_cloud_wait()
+    raise AssertionError("progress step never settled")
+
+
+async def test_guided_waits_for_a_change_not_a_state(hass: HomeAssistant):
+    """The trap this design exists to avoid. After naming a program the
+    appliance is still sitting on it, so a loop that fires on "a known slot is
+    loaded" would re-offer the same one forever. Each round baselines on what
+    is loaded when it starts and completes only on a change."""
+    coordinator = await _coordinator(hass)
+    handler = await _options_handler(hass, coordinator)
+
+    # The fixture is already loaded with 6B, so that is the baseline.
+    await handler.async_step_cloud_guided()
+    assert handler._cloud_baseline == "6B"
+
+    # The appliance stays on 6B: no round completes.
+    _stub_probe(coordinator, ["6B"])
+    handler._cloud_task = None
+    task = hass.async_create_task(handler._await_cloud_selection(coordinator))
+    await asyncio.sleep(0)
+    assert not task.done()
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+
+
+async def test_guided_names_a_newly_selected_program(hass: HomeAssistant):
+    coordinator = await _coordinator(hass)
+    handler = await _options_handler(hass, coordinator)
+    await handler.async_step_cloud_guided()
+
+    _stub_probe(coordinator, ["55"])
+    result = await _run_wait(handler)
+    assert result["step_id"] == "cloud_name"
+
+    form = await handler.async_step_cloud_name()
+    assert form["description_placeholders"]["slot"] == "55"
+    # Persisted immediately -- closing the dialog now would lose nothing.
+    await handler.async_step_cloud_name({"name": "Sports"})
+    await _flush(hass)
+    assert coordinator.cloud_courses.named() == {"55": "Sports"}
+
+
+async def test_guided_rebaselines_so_the_named_program_cannot_refire(
+    hass: HomeAssistant,
+):
+    coordinator = await _coordinator(hass)
+    handler = await _options_handler(hass, coordinator)
+    await handler.async_step_cloud_guided()
+    _stub_probe(coordinator, ["55"])
+    await _run_wait(handler)
+    await handler.async_step_cloud_name({"name": "Sports"})
+    await _flush(hass)
+    # The next round starts from the program just named, so the appliance
+    # sitting on it is not a new selection.
+    assert handler._cloud_baseline == "55"
+
+
+async def test_reselecting_a_named_program_offers_an_edit_not_an_error(
+    hass: HomeAssistant,
+):
+    """Re-picking one is how someone checks their work. It gets the existing
+    name pre-filled, and the counter deliberately does not move."""
+    coordinator = await _coordinator(hass)
+    coordinator.apply_cloud_courses({"55": "Sports"}, "87")
+    await _flush(hass)
+
+    handler = await _options_handler(hass, coordinator)
+    await handler.async_step_cloud_guided()
+    _stub_probe(coordinator, ["55"])
+    await _run_wait(handler)
+
+    form = await handler.async_step_cloud_name()
+    assert form["errors"] == {}
+    assert form["data_schema"]({})["name"] == "Sports"
+    before = form["description_placeholders"]["named"]
+    await handler.async_step_cloud_name({"name": "Sports"})
+    await _flush(hass)
+    after = handler._cloud_progress_placeholders(coordinator)["named"]
+    assert before == after == "1"
+
+
+async def test_guided_times_out_into_a_retry_or_finish_menu(hass: HomeAssistant, monkeypatch):
+    from custom_components.localthings import config_flow as cf
+
+    monkeypatch.setattr(cf, "_CLOUD_WAIT_TIMEOUT_S", 0.0)
+    coordinator = await _coordinator(hass)
+    handler = await _options_handler(hass, coordinator)
+    await handler.async_step_cloud_guided()
+    _stub_probe(coordinator, ["6B"])
+
+    result = await _run_wait(handler)
+    assert result["step_id"] == "cloud_timeout"
+    menu = await handler.async_step_cloud_timeout()
+    assert set(menu["menu_options"]) == {"cloud_guided", "cloud_finish"}
+
+
+async def test_a_failed_probe_does_not_end_the_round(hass: HomeAssistant):
+    """A dropped read is one missed poll, not a reason to bail on someone
+    standing at the appliance."""
+    coordinator = await _coordinator(hass)
+    handler = await _options_handler(hass, coordinator)
+    await handler.async_step_cloud_guided()
+    _stub_probe(coordinator, [None, None, "55"])
+
+    result = await _run_wait(handler)
+    assert result["step_id"] == "cloud_name"
+    assert handler._cloud_slot == "55"
+
+
+async def test_the_entry_step_is_a_menu_offering_both_paths(hass: HomeAssistant):
+    coordinator = await _coordinator(hass)
+    handler = await _options_handler(hass, coordinator)
+    result = await handler.async_step_cloud_courses()
+    assert set(result["menu_options"]) == {"cloud_guided", "cloud_manual"}
+
+
+async def test_closing_the_dialog_stops_probing_the_appliance(hass: HomeAssistant):
+    """Closing the dialog is the documented way to leave guided setup, so it
+    has to actually stop -- an abandoned round would otherwise keep taking the
+    session lock every few seconds for a user who has walked away."""
+    coordinator = await _coordinator(hass)
+    handler = await _options_handler(hass, coordinator)
+    await handler.async_step_cloud_guided()
+
+    probes = 0
+
+    async def probe() -> str | None:
+        nonlocal probes
+        probes += 1
+        return "6B"  # never changes, so the round would run to timeout
+
+    # setattr, not assignment: the stub stands in for a bound method.
+    setattr(coordinator, "async_probe_cloud_courses", probe)  # noqa: B010
+    result = await handler.async_step_cloud_wait()
+    assert result["type"] == "progress"
+    task = handler._cloud_task
+    assert task is not None and not task.done()
+
+    handler.async_remove()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+    assert task.cancelled()
+    settled = probes
+    await asyncio.sleep(0.05)
+    assert probes == settled

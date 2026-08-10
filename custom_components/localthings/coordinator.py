@@ -513,6 +513,29 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """/course/vs/0's live rep -- what advertises the slot list."""
         return self.resource(cloudcourse.COURSE_HREF)
 
+    async def async_probe_cloud_courses(self) -> str | None:
+        """Live-read /course/vs/0, apply it, and report which slot is loaded.
+
+        /course/vs/0 is cold-tier, so passively a program selection can take
+        a whole poll interval to show up -- far too slow for the guided setup
+        flow, which is a person standing at the appliance waiting for Home
+        Assistant to notice. The read goes through the normal apply path, so
+        learning and persistence still happen in exactly one place.
+
+        Returns None when the read fails; the caller is a retry loop and a
+        single missed read is not worth surfacing.
+        """
+        try:
+            code, rep = await self.async_raw_read(cloudcourse.COURSE_HREF)
+        except Exception:
+            # One missed probe; the caller is a retry loop.
+            self._log.debug("cloud-course probe failed", exc_info=True)
+            return None
+        if not _coap_accepted(code) or not rep:
+            return None
+        self._observe.apply(cloudcourse.COURSE_HREF, rep, source="poll")
+        return cloudcourse.loaded_slot(rep)
+
     def apply_cloud_courses(self, names: dict[str, str], download_course: str | None) -> None:
         """The one mutation path for the cloud-program store (issue #342).
 
