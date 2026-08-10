@@ -1005,7 +1005,16 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
         deadline = time.monotonic() + _CLOUD_WAIT_TIMEOUT_S
         while time.monotonic() < deadline:
             slot = await coord.async_probe_cloud_courses()
-            if slot is not None and slot != self._cloud_baseline:
+            # Only a slot the store actually recorded. The probe reports
+            # whatever payload is loaded, while observe() declines one whose
+            # slot the device doesn't advertise -- offering to name that would
+            # take a name and silently discard it, since there is no record to
+            # hang it on and no payload to replay.
+            if (
+                slot is not None
+                and slot != self._cloud_baseline
+                and coord.cloud_courses.snapshot()["slots"].get(slot)
+            ):
                 return slot
             await asyncio.sleep(_CLOUD_PROBE_INTERVAL_S)
         return None
@@ -1104,11 +1113,17 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
 
     @property
     def _cloud_course(self) -> str | None:
+        """The best observed candidate, narrowed to what the selector offers.
+
+        Unfiltered, a candidate the appliance's own course list no longer
+        contains would prefill a dropdown that rejects it, and the form would
+        fail validation on a value the user never chose.
+        """
         coord = self._coordinator()
         if coord is None:
             return None
-        candidates = coord.cloud_courses.download_candidates()
-        return candidates[0] if candidates else None
+        available = cycle_options(coord.canonical_resources(MAIN))
+        return next((c for c in coord.cloud_courses.download_candidates() if c in available), None)
 
     def _cloud_course_selector(self, coord):
         """The appliance's own course codes, observed candidates first.
@@ -1134,9 +1149,13 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
         """Nothing was selected in time. Offer another round rather than
         dropping the user out of the flow -- and an explicit finish, for
         anyone who doesn't think to close the dialog."""
+        coord = self._coordinator()
+        if coord is None:
+            return self.async_abort(reason="not_loaded")
         return self.async_show_menu(
             step_id="cloud_timeout",
             menu_options=["cloud_guided", "cloud_finish"],
+            description_placeholders=self._cloud_progress_placeholders(coord),
         )
 
     async def async_step_cloud_finish(
@@ -1204,7 +1223,18 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
         courses come first, so a shared label resolves to the real cycle).
         """
         names = {slot: str(user_input.get(f"name_{slot}", "")).strip() for slot in known}
+        stored_slots = coord.cloud_courses.snapshot()["slots"]
         taken = {name.casefold() for name in self._device_course_names(coord)}
+        # Programs this form isn't editing. The bulk form edits every slot at
+        # once so this adds nothing there, but guided setup submits one at a
+        # time -- without it, naming two programs the same was accepted, and
+        # the select resolves a shared label to whichever option comes first,
+        # so picking the second would run the first one's payload.
+        taken |= {
+            record["name"].casefold()
+            for slot, record in stored_slots.items()
+            if record["name"] and slot not in known
+        }
         for name in names.values():
             if not name:
                 continue

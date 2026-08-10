@@ -709,3 +709,78 @@ async def test_guided_rejects_a_download_course_the_device_does_not_offer(hass: 
     result = await handler.async_step_cloud_name({"name": "Sports", "download_course": "FF"})
     assert result["errors"] == {"base": "cloud_course_unknown_course"}
     assert coordinator.cloud_courses.snapshot()["download_course"] is None
+
+
+async def test_guided_rejects_a_name_another_program_already_has(hass: HomeAssistant):
+    """Guided setup submits one program at a time, so a within-form check
+    can't see the others. Two programs sharing a label resolve to whichever
+    option comes first, meaning picking the second would run the first one's
+    payload."""
+    coordinator = await _coordinator(hass)
+    coordinator.apply_cloud_courses({"6B": "Sports"}, "87")
+    await _flush(hass)
+
+    handler = await _options_handler(hass, coordinator)
+    await handler.async_step_cloud_guided()
+    _stub_probe(coordinator, ["55"])
+    await _run_wait(handler)
+
+    result = await handler.async_step_cloud_name({"name": "Sports"})
+    await _flush(hass)
+    assert result["errors"] == {"base": "cloud_course_name_duplicate"}
+    assert coordinator.cloud_courses.named() == {"6B": "Sports"}
+
+
+async def test_renaming_a_program_to_its_own_name_is_allowed(hass: HomeAssistant):
+    """The slot being edited is excluded from the taken set, or confirming an
+    unchanged name would reject itself."""
+    coordinator = await _coordinator(hass)
+    coordinator.apply_cloud_courses({"55": "Sports"}, "87")
+    await _flush(hass)
+
+    handler = await _options_handler(hass, coordinator)
+    await handler.async_step_cloud_guided()
+    _stub_probe(coordinator, ["55"])
+    await _run_wait(handler)
+
+    result = await handler.async_step_cloud_name({"name": "Sports"})
+    assert result["type"] == "progress"  # accepted, straight back to waiting
+
+
+async def test_the_timeout_screen_fills_in_its_counters(hass: HomeAssistant):
+    """Its copy interpolates the same placeholders as the other screens, so
+    without them the dialog renders literal braces."""
+    coordinator = await _coordinator(hass)
+    coordinator.apply_cloud_courses({"55": "Sports"}, "87")
+    await _flush(hass)
+
+    handler = await _options_handler(hass, coordinator)
+    result = await handler.async_step_cloud_timeout()
+    assert result["description_placeholders"]["named"] == "1"
+    assert result["description_placeholders"]["named_list"] == "Sports"
+
+
+async def test_guided_ignores_a_payload_the_store_would_not_record(hass: HomeAssistant):
+    """The probe reports whatever payload is loaded; observe() declines one
+    whose slot the device doesn't advertise. Offering to name that would take
+    a name and discard it -- there is no record to hang it on."""
+    coordinator = await _coordinator(hass)
+    handler = await _options_handler(hass, coordinator)
+    await handler.async_step_cloud_guided()
+
+    # 'ZZ' is not in this appliance's CloudExtraCourse_ list.
+    _stub_probe(coordinator, ["ZZ"])
+    result = await _run_wait(handler)
+    assert result["step_id"] == "cloud_timeout"
+
+
+async def test_the_prefilled_course_is_always_one_the_dropdown_offers(hass: HomeAssistant):
+    """An observed candidate the appliance's course list no longer contains
+    would prefill a value the selector rejects, failing validation on
+    something the user never chose."""
+    coordinator = await _coordinator(hass)
+    coordinator.cloud_courses._candidates["FF"] = 99  # not in the course list
+    handler = await _options_handler(hass, coordinator)
+
+    offered = handler._cloud_course_selector(coordinator).config["options"]
+    assert handler._cloud_course is None or handler._cloud_course in offered
