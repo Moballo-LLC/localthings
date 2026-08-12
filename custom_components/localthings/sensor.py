@@ -54,7 +54,7 @@ class LocalThingsSensor(LocalThingsEntity, SensorEntity):
         self._hysteresis_value = None
         self._sticky_value = None
         self._sticky_until: float | None = None
-        self._sticky_armed = False
+        self._sticky_spent = False
 
     @property
     def native_unit_of_measurement(self):
@@ -82,52 +82,49 @@ class LocalThingsSensor(LocalThingsEntity, SensorEntity):
         cache, so write_fn, diagnostics, and the observe-mode sweep
         comparison keep seeing real device data throughout.
 
-        Reads `sticky_fn` and friends against this href's own live rep,
-        not the already-computed `raw`, so they can be independent of
-        whatever rep_fn itself gates on -- notably `sticky_live_fn`, which
-        is *not* `raw`: `raw` is rep_fn's own (possibly differently gated)
-        result, e.g. progress's rep_fn shows "Idle" while paused, but a
-        real progress value reported while paused (adding a sock mid-
-        cycle) must still win over a stale hold, which means reading it
-        ungated here rather than through that gate.
+        `sticky_fn`/`sticky_bypass_fn` read this href's live rep rather
+        than the already-computed `raw`, so they can key on fields rep_fn
+        has collapsed away -- but they never compute a value. `raw` and
+        the frozen `sticky_value` are the only things returned here, so a
+        held entity and a free-running one agree on what "live" means; a
+        hook that broke that rule caused issue #358.
 
-        Edge-triggered, not level-triggered: the window only (re)starts on
-        a fresh False->True transition of `sticky_fn`, and -- this is the
-        part level-triggering alone misses -- expiry is still checked on
-        every call even while `sticky_fn` keeps matching. Without the
-        latter, a firmware that leaves the underlying field stuck matching
-        forever (the same class of quirk `_completion_minutes` already
-        works around) would show the frozen value forever too, defeating
-        "bounded, not indefinite".
+        At most one window per `sticky_bypass_fn` cycle: arming marks the
+        hold spent, and only the bypass clears that. So a `sticky_fn` that
+        keeps matching (firmware leaving the field stuck -- the quirk
+        `_completion_minutes` works around) can't extend the window, and
+        one flapping in and out can't restart it either, before or after
+        expiry. Expiry alone doesn't re-open the door: without something
+        the calibre of "a new cycle is actually running" in between, a
+        second Finish is the same Finish, and re-arming on it would strobe
+        the entity between held and live once per window -- exactly the
+        repeated announcements #345 and #358 are about.
 
-        `sticky_bypass_fn`, when it matches, always passes
-        `sticky_live_fn`'s result through and drops any hold -- for a
-        condition where "not sticky right now" is ambiguous between "went
-        idle, honor the hold" and "genuinely live, different data" (e.g. a
-        new cycle's own real progress), which "consult the hold whenever
-        sticky_fn is False" alone can't tell apart.
+        `sticky_bypass_fn` drops the hold and returns `raw`, for when "not
+        sticky right now" is ambiguous between "went idle, honor the hold"
+        and "genuinely moved on to new data". It is both the early release
+        and the only re-arm, so it should demand positive evidence of that
+        move; when unsure, letting the window run out is the cheaper
+        mistake.
         """
         assert desc.sticky_fn is not None  # native_value only calls this when set
         rep = self.coordinator.resource(self._bound.href)
         now = time.monotonic()
-        matches = desc.sticky_fn(rep)
 
-        if matches:
-            if not self._sticky_armed:
+        if desc.sticky_fn(rep):
+            if not self._sticky_spent:
                 self._sticky_value = (
                     desc.sticky_value_fn(rep) if desc.sticky_value_fn is not None else raw
                 )
                 self._sticky_until = now + desc.sticky_seconds
-            self._sticky_armed = True
-        else:
-            self._sticky_armed = False
-            if desc.sticky_bypass_fn is not None and desc.sticky_bypass_fn(rep):
-                self._sticky_until = None
-                return desc.sticky_live_fn(rep) if desc.sticky_live_fn is not None else raw
+                self._sticky_spent = True
+        elif desc.sticky_bypass_fn is not None and desc.sticky_bypass_fn(rep):
+            self._sticky_until = None
+            self._sticky_spent = False
+            return raw
 
-        if self._sticky_until is not None and now < self._sticky_until:
-            return self._sticky_value
-        return raw
+        holding = self._sticky_until is not None and now < self._sticky_until
+        return self._sticky_value if holding else raw
 
     def _apply_hysteresis(self, raw):
         """Hold the last value this entity actually reported until a new one

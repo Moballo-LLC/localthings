@@ -165,20 +165,132 @@ def test_a_new_cycle_starting_overrides_the_hold():
     assert sensor.native_value == "Wash"
 
 
-def test_a_paused_new_cycle_also_overrides_the_hold():
-    """Not just an actively-running new cycle: adding a sock and pausing
-    mid-cycle must also show the real, current progress rather than a
-    stale hold from the previous cycle -- machine_state isn't 'active'
-    while paused, so a bypass keyed on that alone would miss this."""
-    sensor, coordinator = _sensor(_PROGRESS_DESC)
+def test_a_running_stage_after_finish_does_not_break_the_hold():
+    """Issue #358: the reporting dryer resets `progress` to its course's
+    first stage in the same moment `state` goes idle -- observed twice,
+    identically, as Cooling -> +60s Finish -> +24s 'Drying' -> +4s
+    settled, with the reporter's machine_state history flipping to idle on
+    the exact second progress reads 'Drying'. The hold must survive that,
+    so the cycle still reads Drying, Cooling, Finish, Idle rather than the
+    reported Drying, Cooling, Finish, Drying, Idle."""
+    desc = replace(_PROGRESS_DESC, sticky_seconds=0.2)
+    sensor, coordinator = _sensor(desc)
+
+    _replace(coordinator, state="Run", progress="Drying", progressPercentage="40")
+    assert sensor.native_value == "Drying"
+
+    _replace(coordinator, state="Run", progress="Cooling", progressPercentage="95")
+    assert sensor.native_value == "Cooling"
 
     _replace(coordinator, state="Run", progress="Finish", progressPercentage="100")
     assert sensor.native_value == "Finish"
-    _replace(coordinator, state="Ready")
-    assert sensor.native_value == "Finish"  # still held
+
+    # The tail: a running stage again, state already idle.
+    _replace(coordinator, state="Ready", progress="Drying", progressPercentage="100")
+    assert sensor.native_value == "Finish"
+
+    # ...then the device settles, still inside the window.
+    _replace(coordinator, state="Ready", progress="None")
+    assert sensor.native_value == "Finish"
+
+    time.sleep(0.25)
+    assert sensor.native_value == "Idle"
+
+
+def test_progress_percentage_survives_the_same_tail():
+    """#358's tail hits progress_percentage through the identical bypass;
+    it must stay pinned at 100 rather than being released back to a raw
+    mid-cycle figure."""
+    desc = replace(_PROGRESS_PERCENTAGE_DESC, sticky_seconds=0.2)
+    sensor, coordinator = _sensor(desc)
+
+    _replace(coordinator, state="Run", progress="Finish", progressPercentage="100")
+    assert sensor.native_value == 100
+
+    _replace(coordinator, state="Ready", progress="Drying", progressPercentage="40")
+    assert sensor.native_value == 100
+
+    time.sleep(0.25)
+    assert sensor.native_value == 0
+
+
+def test_a_paused_new_cycle_is_left_to_the_window_rather_than_released():
+    """'Paused' isn't positive evidence of a new cycle, and #358's tail is
+    indistinguishable from it. Nothing live is withheld by waiting --
+    rep_fn shows 'Idle' while paused with or without a hold -- so the
+    stale Finish just expires on schedule instead of being cut short."""
+    desc = replace(_PROGRESS_DESC, sticky_seconds=0.05)
+    sensor, coordinator = _sensor(desc)
+
+    _replace(coordinator, state="Run", progress="Finish", progressPercentage="100")
+    assert sensor.native_value == "Finish"
 
     _replace(coordinator, state="Pause", progress="Wash")
+    assert sensor.native_value == "Finish"  # held out, not released
+
+    time.sleep(0.1)
+    assert sensor.native_value == "Idle"  # what a paused appliance always shows
+
+    _replace(coordinator, state="Run", progress="Wash")
     assert sensor.native_value == "Wash"
+
+
+def test_a_flapping_finish_cannot_ratchet_an_open_window_forward():
+    """Edge-triggering stops a *stuck* Finish from extending the hold; a
+    progress that flaps out of and back into Finish must not restart it
+    either, or the bound stops being a bound."""
+    desc = replace(_PROGRESS_DESC, sticky_seconds=0.3)
+    sensor, coordinator = _sensor(desc)
+
+    _replace(coordinator, state="Ready", progress="Finish")
+    assert sensor.native_value == "Finish"
+
+    for _ in range(3):
+        time.sleep(0.05)
+        _replace(coordinator, state="Ready", progress="None")
+        assert sensor.native_value == "Finish"
+        _replace(coordinator, state="Ready", progress="Finish")
+        assert sensor.native_value == "Finish"
+
+    # 0.15s of flapping so far -- the window still ends 0.3s after the
+    # first Finish, not 0.3s after the most recent re-entry.
+    time.sleep(0.2)
+    _replace(coordinator, state="Ready", progress="Finish")
+    assert sensor.native_value == "Idle"
+
+
+def test_a_finish_after_the_window_closes_does_not_re_arm_it():
+    """Expiry doesn't re-open the door: with no new cycle in between, a
+    second Finish is the same Finish. Re-arming on it would strobe the
+    entity Finish -> Idle -> Finish once per window, re-firing exactly the
+    announcements #345 is about -- so it takes a bypass (a cycle actually
+    running) to make the hold available again.
+
+    Distinct from the flap test above: there the window is still open, and
+    the last read before expiry leaves the sticky condition *matching*.
+    Here it has already closed, and the flap ends on a non-matching read,
+    which is the state a spent-on-arm-only guard would let re-arm."""
+    desc = replace(_PROGRESS_DESC, sticky_seconds=0.05)
+    sensor, coordinator = _sensor(desc)
+
+    _replace(coordinator, state="Ready", progress="Finish")
+    assert sensor.native_value == "Finish"
+
+    time.sleep(0.1)
+    assert sensor.native_value == "Idle"
+
+    _replace(coordinator, state="Ready", progress="None")
+    assert sensor.native_value == "Idle"
+    _replace(coordinator, state="Ready", progress="Finish")
+    assert sensor.native_value == "Idle"
+
+    # A real cycle in between is what makes it available again.
+    _replace(coordinator, state="Run", progress="Drying")
+    assert sensor.native_value == "Drying"
+    _replace(coordinator, state="Run", progress="Finish")
+    assert sensor.native_value == "Finish"
+    _replace(coordinator, state="Ready", progress="None")
+    assert sensor.native_value == "Finish"
 
 
 def test_hold_expires_after_sticky_seconds():
