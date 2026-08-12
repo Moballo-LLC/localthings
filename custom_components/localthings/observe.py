@@ -56,6 +56,26 @@ SUCCESS_FRACTION = 0.8
 PUSH_HEALTH_WINDOW_S = 60.0
 
 
+def _is_alarms_href(href: str) -> bool:
+    """True for /alarms/vs/<index> in any subdevice-translated shape --
+    the canonical MAIN form (/alarms/vs/0), an indexed subdevice's
+    renumbered instance (/alarms/vs/<key>), or a prefixed subdevice's
+    UUID-qualified form (/<uuid>/alarms/vs/0). `Subdevice.to_actual`
+    (registry/subdevices.py) only ever rewrites the trailing index
+    segment or prepends a prefix -- it never touches the 'alarms/vs'
+    stem -- so matching that fixed segment plus a wildcard tail catches
+    every shape without this module needing to be subdevice-aware.
+
+    See `ObserveManager.apply`'s use of this for why the href matters:
+    unlike most resources, /alarms/vs/0's `x.com.samsung.da.items` array
+    is a complete snapshot of every currently-active alarm, not a
+    possibly-partial field update -- so it must never be merged onto a
+    stale prior rep (issue #348).
+    """
+    head, _, _ = href.rpartition("/")
+    return head.endswith("/alarms/vs")
+
+
 class ObserveManager:
     """Per-device observe-mode state: mode, write-settle guard, and (later)
     subscription/staleness tracking. Pure sync logic — safe to call from
@@ -122,6 +142,20 @@ class ObserveManager:
         comes through, even though nothing about the device's actual
         supported options changed.
 
+        `_is_alarms_href` is the one exception to that merge (issue #348):
+        /alarms/vs/0's `items` array is always sent as a complete
+        snapshot of every currently-active alarm, never a partial delta
+        -- confirmed by a live `read_resource` GET returning `{}` (no
+        `items` key at all) the moment a washer's board actually clears
+        an alarm, which entity.py already documents as this resource's
+        normal no-alarm shape. Merging that `{}` onto the prior rep the
+        same way as everywhere else silently kept the stale `items`
+        entry forever: an absent key merges as "unchanged" everywhere
+        else, but on this href absent specifically means "cleared".
+        Every family that exposes an alarm sensor shares this href
+        (common.ALARMS, range_hood's own copy), so this is a full
+        replace for all of them, not a washer-specific carve-out.
+
         `apply()` is the sole path StateCache mutations flow through in
         this component (poll, sweep, and OBSERVE notify all funnel here),
         so `_cache_lock` serializes the read-then-write across those
@@ -149,7 +183,7 @@ class ObserveManager:
             self.log.debug("dropping %s update for %s (settling)", source, href)
             return False
         with self._cache_lock:
-            merged = {**(self.cache.get(href) or {}), **rep}
+            merged = dict(rep) if _is_alarms_href(href) else {**(self.cache.get(href) or {}), **rep}
             changed = self.cache.apply_rep(href, merged, source=source)
         # Outside the cache lock -- the hook takes locks of its own and
         # never reads the cache back. `source` is passed along rather than
