@@ -56,11 +56,16 @@ class _FakeSession:
         self._post_code = post_code
         self._get_reps: dict[str, list[dict]] = {}
 
-    def queue_get(self, href: str, rep: dict) -> None:
+    def queue_get(self, href: str, rep: dict | list) -> None:
         """Queue one more canned rep for `href`'s next GET. Once an href's
         queue is down to one entry, that entry keeps answering every
         further GET -- a test only needs to queue the values that
-        actually change across calls."""
+        actually change across calls.
+
+        A list models a Collection's answer (the `[devcol rep, {href, rep},
+        ...]` batch), which is not a Property map and so is a shape the
+        read path has to carry separately -- see the collection test below.
+        """
         self._get_reps.setdefault(href.strip("/"), []).append(rep)
 
     def post(self, path_segs, payload, timeout=None):
@@ -576,6 +581,28 @@ async def test_read_resource_with_href_does_live_get(hass, coordinator, device_i
     assert response["href"] == "/mode/vs/0"
     assert response["actual_href"] == "/mode/vs/0"
     assert response["rep"] == {"x.field": "live"}
+    # No duplicate copy of a Property map that `rep` already carries.
+    assert "body" not in response
+
+
+async def test_read_resource_surfaces_a_collections_list_body(hass, coordinator, device_id):
+    """A Collection answers a CBOR list, not a Property map, so `rep` can't
+    hold it (issue #335: `/sec/devices` came back as an accepted-but-empty
+    2.05, which reads as "exists, nothing in it" -- the opposite of what a
+    populated batch means)."""
+    batch = [
+        {"rt": ["x.com.samsung.devcol", "oic.wk.col"]},
+        {"href": "/mode/vs/0", "rep": {"x.field": "live"}},
+    ]
+    fake = _FakeSession()
+    fake.queue_get("sec/devices", batch)
+    coordinator._session = fake
+
+    response = await _call_read(hass, device_id, href="/sec/devices")
+
+    assert response["code"] == "2.05"
+    assert response["rep"] == {}
+    assert response["body"] == batch
 
 
 async def test_read_resource_without_href_returns_cached_snapshot_and_does_not_get(

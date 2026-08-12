@@ -179,7 +179,7 @@ async def _async_read_resource(hass: HomeAssistant, call: ServiceCall) -> Servic
     # Same normalize-before-translate order as the write path above.
     canonical = normalize_href(href)
     actual_href = subdevice.to_actual(canonical)
-    code, rep = await coordinator.async_raw_read(actual_href)
+    code, rep, body = await coordinator.async_raw_read(actual_href)
     read_result: dict[str, Any] = {
         "href": canonical,
         "actual_href": actual_href,
@@ -187,6 +187,13 @@ async def _async_read_resource(hass: HomeAssistant, call: ServiceCall) -> Servic
         "raw_code": code,
         "rep": rep,
     }
+    # `body` only when it isn't the Property map already in `rep` -- a
+    # Collection (`/device/0`, `/sec/devices`) answers a CBOR list, which
+    # `rep` can't carry and which used to vanish into an empty-looking
+    # 2.05 (issue #335). Omitted for the ordinary map case rather than
+    # duplicating every rep in every response.
+    if body is not None and not isinstance(body, dict):
+        read_result["body"] = body
     return cast(ServiceResponse, read_result)
 
 

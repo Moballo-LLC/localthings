@@ -530,7 +530,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         single missed read is not worth surfacing.
         """
         try:
-            code, rep = await self.async_raw_read(cloudcourse.COURSE_HREF)
+            code, rep, _body = await self.async_raw_read(cloudcourse.COURSE_HREF)
         except Exception:
             # One missed probe; the caller is a retry loop.
             self._log.debug("cloud-course probe failed", exc_info=True)
@@ -1576,12 +1576,24 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._log.debug("raw write follow-up read failed: %s", e)
         return code, new_rep
 
-    def _raw_read_blocking(self, path_segs: list[str], href: str) -> tuple[int, dict]:
+    def _raw_read_blocking(self, path_segs: list[str], href: str) -> tuple[int, dict, Any]:
         """Debug primitive: a live GET, deliberately bypassing the cache
         (issue #300) -- the cache can be up to a poll interval stale,
         exactly the staleness that makes testing whether a write held or
         got silently reverted by the board unreliable. Blocking -- runs in
-        executor."""
+        executor.
+
+        Returns `(code, rep, body)`. `rep` is the decoded body only when it
+        is a Property map, since that's the shape the observe cache and
+        every capability are written against. `body` is whatever CBOR
+        actually decoded to, and exists because a Collection answers a
+        *list*, not a map: `/device/0` and its `x.com.samsung.devcol`
+        siblings return the `[devcol rep, {href, rep}, ...]` batch
+        `parse_device0_batch` reads. Reporting only `rep` rendered those as
+        an accepted-but-empty `2.05 {}`, which reads as "the resource is
+        there and has nothing in it" -- the opposite of what a full batch
+        means, and how issue #335's `/sec/devices` was nearly written off.
+        """
         if self._session is None:
             self._connect_session()
         sess = self._session
@@ -1589,6 +1601,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise RuntimeError("no session")
         code, payload = sess.get(path_segs, timeout=10.0)
         rep: dict = {}
+        body: Any = None
         if code == 0x45 and payload:
             try:
                 body = cbor2.loads(payload)
@@ -1598,11 +1611,13 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if isinstance(body, dict):
                 self._observe.apply(href, body, source="poll")
                 rep = body
-        return code, rep
+        return code, rep, body
 
-    async def async_raw_read(self, href: str) -> tuple[int, dict]:
+    async def async_raw_read(self, href: str) -> tuple[int, dict, Any]:
         """Debug-only live GET (issue #300, backs the read_resource
-        service). Same href validation as async_raw_write."""
+        service). Same href validation as async_raw_write. Three-tuple --
+        see `_raw_read_blocking` for why the raw body comes back alongside
+        the Property-map `rep`."""
         path_segs = _href_to_path_segs(href)
         if not path_segs:
             raise ServiceValidationError(
@@ -1721,7 +1736,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             verified: dict[str, Any] = {}
             async with self._session_lock:
                 for href in dict.fromkeys(r["href"] for r in results):
-                    vcode, vrep = await self.hass.async_add_executor_job(
+                    vcode, vrep, _vbody = await self.hass.async_add_executor_job(
                         self._raw_read_blocking, _href_to_path_segs(href), href
                     )
                     # None, not False, when the re-read brought back nothing

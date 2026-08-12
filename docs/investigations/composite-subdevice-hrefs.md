@@ -88,42 +88,69 @@ collection of devices, sitting alongside `/device/0`, never read by this
 project or by any issue thread. If the composite enumeration is exposed
 anywhere as a first-class resource, that is the shape it would take.
 
-## Hrefs worth reading next, in priority order
+## Results of the second probe round
 
-All plain RETRIEVEs via `localthings.read_resource`; a wrong guess costs one
-round trip.
+The reporter ran these live. Three answers, all informative.
 
-**1 — indexed leaves (the untried namespace).** `/information/vs/1` first:
-on the TP2X 2-in-1 the sibling's `/information/vs/0` is what identified the
-wall unit by `modelNum`, so a populated `/information/vs/1` both proves the
-namespace and names the unit.
+**Indexed leaves do not exist.** `/information/vs/1`, `/power/vs/1`,
+`/mode/vs/1` → 4.04. Pattern A is ruled out on this board properly now:
+not just the `/device/1` Collection, but the leaf namespace it would have
+carried.
 
-    /information/vs/1
-    /power/vs/1
-    /mode/vs/1
-    /temperatures/vs/1
-    /temperature/current/1
-    /airflow/vs/1
-    /sensors/vs/1
-    /power/1
+**The UUID prefix routes, and is empty of operational resources.** The
+control pair settles it:
 
-**2 — the device Collection.** `/sec/devices`, per the clause above.
+    /c24e25e9-.../file/list/vs/0  → 2.05, two items
+    /file/list/vs/0              → 2.05, the same two items
+    (/opt/data/energy.db, /opt/data/hass.db)
 
-**3 — a positive control for the UUID namespace.** `/oic/res` advertises
-three UUID-prefixed file resources on this board, so at least one path under
-that prefix is supposed to answer:
+So the sibling's prefix is a live, routed namespace — the 23 flat-fallback
+4.04s under it are the firmware answering "no such resource", not a dead
+prefix swallowing everything. Pattern B/C is ruled out on this board on
+positive evidence rather than on absence. That the two listings are
+identical is expected either way: one board, one flash, one filesystem.
 
-    /c24e25e9-55dd-ba18-d567-000000000001/file/list/vs/0
-    /file/list/vs/0
+**`/sec/devices` exists — and this project could not see what's in it.**
+It answered `2.05` with `rep: {}`, which reads as "the resource is there and
+has nothing in it". It is not. `coordinator._raw_read_blocking` decoded the
+CBOR body and then kept it *only if it was a Property map*:
 
-The master's own href is the baseline. If the prefixed one answers, the
-prefix routes and the sibling's operational resources are genuinely not
-mounted there — stop probing that namespace on this family. If it 4.04s
-while the master's answers, the prefix is advertised but unrouted, which
-says the `/oic/res` advertisement is scaffolding and is worth knowing before
-trusting it for Pattern C elsewhere.
+```python
+if isinstance(body, dict):
+    rep = body
+```
 
-**4 — only if index 1 shows anything:** repeat tier 1 at index 2.
+A Collection answers a **list** — the `[devcol rep, {href, rep}, ...]` batch
+`parse_device0_batch` reads. `/device/0` itself would have rendered exactly
+the same accepted-but-empty `2.05 {}` through `read_resource`. Fixed: the
+read path now returns the decoded body alongside `rep`, and the service
+response carries it as `body` whenever it isn't the map already in `rep`.
+
+`/sec/devices` therefore remains the one open lead, and needs one re-read on
+a build carrying that fix.
+
+## Still worth reading
+
+**1 — `/sec/devices`, again.** Same `x.com.samsung.devcol` + `oic.wk.col`
+pair as `/device/0`, so its body should be a batch naming its members. If a
+composite enumeration is exposed anywhere, it is here.
+
+**2 — the file-transfer pair.** `/oic/res` advertises
+`/c24e25e9-.../file/transfer/vs/0` alongside the master's, and the prefix is
+now known to route. Issue #301 documents the shape: a baseline GET returns
+one item, `x.com.samsung.name` plus `x.com.samsung.blob`, no write needed to
+see whatever it currently serves. If the prefixed endpoint serves *different
+bytes* than the master's, that is the first hard local evidence the wall
+unit exists as a data producer, and `/opt/data/energy.db` would be where its
+runtime history lives.
+
+    /file/transfer/vs/0
+    /c24e25e9-55dd-ba18-d567-000000000001/file/transfer/vs/0
+
+Mind the blob: #301 measured 2172 B on a `KRAC_18K`, and a raw `bytes` value
+in a service response is not guaranteed to survive rendering in Developer
+Tools. Ask for `x.com.samsung.name` and whether a blob field appears, not
+for the blob pasted into a comment.
 
 ## Dead ends, so they aren't re-tried
 
@@ -138,10 +165,20 @@ trusting it for Pattern C elsewhere.
 - `/actions/vs/0` — GET returns `{}` on baseline and `oic.if.a`; publishes
   no schema (`ac-filter-reset.md`).
 
-## If tier 1 comes back empty
+## Where this lands if `/sec/devices` is empty too
 
-A full 4.04 sweep is a real result, not a failed one: it would mean the
-sibling is named in `subdeviceIdList` for the cloud's benefit and has no
-local resource surface at all on this firmware. That closes issue #335 as a
-firmware limitation rather than leaving it open against a probe strategy
-that was never actually exercised.
+Then the sibling is named in `subdeviceIdList` for the cloud's benefit and
+has no local operational surface at all on this firmware — every namespace
+it could occupy has now been read directly, and the UUID one was confirmed
+routable first, so the negatives mean what they say. That closes issue #335
+as a firmware limitation rather than leaving it open against a probe
+strategy that was never actually exercised.
+
+Worth keeping in view for the enumeration code either way: both remaining
+patterns hinge on a Collection, and this board answers neither `/device/1`
+nor a prefixed `/device/0`. An indexed flat-probe fallback — the mirror of
+issue #205's prefixed one, gated on a board that claims a sibling but
+materialized nothing — would have cost 8 round trips here and returned the
+same 4.04s the reporter got by hand. It is worth building only if some
+other board turns out to serve indexed leaves without their Collection;
+this one does not.

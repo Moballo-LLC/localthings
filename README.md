@@ -159,7 +159,7 @@ data:
   href: /mode/vs/0
 ```
 
-returning `{"href", "actual_href", "code", "raw_code", "rep"}` off a **live GET straight from the device**, not the cache — which can be up to a poll interval stale, exactly the staleness that would make `held` above meaningless. Omit `href` and you get `{"resources": {href: rep, ...}}`, the cached snapshot of everything this integration currently tracks on that device, with no GET at all — useful for seeing what's there before you start writing to it, without hammering the appliance.
+returning `{"href", "actual_href", "code", "raw_code", "rep"}` off a **live GET straight from the device**, not the cache — which can be up to a poll interval stale, exactly the staleness that would make `held` above meaningless. A sixth key, `body`, appears only when the response isn't a Property map: a Collection (`/device/0`, and the `x.com.samsung.devcol` siblings some boards expose) answers a CBOR list, which `rep` can't carry, and which would otherwise read as an accepted-but-empty resource. Omit `href` and you get `{"resources": {href: rep, ...}}`, the cached snapshot of everything this integration currently tracks on that device, with no GET at all — useful for seeing what's there before you start writing to it, without hammering the appliance.
 
 The **Debug write** panel under a device's Configure menu (Part 4) is the friendlier single-write path over this same machinery — pick an href, type a payload, see the result — for when you don't need a sequence.
 
