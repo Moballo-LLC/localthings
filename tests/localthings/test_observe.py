@@ -58,6 +58,49 @@ def test_apply_merges_partial_update_onto_prior_rep():
     assert cached["x.com.samsung.da.supportedOptions"] == ["CV_FDR_WINE", "CV_FDR_MEAT"]
 
 
+def test_apply_fully_replaces_alarms_href_instead_of_merging():
+    """Regression test for issue #348: /alarms/vs/0's `items` array is a
+    complete snapshot of every currently-active alarm, not a partial field
+    update like /mode/vs/0 (issue #27). A washer's board reports a cleared
+    alarm by omitting `items` entirely -- a live read_resource GET showed
+    `{}` -- so merging that onto the prior rep (as every other href does)
+    left the stale ErrorCode_DC entry in the cache forever. This must
+    instead behave like a full replace: the empty rep wins outright."""
+    mgr = _manager()
+    active = {
+        "x.com.samsung.da.items": [
+            {"x.com.samsung.da.code": "ErrorCode_DC", "x.com.samsung.da.state": "Created"}
+        ]
+    }
+    mgr.apply("/alarms/vs/0", active, source="poll")
+    assert mgr.cache.get("/alarms/vs/0") == active
+
+    cleared = mgr.apply("/alarms/vs/0", {}, source="poll")
+
+    assert cleared is True
+    assert mgr.cache.get("/alarms/vs/0") == {}
+
+
+def test_apply_fully_replaces_alarms_href_for_subdevice_shapes():
+    """The same full-replace behavior must hold for both hrefs
+    `Subdevice.to_actual` can produce: an indexed subdevice renumbers only
+    the trailing '0' (/alarms/vs/1), and a prefixed one prepends a UUID
+    (/<uuid>/alarms/vs/0) -- neither ever touches the 'alarms/vs' stem
+    itself (registry/subdevices.py)."""
+    for href in ("/alarms/vs/1", "/6c2dff6d-ee5c-dad1-6a5e-000000000001/alarms/vs/0"):
+        mgr = _manager()
+        mgr.apply(
+            href,
+            {"x.com.samsung.da.items": [{"x.com.samsung.da.code": "ErrorCode_UB"}]},
+            source="poll",
+        )
+
+        cleared = mgr.apply(href, {}, source="poll")
+
+        assert cleared is True
+        assert mgr.cache.get(href) == {}
+
+
 def test_apply_drops_update_during_settle_window():
     mgr = _manager()
     mgr.cache.apply_rep("/oven/vs/0", {"a": 1}, source="seed")
