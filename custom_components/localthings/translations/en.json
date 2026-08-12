@@ -324,6 +324,22 @@
           "4": "Alarm 4"
         }
       },
+      "dryer_cycle_table_00": {
+        "name": "Cycle",
+        "state": {
+          "01": "Normal",
+          "9c": "Heavy Duty",
+          "a5": "Bedding",
+          "9e": "Perm Press",
+          "9b": "Steam Sanitize+",
+          "27": "Refresh",
+          "a0": "Air Fluff",
+          "a4": "Time Dry",
+          "a6": "Quick Dry",
+          "a3": "Active Wear",
+          "a2": "Delicates"
+        }
+      },
       "dryer_cycle_table_03": {
         "name": "Cycle",
         "state": {
@@ -602,6 +618,22 @@
           "warm": "Warm",
           "hot": "Hot",
           "extra_hot": "Extra hot"
+        }
+      },
+      "washer_cycle_table_00": {
+        "name": "Cycle",
+        "state": {
+          "01": "Normal",
+          "70": "Heavy Duty",
+          "55": "Whites",
+          "71": "Bedding",
+          "72": "Sanitize",
+          "77": "Perm Press",
+          "57": "Self Clean+",
+          "73": "Rinse + Spin",
+          "74": "Active Wear",
+          "75": "Delicates",
+          "78": "Quick Wash"
         }
       },
       "washer_cycle_table_02": {

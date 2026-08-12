@@ -324,6 +324,22 @@
           "4": "Alarm 4"
         }
       },
+      "dryer_cycle_table_00": {
+        "name": "Programma",
+        "state": {
+          "01": "Normaal",
+          "9c": "Intensief",
+          "a5": "Beddengoed",
+          "9e": "Strijkvrij",
+          "9b": "Stoomhygiëne+",
+          "27": "Opfrissen",
+          "a0": "Luchtdrogen",
+          "a4": "Tijdprogramma",
+          "a6": "Snel drogen",
+          "a3": "Sportkleding",
+          "a2": "Fijne was"
+        }
+      },
       "dryer_cycle_table_03": {
         "name": "Programma",
         "state": {
@@ -602,6 +618,22 @@
           "warm": "Warm",
           "hot": "Heet",
           "extra_hot": "Extra heet"
+        }
+      },
+      "washer_cycle_table_00": {
+        "name": "Programma",
+        "state": {
+          "01": "Normaal",
+          "70": "Intensief",
+          "55": "Witte was",
+          "71": "Beddengoed",
+          "72": "Hygiëne",
+          "77": "Strijkvrij",
+          "57": "Self Clean+",
+          "73": "Spoelen + centrifugeren",
+          "74": "Sportkleding",
+          "75": "Fijne was",
+          "78": "Snelle was"
         }
       },
       "washer_cycle_table_02": {

@@ -324,6 +324,22 @@
           "4": "Alarm 4"
         }
       },
+      "dryer_cycle_table_00": {
+        "name": "Cyklus",
+        "state": {
+          "01": "Normální",
+          "9c": "Intenzivní",
+          "a5": "Ložní prádlo",
+          "9e": "Nežehlivé prádlo",
+          "9b": "Parní dezinfekce+",
+          "27": "Osvěžení",
+          "a0": "Provětrání",
+          "a4": "Časové sušení",
+          "a6": "Rychlé sušení",
+          "a3": "Sportovní oblečení",
+          "a2": "Jemné prádlo"
+        }
+      },
       "dryer_cycle_table_03": {
         "name": "Cyklus",
         "state": {
@@ -602,6 +618,22 @@
           "warm": "Teplá",
           "hot": "Horká",
           "extra_hot": "Extra horká"
+        }
+      },
+      "washer_cycle_table_00": {
+        "name": "Cyklus",
+        "state": {
+          "01": "Normální",
+          "70": "Intenzivní",
+          "55": "Bílé prádlo",
+          "71": "Ložní prádlo",
+          "72": "Dezinfekce",
+          "77": "Nežehlivé prádlo",
+          "57": "Samočištění+",
+          "73": "Máchání + odstřeďování",
+          "74": "Sportovní oblečení",
+          "75": "Jemné prádlo",
+          "78": "Rychlé praní"
         }
       },
       "washer_cycle_table_02": {

@@ -324,6 +324,22 @@
           "4": "Allarme 4"
         }
       },
+      "dryer_cycle_table_00": {
+        "name": "Ciclo",
+        "state": {
+          "01": "Normale",
+          "9c": "Intenso",
+          "a5": "Biancheria da letto",
+          "9e": "Pronto da stirare",
+          "9b": "Igienizzante a vapore+",
+          "27": "Rinfresca",
+          "a0": "Arieggiatura",
+          "a4": "Asciugatura a tempo",
+          "a6": "Asciugatura rapida",
+          "a3": "Abbigliamento sportivo",
+          "a2": "Delicati"
+        }
+      },
       "dryer_cycle_table_03": {
         "name": "Ciclo",
         "state": {
@@ -602,6 +618,22 @@
           "warm": "Tiepido",
           "hot": "Caldo",
           "extra_hot": "Extra caldo"
+        }
+      },
+      "washer_cycle_table_00": {
+        "name": "Ciclo",
+        "state": {
+          "01": "Normale",
+          "70": "Intenso",
+          "55": "Bianchi",
+          "71": "Biancheria da letto",
+          "72": "Igienizzante",
+          "77": "Pronto da stirare",
+          "57": "Self Clean+",
+          "73": "Risciacquo+Centrifuga",
+          "74": "Abbigliamento sportivo",
+          "75": "Delicati",
+          "78": "Lavaggio rapido"
         }
       },
       "washer_cycle_table_02": {

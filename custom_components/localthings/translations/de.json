@@ -324,6 +324,22 @@
           "4": "Alarm 4"
         }
       },
+      "dryer_cycle_table_00": {
+        "name": "Programm",
+        "state": {
+          "01": "Normal",
+          "9c": "Intensiv",
+          "a5": "Bettwäsche",
+          "9e": "Pflegeleicht",
+          "9b": "Dampf-Hygiene+",
+          "27": "Auffrischen",
+          "a0": "Lüften",
+          "a4": "Zeittrocknen",
+          "a6": "Schnelltrocknen",
+          "a3": "Sportkleidung",
+          "a2": "Feinwäsche"
+        }
+      },
       "dryer_cycle_table_03": {
         "name": "Programm",
         "state": {
@@ -565,6 +581,22 @@
           "warm": "Warm",
           "hot": "Heiß",
           "extra_hot": "Extra heiß"
+        }
+      },
+      "washer_cycle_table_00": {
+        "name": "Programm",
+        "state": {
+          "01": "Normal",
+          "70": "Intensiv",
+          "55": "Weißwäsche",
+          "71": "Bettwäsche",
+          "72": "Hygienespülung",
+          "77": "Pflegeleicht",
+          "57": "Selbstreinigung+",
+          "73": "Spülen + Schleudern",
+          "74": "Sportkleidung",
+          "75": "Feinwäsche",
+          "78": "Schnellwäsche"
         }
       },
       "washer_cycle_table_02": {

@@ -89,6 +89,20 @@ def test_course_bound_to_shared_course_vs_0():
     assert desc.rep_fn(rep) == "16"
 
 
+def test_reported_table_00_course_codes_are_translated():
+    """The reporter confirmed these codes on a DVE45R6300W/A3 by selecting
+    each cycle and reading back the raw course code (issue #357)."""
+    from custom_components.localthings.catalog import translated_states
+
+    desc = next(
+        e for e in dryer.DRYER_COURSE.entities if e.key == "cycle" and isinstance(e, SelectDesc)
+    )
+    table_00 = {"/st/dryercourse/vs/0": {"x.com.samsung.da.st.courseTable": "Table_00"}}
+    assert desc.translation_key(table_00) == "dryer_cycle_table_00"
+    confirmed = {"01", "9c", "a5", "9e", "9b", "27", "a0", "a4", "a6", "a3", "a2"}
+    assert confirmed <= translated_states("select", "dryer_cycle_table_00")
+
+
 def test_st_dryercourse_is_ignored():
     """/st/dryercourse/vs/0 re-encodes the course exposed via /course/vs/0 and
     is globally ignored -- the mirror of /st/washercourse/vs/0."""

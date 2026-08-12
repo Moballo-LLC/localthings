@@ -517,6 +517,22 @@
           "4": "Alarma 4"
         }
       },
+      "dryer_cycle_table_00": {
+        "name": "Ciclo",
+        "state": {
+          "01": "Normal",
+          "9c": "Servicio intensivo",
+          "a5": "Ropa de cama",
+          "9e": "Planchado fácil",
+          "9b": "Desinfección por vapor+",
+          "27": "Renovar",
+          "a0": "Aireación",
+          "a4": "Secado por tiempo",
+          "a6": "Secado rápido",
+          "a3": "Ropa deportiva",
+          "a2": "Delicados"
+        }
+      },
       "dryer_cycle_table_03": {
         "name": "Ciclo",
         "state": {
@@ -795,6 +811,22 @@
           "warm": "Tibia",
           "hot": "Caliente",
           "extra_hot": "Muy caliente"
+        }
+      },
+      "washer_cycle_table_00": {
+        "name": "Ciclo",
+        "state": {
+          "01": "Normal",
+          "70": "Servicio intensivo",
+          "55": "Blancos",
+          "71": "Ropa de cama",
+          "72": "Desinfección",
+          "77": "Planchado fácil",
+          "57": "Autolimpieza+",
+          "73": "Aclarar + Centrifugar",
+          "74": "Ropa deportiva",
+          "75": "Delicados",
+          "78": "Lavado rápido"
         }
       },
       "washer_cycle_table_02": {

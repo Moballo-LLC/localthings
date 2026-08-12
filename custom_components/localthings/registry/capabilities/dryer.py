@@ -46,6 +46,13 @@ DRYER_SETTINGS = Capability(
 # (issue #244). /st/dryercourse/vs/0 re-encodes the same selected course
 # and is ignored (ignored.py), mirroring /st/washercourse/vs/0 for washers.
 #
+# dryer_cycle_table_00 is a separate, older course-code family reported by
+# a DVE45R6300W/A3 (issue #357), confirmed the same way: the reporter
+# selected each cycle on the appliance and read back the resulting raw
+# code. It shares no codes with Table_03 above -- 'a5' Bedding here and
+# '01' Normal are both table-scoped, so a Table_03 dryer never picks up a
+# Table_00 label or vice versa (see laundry.cycle_select's table_href).
+#
 # Drum Clean+ maintenance tracking (issue #258) reuses washer.py's
 # DrumCleanProposal_/WashingTimes_/DrumCleanLog_ tokens on this same
 # options[] array -- see laundry.drum_clean_cycles_remaining/

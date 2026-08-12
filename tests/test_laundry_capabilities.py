@@ -369,7 +369,7 @@ class TestCycleSelectTableGating:
     def test_untranslated_table_uses_generic_cycle_key(self):
         """An unknown table does not claim another board's state labels."""
         desc = self._desc()
-        resources = {"/st/washercourse/vs/0": {"x.com.samsung.da.st.courseTable": "Table_00"}}
+        resources = {"/st/washercourse/vs/0": {"x.com.samsung.da.st.courseTable": "Table_99"}}
         assert desc.translation_key(resources) == "cycle"
 
     def test_resolves_to_generic_cycle_when_table_id_is_unknown(self):
