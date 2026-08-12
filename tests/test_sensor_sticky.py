@@ -166,12 +166,13 @@ def test_a_new_cycle_starting_overrides_the_hold():
 
 
 def test_a_running_stage_after_finish_does_not_break_the_hold():
-    """Issue #358: the reporting dryer replays a running stage after
-    Finish -- observed twice, identically, as Cooling -> +60s Finish ->
-    +24s 'Drying' -> +4s settled, with `state` already idle throughout the
-    tail. The hold must survive it, so the cycle still reads Drying,
-    Cooling, Finish, Idle rather than the reported Drying, Cooling,
-    Finish, Drying, Idle."""
+    """Issue #358: the reporting dryer resets `progress` to its course's
+    first stage in the same moment `state` goes idle -- observed twice,
+    identically, as Cooling -> +60s Finish -> +24s 'Drying' -> +4s
+    settled, with the reporter's machine_state history flipping to idle on
+    the exact second progress reads 'Drying'. The hold must survive that,
+    so the cycle still reads Drying, Cooling, Finish, Idle rather than the
+    reported Drying, Cooling, Finish, Drying, Idle."""
     desc = replace(_PROGRESS_DESC, sticky_seconds=0.2)
     sensor, coordinator = _sensor(desc)
 

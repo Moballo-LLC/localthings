@@ -67,11 +67,14 @@ def _new_cycle_running(rep):
     early once a new cycle is genuinely running.
 
     Gated on `state == 'active'`, unlike _just_finished's arm condition
-    above: issue #358's dryer replays a running stage ('Drying') for a few
-    seconds after Finish while `state` already reads idle, and a bypass
-    keyed on the progress code alone read that tail as a new cycle and
-    republished it. Releasing late costs nothing -- an unreleased hold
-    still expires on its own -- so this side takes the stronger signal."""
+    above: issue #358's dryer resets `progress` to its course's first
+    stage ('Drying') in the same moment `state` goes idle, ~4s before
+    settling to 'None' -- confirmed by the reporter's machine_state
+    history, which flips to idle on the exact second progress reads
+    'Drying', in both captured cycles. A bypass keyed on the progress
+    code alone read that as a new cycle and republished it. Releasing
+    late costs nothing -- an unreleased hold still expires on its own --
+    so this side takes the stronger signal."""
     v = rep.get("x.com.samsung.da.progress")
     return _state_is_active(rep) and v is not None and v not in ("None", "Finish")
 
