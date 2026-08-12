@@ -99,16 +99,18 @@ class TestWasherCourse:
 
     def test_translation_key(self):
         """Table-scoped (issue: course codes aren't guaranteed consistent
-        across board generations sharing /course/vs/0 -- FlexWash's older
-        board reports Table_00, not the Table_02 every washer_cycle_table_02
-        name was confirmed against) -- see laundry.cycle_select. Only a
-        verified table gets table-specific state translations."""
+        across board generations sharing /course/vs/0 -- a device reporting
+        an unrecognized table id must not borrow another board generation's
+        labels) -- see laundry.cycle_select. Only a verified table gets
+        table-specific state translations."""
         desc = next(e for e in washer.WASHER_COURSE.entities if e.key == "cycle")
         assert callable(desc.translation_key)
         table_02 = {"/st/washercourse/vs/0": {"x.com.samsung.da.st.courseTable": "Table_02"}}
         assert desc.translation_key(table_02) == "washer_cycle_table_02"
         table_00 = {"/st/washercourse/vs/0": {"x.com.samsung.da.st.courseTable": "Table_00"}}
-        assert desc.translation_key(table_00) == "cycle"
+        assert desc.translation_key(table_00) == "washer_cycle_table_00"
+        unrecognized = {"/st/washercourse/vs/0": {"x.com.samsung.da.st.courseTable": "Table_99"}}
+        assert desc.translation_key(unrecognized) == "cycle"
         assert desc.translation_key({}) == "cycle"
 
     def test_reads_raw_course_code_from_options_array(self):
@@ -145,6 +147,15 @@ class TestWasherCourse:
             "88",
         }
         assert confirmed <= translated_states("select", "washer_cycle_table_02")
+
+    def test_reported_table_00_course_codes_are_translated(self):
+        """The reporter confirmed these codes on a WF45R6300AW/US by
+        selecting each cycle and reading back the raw course code
+        (issue #357)."""
+        from custom_components.localthings.catalog import translated_states
+
+        confirmed = {"01", "70", "55", "71", "72", "77", "57", "73", "74", "75", "78"}
+        assert confirmed <= translated_states("select", "washer_cycle_table_00")
 
     def test_missing_course_option_returns_none(self):
         desc = next(e for e in washer.WASHER_COURSE.entities if e.key == "cycle")

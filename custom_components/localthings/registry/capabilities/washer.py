@@ -58,6 +58,15 @@ from .laundry import (
 # the owner or device metadata falls back to washer_cycle_fallback, which
 # surfaces a personal-course name only -- no invented English label for an
 # unrecognized standard code (PR #251 review).
+#
+# washer_cycle_table_00 (issue #357) is a separate, older course-code family
+# reported by a WF45R6300AW/US -- confirmed by the reporter selecting each
+# cycle on the appliance and reading back the raw code, the same method used
+# for Table_02's WF50A8600AV/US codes above. A device reporting Table_00 with
+# an unconfirmed code (FlexWash's washer_flexwash_device fixture, for
+# instance) still renders that code raw rather than borrowing a Table_02
+# label -- the two tables are unrelated code spaces despite a handful of
+# overlapping hex values.
 # ---------------------------------------------------------------------------
 
 # /washer/vs/0 -- wash temperature, spin speed, rinse cycle count.
