@@ -54,7 +54,7 @@ class LocalThingsSensor(LocalThingsEntity, SensorEntity):
         self._hysteresis_value = None
         self._sticky_value = None
         self._sticky_until: float | None = None
-        self._sticky_armed = False
+        self._sticky_spent = False
 
     @property
     def native_unit_of_measurement(self):
@@ -89,39 +89,41 @@ class LocalThingsSensor(LocalThingsEntity, SensorEntity):
         held entity and a free-running one agree on what "live" means; a
         hook that broke that rule caused issue #358.
 
-        Edge-triggered, not level-triggered: the window (re)starts only on
-        a fresh False->True transition of `sticky_fn`, is never restarted
-        while already open, and is checked for expiry on every call even
-        while `sticky_fn` keeps matching -- so neither a field stuck
-        matching forever (the quirk `_completion_minutes` works around)
-        nor one flapping in and out can hold the value past
-        `sticky_seconds` from when it first armed.
+        At most one window per `sticky_bypass_fn` cycle: arming marks the
+        hold spent, and only the bypass clears that. So a `sticky_fn` that
+        keeps matching (firmware leaving the field stuck -- the quirk
+        `_completion_minutes` works around) can't extend the window, and
+        one flapping in and out can't restart it either, before or after
+        expiry. Expiry alone doesn't re-open the door: without something
+        the calibre of "a new cycle is actually running" in between, a
+        second Finish is the same Finish, and re-arming on it would strobe
+        the entity between held and live once per window -- exactly the
+        repeated announcements #345 and #358 are about.
 
         `sticky_bypass_fn` drops the hold and returns `raw`, for when "not
         sticky right now" is ambiguous between "went idle, honor the hold"
-        and "genuinely moved on to new data". Being the early-release
-        path it should demand positive evidence of the latter; when
-        unsure, letting the window run out is the cheaper mistake.
+        and "genuinely moved on to new data". It is both the early release
+        and the only re-arm, so it should demand positive evidence of that
+        move; when unsure, letting the window run out is the cheaper
+        mistake.
         """
         assert desc.sticky_fn is not None  # native_value only calls this when set
         rep = self.coordinator.resource(self._bound.href)
         now = time.monotonic()
-        holding = self._sticky_until is not None and now < self._sticky_until
 
         if desc.sticky_fn(rep):
-            if not self._sticky_armed and not holding:
+            if not self._sticky_spent:
                 self._sticky_value = (
                     desc.sticky_value_fn(rep) if desc.sticky_value_fn is not None else raw
                 )
                 self._sticky_until = now + desc.sticky_seconds
-                holding = True
-            self._sticky_armed = True
-        else:
-            self._sticky_armed = False
-            if desc.sticky_bypass_fn is not None and desc.sticky_bypass_fn(rep):
-                self._sticky_until = None
-                return raw
+                self._sticky_spent = True
+        elif desc.sticky_bypass_fn is not None and desc.sticky_bypass_fn(rep):
+            self._sticky_until = None
+            self._sticky_spent = False
+            return raw
 
+        holding = self._sticky_until is not None and now < self._sticky_until
         return self._sticky_value if holding else raw
 
     def _apply_hysteresis(self, raw):

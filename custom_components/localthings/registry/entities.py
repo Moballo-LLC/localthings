@@ -65,8 +65,8 @@ class SensorDesc(SamsungEntityDescription):
     # device-side revisions -- not a general-purpose flag.
     hysteresis: bool = False
     # Opt-in, entity-instance-only hold -- see sensor.py's _apply_sticky
-    # for the full contract (arm/value/bypass semantics, edge-triggering,
-    # why this never touches the coordinator cache).
+    # for the full contract (arm/value/bypass semantics, one window per
+    # bypass, why this never touches the coordinator cache).
     # sticky_fn arms it; sticky_value_fn picks what to freeze at that
     # moment (defaults to rep_fn's own result); sticky_bypass_fn drops the
     # hold and lets rep_fn's own live result through; sticky_seconds

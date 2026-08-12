@@ -234,29 +234,62 @@ def test_a_paused_new_cycle_is_left_to_the_window_rather_than_released():
     assert sensor.native_value == "Wash"
 
 
-def test_a_flapping_finish_cannot_ratchet_the_window_forward():
-    """Edge-triggering stops a *stuck* Finish from extending the hold, but
-    a device whose progress flaps out of and back into Finish re-arms --
-    an already-open window must not restart on that, or the bound stops
-    being a bound."""
-    desc = replace(_PROGRESS_DESC, sticky_seconds=0.1)
+def test_a_flapping_finish_cannot_ratchet_an_open_window_forward():
+    """Edge-triggering stops a *stuck* Finish from extending the hold; a
+    progress that flaps out of and back into Finish must not restart it
+    either, or the bound stops being a bound."""
+    desc = replace(_PROGRESS_DESC, sticky_seconds=0.3)
     sensor, coordinator = _sensor(desc)
 
     _replace(coordinator, state="Ready", progress="Finish")
     assert sensor.native_value == "Finish"
 
     for _ in range(3):
-        time.sleep(0.03)
+        time.sleep(0.05)
         _replace(coordinator, state="Ready", progress="None")
         assert sensor.native_value == "Finish"
         _replace(coordinator, state="Ready", progress="Finish")
         assert sensor.native_value == "Finish"
 
-    # 0.09s of flapping so far; past 0.1s from the *first* Finish it ends,
-    # rather than 0.1s from the most recent re-arm.
-    time.sleep(0.03)
+    # 0.15s of flapping so far -- the window still ends 0.3s after the
+    # first Finish, not 0.3s after the most recent re-entry.
+    time.sleep(0.2)
     _replace(coordinator, state="Ready", progress="Finish")
     assert sensor.native_value == "Idle"
+
+
+def test_a_finish_after_the_window_closes_does_not_re_arm_it():
+    """Expiry doesn't re-open the door: with no new cycle in between, a
+    second Finish is the same Finish. Re-arming on it would strobe the
+    entity Finish -> Idle -> Finish once per window, re-firing exactly the
+    announcements #345 is about -- so it takes a bypass (a cycle actually
+    running) to make the hold available again.
+
+    Distinct from the flap test above: there the window is still open, and
+    the last read before expiry leaves the sticky condition *matching*.
+    Here it has already closed, and the flap ends on a non-matching read,
+    which is the state a spent-on-arm-only guard would let re-arm."""
+    desc = replace(_PROGRESS_DESC, sticky_seconds=0.05)
+    sensor, coordinator = _sensor(desc)
+
+    _replace(coordinator, state="Ready", progress="Finish")
+    assert sensor.native_value == "Finish"
+
+    time.sleep(0.1)
+    assert sensor.native_value == "Idle"
+
+    _replace(coordinator, state="Ready", progress="None")
+    assert sensor.native_value == "Idle"
+    _replace(coordinator, state="Ready", progress="Finish")
+    assert sensor.native_value == "Idle"
+
+    # A real cycle in between is what makes it available again.
+    _replace(coordinator, state="Run", progress="Drying")
+    assert sensor.native_value == "Drying"
+    _replace(coordinator, state="Run", progress="Finish")
+    assert sensor.native_value == "Finish"
+    _replace(coordinator, state="Ready", progress="None")
+    assert sensor.native_value == "Finish"
 
 
 def test_hold_expires_after_sticky_seconds():
