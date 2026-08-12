@@ -3,7 +3,7 @@
 from custom_components.localthings.registry.capabilities.operational import (
     OPERATIONAL_STATE,
     _just_finished,
-    _live_progress_code,
+    _new_cycle_running,
 )
 from custom_components.localthings.registry.entities import NumberDesc
 
@@ -41,27 +41,46 @@ class TestJustFinished:
         assert not _just_finished({"x.com.samsung.da.state": "Run"})
 
 
-class TestLiveProgressCode:
-    """`_live_progress_code` is progress/progress_percentage's
-    sticky_bypass_fn (issue #345) -- see sensor.py's _apply_sticky."""
+class TestNewCycleRunning:
+    """`_new_cycle_running` is progress/progress_percentage's
+    sticky_bypass_fn -- the early-release condition for the #345 hold.
+    See sensor.py's _apply_sticky."""
 
-    def test_true_for_a_concrete_non_finish_code(self):
-        assert _live_progress_code({"x.com.samsung.da.progress": "Wash"})
+    def test_true_for_a_concrete_non_finish_code_while_active(self):
+        assert _new_cycle_running(
+            {"x.com.samsung.da.state": "Run", "x.com.samsung.da.progress": "Wash"}
+        )
 
-    def test_true_regardless_of_state(self):
-        """Not gated on machine_state -- a new cycle's own real progress
-        must win over a held hold even while paused (e.g. adding a sock
-        mid-hold), not just while actively running."""
-        assert _live_progress_code(
+    def test_false_for_a_running_stage_reported_after_state_left_active(self):
+        """Issue #358, the whole reason for the `state` gate: the reporting
+        dryer replays a running stage ('Drying', its first supportedProgress
+        entry) for a few seconds after Finish while winding down. That is
+        the finished cycle's tail, not a new cycle -- releasing the hold on
+        it is what produced 'Drying, Cooling, Finish, Drying, Idle'."""
+        assert not _new_cycle_running(
+            {"x.com.samsung.da.state": "Ready", "x.com.samsung.da.progress": "Drying"}
+        )
+
+    def test_false_while_paused(self):
+        """Paused is not evidence a new cycle is running, and the tail
+        above can't be told apart from it. rep_fn shows 'Idle' whenever
+        state isn't active anyway, so there is no live value being
+        withheld here -- only a hold that expires on its own instead of
+        being released early."""
+        assert not _new_cycle_running(
             {"x.com.samsung.da.state": "Pause", "x.com.samsung.da.progress": "Wash"}
         )
 
     def test_false_for_finish(self):
-        assert not _live_progress_code({"x.com.samsung.da.progress": "Finish"})
+        assert not _new_cycle_running(
+            {"x.com.samsung.da.state": "Run", "x.com.samsung.da.progress": "Finish"}
+        )
 
     def test_false_when_absent_or_none(self):
-        assert not _live_progress_code({})
-        assert not _live_progress_code({"x.com.samsung.da.progress": "None"})
+        assert not _new_cycle_running({})
+        assert not _new_cycle_running(
+            {"x.com.samsung.da.state": "Run", "x.com.samsung.da.progress": "None"}
+        )
 
 
 class TestProgressPercentage:

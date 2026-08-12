@@ -62,17 +62,18 @@ def _just_finished(rep):
     return rep.get("x.com.samsung.da.progress") == "Finish"
 
 
-def _live_progress_code(rep):
-    """progress/progress_percentage's sticky_bypass_fn: a concrete,
-    non-Finish progress code being reported right now -- e.g. a new
-    cycle's own real 'Wash'/'Spin' -- must win over a still-open hold from
-    the previous cycle immediately. Not keyed on `state` (unlike
-    _is_active): _just_finished's whole premise is that `state` can't be
-    trusted to still say 'active' while a fresh, real progress value is
-    already there, and the same applies to recognizing when it's moved on
-    to a new one -- including while paused, e.g. adding a sock mid-hold."""
+def _new_cycle_running(rep):
+    """progress/progress_percentage's sticky_bypass_fn: drop the #345 hold
+    early once a new cycle is genuinely running.
+
+    Gated on `state == 'active'`, unlike _just_finished's arm condition
+    above: issue #358's dryer replays a running stage ('Drying') for a few
+    seconds after Finish while `state` already reads idle, and a bypass
+    keyed on the progress code alone read that tail as a new cycle and
+    republished it. Releasing late costs nothing -- an unreleased hold
+    still expires on its own -- so this side takes the stronger signal."""
     v = rep.get("x.com.samsung.da.progress")
-    return v is not None and v not in ("None", "Finish")
+    return _state_is_active(rep) and v is not None and v not in ("None", "Finish")
 
 
 def _remaining_seconds(raw):
@@ -190,14 +191,10 @@ OPERATIONAL_STATE = Capability(
         # sticky_* (issue #345): once progress reads 'Finish', keep
         # showing Finish/100 for a grace window even after machine_state
         # reverts, rather than falling to Idle/0 the instant it does --
-        # see sensor.py's _apply_sticky. rep_fn below is otherwise
-        # unchanged; the hold is entirely a read-side, per-entity concern,
-        # deliberately not gated on machine_state (_just_finished's
-        # docstring explains why). sticky_live_fn reads the raw field the
-        # same ungated way, for sticky_bypass_fn's benefit: a real
-        # progress value reported while paused (e.g. adding a sock
-        # mid-cycle) must win over a stale hold even though rep_fn itself
-        # would show "Idle"/0 there.
+        # see sensor.py's _apply_sticky. rep_fn below is unchanged and
+        # stays the only definition of a live value -- the hold decides
+        # only *whether* to freeze. A second, ungated one here is what
+        # let issue #358's post-Finish tail reach the entity.
         SensorDesc(
             key="progress",
             icon="mdi:progress-wrench",
@@ -208,8 +205,7 @@ OPERATIONAL_STATE = Capability(
             ),
             sticky_fn=_just_finished,
             sticky_value_fn=lambda rep: "Finish",
-            sticky_live_fn=lambda rep: _progress(rep.get("x.com.samsung.da.progress")),
-            sticky_bypass_fn=_live_progress_code,
+            sticky_bypass_fn=_new_cycle_running,
         ),
         SensorDesc(
             key="progress_percentage",
@@ -222,8 +218,7 @@ OPERATIONAL_STATE = Capability(
             ),
             sticky_fn=_just_finished,
             sticky_value_fn=lambda rep: 100,
-            sticky_live_fn=lambda rep: _int(rep.get("x.com.samsung.da.progressPercentage")) or 0,
-            sticky_bypass_fn=_live_progress_code,
+            sticky_bypass_fn=_new_cycle_running,
         ),
         # Only show finish time while actively running -- firmware leaves a
         # stale remainingTime after a cycle ends, frozen at '00:01:00'.
