@@ -54,7 +54,7 @@ class _FakeSession:
         self.post_calls: list[tuple[list[str], bytes]] = []
         self.get_calls: list[list[str]] = []
         self._post_code = post_code
-        self._get_reps: dict[str, list[dict]] = {}
+        self._get_reps: dict[str, list[dict | list]] = {}
 
     def queue_get(self, href: str, rep: dict | list) -> None:
         """Queue one more canned rep for `href`'s next GET. Once an href's
