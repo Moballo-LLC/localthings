@@ -297,6 +297,7 @@ async def test_write_resource_verify_after_reports_held(hass, coordinator, devic
     verified = response["verified"]["/mode/vs/0"]
     assert verified["held"] is True
     assert verified["rep"] == {"x.field": "target"}
+    assert verified["read_error"] is None
 
 
 async def test_write_resource_verify_after_reports_reverted(hass, coordinator, device_id):
@@ -322,6 +323,42 @@ async def test_write_resource_verify_after_reports_reverted(hass, coordinator, d
     verified = response["verified"]["/mode/vs/0"]
     assert verified["held"] is False
     assert verified["rep"] == {"x.field": "original"}
+
+
+async def test_write_resource_verify_after_survives_a_failed_confirmation_read(
+    hass, coordinator, device_id, monkeypatch
+):
+    """The write itself already landed (see `results`, built before
+    verify_after's wait even starts) by the time the confirmation read runs
+    -- a session dying in the gap verify_after waits out (smartthings-local's
+    redacted SessionClosedError/SessionTimeoutError, or any other exception)
+    must not lose that outcome behind a raised exception. Same "couldn't
+    verify" posture as a 4.04/empty read: `held` stays None, not False."""
+    fake = _FakeSession()
+    fake.queue_get("mode/vs/0", {"x.field": "target"})  # write's own follow-up read
+    coordinator._session = fake
+
+    def _boom(path_segs, href):
+        raise ConnectionError("session closed")
+
+    monkeypatch.setattr(coordinator, "_raw_read_blocking", _boom)
+
+    with patch(_SLEEP_TARGET, new_callable=AsyncMock):
+        response = await _call_write(
+            hass,
+            device_id,
+            writes=[{"href": "/mode/vs/0", "payload": {"x.field": "target"}}],
+            verify_after=30,
+        )
+
+    # The write's own results survive even though verification blew up.
+    assert response["results"][0]["accepted"] is True
+    verified = response["verified"]["/mode/vs/0"]
+    assert verified["held"] is None
+    assert verified["rep"] == {}
+    # raw_code 0 alone is indistinguishable from a real 4.04 -- read_error
+    # is what tells a caller this was an unreachable session, not a reply.
+    assert verified["read_error"] == "session closed"
 
 
 async def test_write_resource_no_verified_key_when_verify_after_is_zero(
@@ -603,6 +640,65 @@ async def test_read_resource_surfaces_a_collections_list_body(hass, coordinator,
     assert response["code"] == "2.05"
     assert response["rep"] == {}
     assert response["body"] == batch
+
+
+async def test_read_resource_failure_is_surfaced_as_a_home_assistant_error(
+    hass, coordinator, device_id, monkeypatch
+):
+    """A session/network failure during a live debug read (e.g.
+    smartthings-local's redacted SessionError, or any other exception) must
+    not reach the service caller raw and untranslated -- write_resource
+    already goes through HomeAssistantError on failure, and async_raw_read
+    must match that instead of letting the exception escape uncaught."""
+
+    def _boom(path_segs, href):
+        raise ConnectionError("session closed")
+
+    monkeypatch.setattr(coordinator, "_raw_read_blocking", _boom)
+
+    with pytest.raises(HomeAssistantError):
+        await _call_read(hass, device_id, href="/mode/vs/0")
+
+
+async def test_read_resource_failure_closes_a_confirmed_dead_session(
+    hass, coordinator, device_id, monkeypatch
+):
+    """A non-timeout failure is unambiguous (same TimeoutError-vs-anything-
+    else split as _poll_once) -- leaving a confirmed-dead session installed
+    would fail every subsequent read/write identically until the next real
+    poll cycle's own reconnect notices, up to a full update_interval later."""
+    coordinator._session = _FakeSession()
+
+    def _boom(path_segs, href):
+        raise ConnectionError("session closed")
+
+    monkeypatch.setattr(coordinator, "_raw_read_blocking", _boom)
+
+    with pytest.raises(HomeAssistantError):
+        await _call_read(hass, device_id, href="/mode/vs/0")
+
+    assert coordinator._session is None
+
+
+async def test_read_resource_timeout_does_not_close_the_session(
+    hass, coordinator, device_id, monkeypatch
+):
+    """The other half of the same distinction: a block-ACK TimeoutError
+    alone doesn't prove the session is dead (see _poll_once), so unlike
+    any other failure it must not tear down a session that might still be
+    perfectly fine."""
+    fake = _FakeSession()
+    coordinator._session = fake
+
+    def _boom(path_segs, href):
+        raise TimeoutError("GET timeout")
+
+    monkeypatch.setattr(coordinator, "_raw_read_blocking", _boom)
+
+    with pytest.raises(HomeAssistantError):
+        await _call_read(hass, device_id, href="/mode/vs/0")
+
+    assert coordinator._session is fake
 
 
 async def test_read_resource_without_href_returns_cached_snapshot_and_does_not_get(

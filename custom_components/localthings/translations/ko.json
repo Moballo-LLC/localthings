@@ -1558,6 +1558,9 @@
     "command_failed": {
       "message": "재연결 후에도 {href} 명령이 실패했습니다: {error}"
     },
+    "debug_read_failed": {
+      "message": "{href}에서 읽기가 실패했습니다: {error}"
+    },
     "debug_too_many_writes": {
       "message": "1~10개의 쓰기를 지정하세요."
     },

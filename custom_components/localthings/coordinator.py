@@ -103,10 +103,15 @@ def _local_source_port(host: str) -> int:
     time per RFC 6347 §4.2.8, instead of holding it 5-15 min. See
     DTLS_LOCAL_PORT_BASE. Requires smartthings-local >= 0.1.1.
 
-    Must stay unique per device on this host too: the library's socket is
-    unconnected, so two devices sharing a port would mis-demux each other's
-    datagrams. Last IPv4 octet as offset for the common case; a stable
-    CRC32 fold otherwise.
+    Must stay unique per device on this host too. That used to be load-
+    bearing for demuxing: an unconnected socket handed every device's
+    datagrams to whichever recvfrom() happened to be listening on their
+    shared port. smartthings-local >= 0.1.3 connect()s its UDP socket
+    instead (see endpoint.py's open_connected_udp_socket), so the kernel
+    already filters incoming datagrams to each session's own resolved peer
+    -- but a distinct port per device keeps that guarantee from ever
+    depending on it, and keeps captures/logs unambiguous. Last IPv4 octet
+    as offset for the common case; a stable CRC32 fold otherwise.
     """
     try:
         offset = int(ipaddress.IPv4Address(host)) & 0xFF
@@ -203,7 +208,10 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     # A block-level ACK timeout on the summary GET doesn't prove the session
     # is dead (see _poll_once) -- require this many in a row before treating
     # it as one, so one slow transfer doesn't tear down a working OBSERVE
-    # subscription.
+    # subscription. Only covers that ambiguous case: smartthings-local
+    # >= 0.1.6 raises a distinct SessionClosedError, not a TimeoutError, the
+    # moment a dead reader thread is confirmed, and _defer_reconnect_for
+    # never defers that -- see its docstring for what changed there.
     _POLL_TIMEOUT_LIMIT: int = 3
 
     # Named (not inline literals) so the write-settle window in
@@ -717,6 +725,14 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         not that the session is dead (earlier blocks succeeded). Left open;
         `_async_update_data` decides whether repeated timeouts warrant a
         reconnect. Any other exception is unambiguous -- close immediately.
+
+        smartthings-local >= 0.1.6 tells those two cases apart itself now:
+        a reader thread that has actually died raises `SessionClosedError`
+        (a ConnectionError, not a TimeoutError) the moment the next request
+        notices, instead of the old behavior of quietly hanging out to this
+        call's own timeout and surfacing as an ambiguous `TimeoutError`.
+        See `_defer_reconnect_for` for what that changes about how soon a
+        confirmed-dead session gets reconnected.
         """
         if self._session is None:
             self._connect_session()
@@ -1164,7 +1180,38 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if self._session is None:
                 # _poll_once already connects on a real poll; only fires if
                 # the session was closed out from under us concurrently.
-                await self.hass.async_add_executor_job(self._connect_session)
+                try:
+                    await self.hass.async_add_executor_job(self._connect_session)
+                except Exception as e:
+                    # Not a poll failure -- the poll that reached this line
+                    # already succeeded, and observe mode is only an
+                    # optimization on top of it. Give up on push this cycle
+                    # the same way the two branches below do, rather than
+                    # letting this escape _async_update_data uncaught: none
+                    # of this integration's reconnect bookkeeping would run,
+                    # and the base coordinator logs an ERROR traceback in
+                    # place of the deliberately quiet "poll failed,
+                    # reconnecting" voice used everywhere else in this file.
+                    #
+                    # Not counted by _reconnect_is_frequent() (that window
+                    # records reconnects the poll path itself performed --
+                    # feeding it a secondary path's failure would push the
+                    # next routine poll reconnect over the warn threshold),
+                    # and nothing to _close_session(): _connect_session only
+                    # publishes self._session once connect() and
+                    # start_reader() have both already succeeded, so it's
+                    # still None here. No _resubscribe_due either -- that
+                    # flag means "a live session nothing has tried yet",
+                    # and setting it would re-enter this doomed handshake
+                    # every cycle; _last_observe_attempt_ts (stamped above)
+                    # already paces the retry to _RECOVERY_RETRY_S.
+                    self._log.info(
+                        "observe-mode reconnect failed (%s), staying on polling: %s",
+                        type(e).__name__,
+                        e,
+                    )
+                    self._observe.abandon_observe_attempt()
+                    return
             sess = self._session
             if sess is None:
                 return
@@ -1219,6 +1266,19 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         the channel is live, so always defer then. Otherwise defer until
         `_POLL_TIMEOUT_LIMIT` consecutive timeouts pile up. Any other
         exception reconnects immediately.
+
+        That includes `SessionClosedError`, which is the point: before
+        smartthings-local 0.1.6, a reader thread that had actually died was
+        indistinguishable from a slow transfer -- both surfaced here only as
+        a `TimeoutError`, so this tolerance was the only thing standing
+        between a truly dead session and a reconnect, worst case about
+        `_POLL_TIMEOUT_LIMIT` poll cycles (~2 minutes at the default 30s
+        interval). 0.1.6 confirms reader death directly and raises a
+        ConnectionError subclass for it instead, which isn't a TimeoutError
+        and so skips this tolerance entirely -- a genuinely dead session now
+        reconnects on the very first occurrence. Intended (see this repo's
+        README, "Known device behavior"), not a regression, but a real
+        change in observed reconnect timing for that one failure mode.
 
         Never defers before first discovery (issue #254): deferring returns
         an empty dict, which the base coordinator treats as a successful
@@ -1322,9 +1382,37 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # cycle's snapshot so discovery sees every subdevice on the
             # first poll rather than waiting a cycle.
             async with self._session_lock:
-                resources = await self.hass.async_add_executor_job(
-                    self._enumerate_subdevices_blocking, resources
-                )
+                try:
+                    resources = await self.hass.async_add_executor_job(
+                        self._enumerate_subdevices_blocking, resources
+                    )
+                except Exception as e:
+                    # _connect_session() inside here only runs at all if the
+                    # session the poll above just used got closed out from
+                    # under us within this same cycle -- rare, but not
+                    # impossible, and unguarded before this. Losing the
+                    # subdevice probe isn't losing first discovery: `resources`
+                    # keeps the value _poll_once already returned, so
+                    # discovery below still runs on the master's own data,
+                    # same posture _poll_subdevice_seed takes for one sibling
+                    # going quiet.
+                    #
+                    # Not a one-cycle blip, though: `_run_discovery` a few
+                    # lines below sets `self._discovered = True`
+                    # unconditionally this same cycle, which is what gates
+                    # this whole block -- there is no next cycle where this
+                    # is retried. A composite appliance whose enumeration
+                    # fails here loses its sibling subdevices' entities for
+                    # this config entry's lifetime (a reload probes again).
+                    # warning, not debug, because of that: it's silent and
+                    # permanent otherwise, with nothing in the log pointing
+                    # at why a device is missing entities it should have.
+                    self._log.warning(
+                        "subdevice enumeration failed on first discovery; "
+                        "any sibling subdevices will be missing until this "
+                        "config entry is reloaded: %s",
+                        e,
+                    )
 
         source = "sweep" if self._discovered else "poll"
         first_cycle = not self._discovered
@@ -1626,9 +1714,31 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
         norm_href = "/" + "/".join(path_segs)
         async with self._session_lock:
-            return await self.hass.async_add_executor_job(
-                self._raw_read_blocking, path_segs, norm_href
-            )
+            try:
+                return await self.hass.async_add_executor_job(
+                    self._raw_read_blocking, path_segs, norm_href
+                )
+            except Exception as e:
+                # Unlike async_raw_write_sequence, there's nothing to
+                # reconnect-and-retry here -- a live debug read either lands
+                # or it doesn't, and a service call is the one place on this
+                # path a raw session exception would otherwise reach a user
+                # untranslated (write_resource already goes through
+                # HomeAssistantError; this brings read_resource in line).
+                if not isinstance(e, TimeoutError):
+                    # Same TimeoutError-vs-anything-else split as
+                    # _poll_once: a block-ACK timeout alone doesn't prove
+                    # the session is dead, but anything else does -- and
+                    # leaving a confirmed-dead one installed would fail
+                    # every read/write identically until the next real
+                    # poll cycle's own reconnect notices.
+                    await self.hass.async_add_executor_job(self._close_session)
+                self._log.warning("debug read failed for %s: %s", norm_href, e)
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="debug_read_failed",
+                    translation_placeholders={"href": norm_href, "error": str(e)},
+                ) from e
 
     async def async_raw_write_sequence(
         self,
@@ -1736,9 +1846,26 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             verified: dict[str, Any] = {}
             async with self._session_lock:
                 for href in dict.fromkeys(r["href"] for r in results):
-                    vcode, vrep, _vbody = await self.hass.async_add_executor_job(
-                        self._raw_read_blocking, _href_to_path_segs(href), href
-                    )
+                    read_error: str | None = None
+                    try:
+                        vcode, vrep, _vbody = await self.hass.async_add_executor_job(
+                            self._raw_read_blocking, _href_to_path_segs(href), href
+                        )
+                    except Exception as e:
+                        # The write already landed -- see `results` above,
+                        # built before this wait ever started. A failed
+                        # confirmation read (the session dying in the gap
+                        # verify_after just waited out, say) must not lose
+                        # that outcome behind a raised exception here, and
+                        # one href's failure shouldn't stop the rest of the
+                        # batch from being checked. Same "couldn't verify"
+                        # posture as a 4.04/empty read below: held stays
+                        # None, not False -- but raw_code 0 alone is also
+                        # what a 4.04 produces, so read_error is what tells
+                        # the two apart for a caller inspecting the response.
+                        self._log.debug("raw write verification read failed for %s: %s", href, e)
+                        vcode, vrep = 0, {}
+                        read_error = str(e)
                     # None, not False, when the re-read brought back nothing
                     # to compare: every comparison against an empty rep is
                     # False, which would report a 4.04 as a revert -- the one
@@ -1753,6 +1880,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             if read_ok
                             else None
                         ),
+                        "read_error": read_error,
                     }
             response["verified"] = verified
 

@@ -13,6 +13,7 @@ from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import issue_registry as ir
+from smartthings_local.errors import SessionClosedError, SessionError, SessionTimeoutError
 
 from custom_components.localthings.const import (
     CONF_BYPASS_REMOTE_CONTROL,
@@ -531,6 +532,36 @@ async def test_total_poll_failure_downgrades_observe_mode_to_poll(
     assert coordinator.last_update_success is True
 
 
+def test_defer_reconnect_for_reconnects_immediately_on_a_confirmed_dead_session(
+    hass: HomeAssistant, mock_entry
+) -> None:
+    """smartthings-local >= 0.1.6 raises SessionClosedError -- a
+    ConnectionError, not a TimeoutError -- the moment a dead reader thread
+    is confirmed, instead of the old behavior of letting the request hang
+    out to its own timeout and surface as an ambiguous TimeoutError.
+    _defer_reconnect_for must never extend the block-ACK tolerance to a
+    failure this unambiguous; see its docstring for the full reasoning."""
+    coordinator = LocalThingsCoordinator(hass, mock_entry)
+    coordinator._discovered = True
+
+    assert coordinator._defer_reconnect_for(SessionClosedError()) is False
+
+
+def test_defer_reconnect_for_still_tolerates_an_ambiguous_timeout(
+    hass: HomeAssistant, mock_entry
+) -> None:
+    """The other half of the same distinction: a plain block-ACK timeout --
+    still a TimeoutError, including smartthings-local's own
+    SessionTimeoutError subclass -- keeps its multi-cycle tolerance rather
+    than being swept into the immediate-reconnect path above."""
+    coordinator = LocalThingsCoordinator(hass, mock_entry)
+    coordinator._discovered = True
+
+    for _ in range(coordinator._POLL_TIMEOUT_LIMIT - 1):
+        assert coordinator._defer_reconnect_for(SessionTimeoutError()) is True
+    assert coordinator._defer_reconnect_for(SessionTimeoutError()) is False
+
+
 async def test_poll_timeout_skips_reconnect_when_push_is_healthy(
     hass: HomeAssistant, mock_entry, mock_coordinator_observe_session
 ) -> None:
@@ -784,6 +815,38 @@ async def test_attempt_observe_mode_discards_stale_commit_after_session_swap(
     assert coordinator._observe.subscribed_hrefs == set()
     assert coordinator._observe._refresh_thread is None
     assert coordinator._resubscribe_due is True
+
+
+async def test_attempt_observe_mode_survives_a_failed_reconnect(
+    hass: HomeAssistant, mock_entry, mock_coordinator_observe_session
+) -> None:
+    """The session was closed out from under this attempt concurrently
+    (rare, but real -- see the docstring above), and the reconnect it tries
+    on the way back in fails too (smartthings-local >= 0.1.3's redacted
+    SessionError, or any other exception). That must not escape
+    _async_update_data uncaught: it should land in the same "give up on
+    push this cycle" state the subscribe-failed and stale-session branches
+    already produce, not skip this integration's own logging/state handling
+    entirely."""
+    await hass.config_entries.async_setup(mock_entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
+    coordinator._session = None
+    coordinator._reconnect_times = []
+
+    with patch.object(
+        coordinator,
+        "_connect_session",
+        side_effect=SessionError(),
+    ):
+        await coordinator._attempt_observe_mode()  # must not raise
+
+    assert coordinator.observe_mode == MODE_POLL
+    assert coordinator._observe.subscribed_hrefs == set()
+    assert coordinator._resubscribe_due is False
+    # Not the poll path's own reconnect-frequency window (see the fix's
+    # comment) -- this failure must not count toward it.
+    assert coordinator._reconnect_times == []
 
 
 async def test_maybe_retry_observe_mode_uses_most_recent_attempt_not_just_mode_change(

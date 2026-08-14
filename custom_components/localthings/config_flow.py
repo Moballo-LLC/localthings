@@ -493,27 +493,84 @@ _CERT_ALERTS = frozenset(
     }
 )
 
-# OpenSSL renders a received fatal alert into its error text as e.g.
-# "tlsv1 alert unknown ca", which DtlsCoapSession.connect() wraps in a
-# ConnectionError. Reading it back tells us what the appliance objected to.
-#
-# Deliberately not the library's diagnostic probe (stateless=False): that
-# mode commits association state on the device, and an orphaned association
-# makes the next attempt time out (RFC 6347 §4.2.8) -- a bad trade on a
-# path the user is about to retry.
+# Older smartthings-local (< 0.1.3) rendered a received fatal alert straight
+# into the handshake exception's text, e.g. "tlsv1 alert unknown ca" wrapped
+# in a ConnectionError -- reading it back told us what the appliance
+# objected to. 0.1.3's "redacted typed failures" removed that: connect()'s
+# exceptions now carry a fixed, non-sensitive message with the real OpenSSL
+# text neither included nor chained (see smartthings_local.errors --
+# "backend errors can contain remote endpoints, local paths, or credential
+# metadata"). _alert_name is kept as a harmless fallback for exception text
+# that does carry it; _resolve_alert below is what actually classifies a
+# failure against a current library.
 _ALERT_RE = re.compile(r"alert ([a-z0-9 ]+)")
 
 
 def _alert_name(exc: Exception) -> str | None:
-    """The TLS alert an appliance sent, if this failure carried one."""
+    """The TLS alert an appliance sent, if this failure's exception text
+    carried one (only ever true against smartthings-local < 0.1.3)."""
     match = _ALERT_RE.search(str(exc).lower())
     return match.group(1).strip().replace(" ", "_") if match else None
+
+
+def _diagnostic_alert(host: str, port: int, cert_pem: str, key_pem: str):
+    """One opt-in stateful handshake against `port`, using our real
+    credentials, so a fatal Alert can be classified from the raw record
+    itself rather than parsed out of an exception's text.
+
+    This is the library's diagnose_dtls_handshake -- deliberately not used
+    for the primary candidate scan (it commits association state on the
+    device, and an orphaned association makes the *next* attempt time out
+    per RFC 6347 §4.2.8). Here it only runs once every real candidate has
+    already failed, to explain a failure that's happening either way --
+    one more orphaned association is a fair trade for a message that says
+    why, on a path the user is about to retry regardless.
+
+    Imported lazily, like `_clienthello_probe`, so an install whose
+    smartthings-local predates this API degrades to a generic message
+    instead of failing to load the config flow at all.
+    """
+    from smartthings_local.protocol.dtls_probe import diagnose_dtls_handshake
+
+    return diagnose_dtls_handshake(
+        host,
+        port,
+        cert_pem=cert_pem,
+        key_pem=key_pem,
+        timeout=CLIENTHELLO_PROBE_TIMEOUT_S,
+        retries=CLIENTHELLO_PROBE_RETRIES,
+    )
+
+
+def _resolve_alert(exc: Exception, host: str, port: int, cert_pem: str, key_pem: str) -> str | None:
+    """The TLS alert `port`'s failed handshake carried, if any -- the
+    exception's own text first (cheap, and all an older library ever
+    offers), then one bounded diagnostic handshake against a current one
+    that redacts it (see _diagnostic_alert)."""
+    name = _alert_name(exc)
+    if name is not None:
+        return name
+    try:
+        result = _diagnostic_alert(host, port, cert_pem, key_pem)
+    except Exception:
+        return None
+    if result.alert is None:
+        return None
+    level, name = result.alert
+    # ProbeResult.alert is set for a *received* alert record of either
+    # level -- fatal (2) means the appliance actually broke off the
+    # handshake over it; a warning (1, e.g. close_notify on an otherwise
+    # ordinary close) is not evidence of a rejection and must not be read
+    # as one. The old exception-text path never had this ambiguity: an
+    # OpenSSL exception only ever rendered for a fatal alert.
+    return name if level == 2 else None
 
 
 def _classify_handshake_failure(
     host: str,
     scan: _PortScan,
     failures: list[tuple[int, Exception]],
+    alerts: dict[int, str] | None = None,
 ) -> CannotConnect:
     """Turn "no port worked" into the most specific thing we can honestly
     say, in rough order of how much the evidence tells us: an alert means
@@ -521,13 +578,21 @@ def _classify_handshake_failure(
     certificate); a confirmed DTLS port that then timed out is likely still
     holding a session from a previous attempt; otherwise the sweep's own
     shape is the evidence.
+
+    `alerts` is the per-port classification `_handshake_and_read` already
+    resolved (exception text, or a diagnostic handshake -- see
+    _resolve_alert); a caller with only raw failures (or an older library)
+    still gets `_alert_name`'s exception-text reading as a fallback.
     """
-    alerts = [name for name in (_alert_name(exc) for _, exc in failures) if name]
-    cert_alerts = [name for name in alerts if name in _CERT_ALERTS]
+    resolved = dict(alerts or {})
+    for port, exc in failures:
+        resolved.setdefault(port, _alert_name(exc))
+    alert_names = [name for name in resolved.values() if name]
+    cert_alerts = [name for name in alert_names if name in _CERT_ALERTS]
     if cert_alerts:
         return CertRejected(f"{host} rejected our certificate (alert {cert_alerts[0]})")
-    if alerts:
-        return HandshakeFailed(f"{host} refused the DTLS handshake (alert {alerts[0]})")
+    if alert_names:
+        return HandshakeFailed(f"{host} refused the DTLS handshake (alert {alert_names[0]})")
     if scan.confirmed:
         return HandshakeTimeout(
             f"DTLS server confirmed on {host}:{scan.confirmed} but the handshake never completed"
@@ -626,6 +691,40 @@ def _read_device(sess, host: str, port: int) -> dict:
     }
 
 
+def _diagnose_failures(
+    host: str,
+    scan: _PortScan,
+    failures: list[tuple[int, Exception]],
+    cert_pem: str,
+    key_pem: str,
+) -> dict[int, str]:
+    """At most one diagnostic handshake (see _diagnostic_alert) across every
+    port `_handshake_and_read` just gave up on -- not one per port.
+
+    Called only after that loop has fully exhausted `scan.candidates`, never
+    interleaved with it: `_diagnostic_alert`'s own docstring says the extra
+    orphaned association it costs is a fair trade "on a path the user is
+    about to retry regardless" -- true for the retry `_probe_and_validate`
+    itself makes on a CertRejected (a fresh `_handshake_and_read` call
+    against this same `scan`), but only if that retry's real handshake
+    attempts are the ones landing on a clean slate. Running the diagnostic
+    per candidate mid-loop would pollute exactly the port(s) that retry is
+    about to reattempt; running several of them multiplies both the latency
+    (each is its own bounded handshake) and the pollution for no extra
+    classification value, since _classify_handshake_failure only ever needs
+    one alert to decide.
+
+    Targets a confirmed-live port over an unconfirmed sweep candidate --
+    the one actually worth spending the extra handshake on.
+    """
+    if not failures:
+        return {}
+    by_port = dict(failures)
+    port = next((p for p in scan.confirmed if p in by_port), next(iter(by_port)))
+    alert = _resolve_alert(by_port[port], host, port, cert_pem, key_pem)
+    return {port: alert} if alert is not None else {}
+
+
 def _handshake_and_read(host: str, scan: _PortScan, cert_pem: str, key_pem: str) -> dict:
     """Handshake each candidate in turn, returning the first device that answers."""
     from smartthings_local.protocol.dtls_session import DtlsCoapSession
@@ -649,7 +748,8 @@ def _handshake_and_read(host: str, scan: _PortScan, cert_pem: str, key_pem: str)
             if sess is not None:
                 with contextlib.suppress(Exception):
                     sess.close()
-    raise _classify_handshake_failure(host, scan, failures)
+    alerts = _diagnose_failures(host, scan, failures, cert_pem, key_pem)
+    raise _classify_handshake_failure(host, scan, failures, alerts)
 
 
 def _probe_and_validate(

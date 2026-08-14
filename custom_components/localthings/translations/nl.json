@@ -1558,6 +1558,9 @@
     "command_failed": {
       "message": "Het commando naar {href} is ook na opnieuw verbinden mislukt: {error}"
     },
+    "debug_read_failed": {
+      "message": "Het lezen van {href} is mislukt: {error}"
+    },
     "debug_too_many_writes": {
       "message": "Geef tussen de 1 en 10 schrijfacties op."
     },

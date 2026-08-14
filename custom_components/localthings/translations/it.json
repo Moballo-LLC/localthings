@@ -1558,6 +1558,9 @@
     "command_failed": {
       "message": "Il comando per {href} è fallito anche dopo la riconnessione: {error}"
     },
+    "debug_read_failed": {
+      "message": "La lettura da {href} è fallita: {error}"
+    },
     "debug_too_many_writes": {
       "message": "Specificare da 1 a 10 scritture."
     },
