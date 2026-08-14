@@ -108,6 +108,9 @@
       },
       "remote_control": {
         "name": "Intelligente Steuerung"
+      },
+      "stick_ble_connected": {
+        "name": "Stick per BLE verbunden"
       }
     },
     "button": {
@@ -871,6 +874,12 @@
       },
       "stick_status": {
         "name": "Stick-Status"
+      },
+      "stick_operation_mode": {
+        "name": "Stick-Betriebsmodus"
+      },
+      "stick_cleaning_status": {
+        "name": "Stick-Reinigungsstatus"
       },
       "uvc_operation_time": {
         "name": "UV-C Betriebszeit"
