@@ -324,6 +324,39 @@ async def test_write_resource_verify_after_reports_reverted(hass, coordinator, d
     assert verified["rep"] == {"x.field": "original"}
 
 
+async def test_write_resource_verify_after_survives_a_failed_confirmation_read(
+    hass, coordinator, device_id, monkeypatch
+):
+    """The write itself already landed (see `results`, built before
+    verify_after's wait even starts) by the time the confirmation read runs
+    -- a session dying in the gap verify_after waits out (smartthings-local's
+    redacted SessionClosedError/SessionTimeoutError, or any other exception)
+    must not lose that outcome behind a raised exception. Same "couldn't
+    verify" posture as a 4.04/empty read: `held` stays None, not False."""
+    fake = _FakeSession()
+    fake.queue_get("mode/vs/0", {"x.field": "target"})  # write's own follow-up read
+    coordinator._session = fake
+
+    def _boom(path_segs, href):
+        raise ConnectionError("session closed")
+
+    monkeypatch.setattr(coordinator, "_raw_read_blocking", _boom)
+
+    with patch(_SLEEP_TARGET, new_callable=AsyncMock):
+        response = await _call_write(
+            hass,
+            device_id,
+            writes=[{"href": "/mode/vs/0", "payload": {"x.field": "target"}}],
+            verify_after=30,
+        )
+
+    # The write's own results survive even though verification blew up.
+    assert response["results"][0]["accepted"] is True
+    verified = response["verified"]["/mode/vs/0"]
+    assert verified["held"] is None
+    assert verified["rep"] == {}
+
+
 async def test_write_resource_no_verified_key_when_verify_after_is_zero(
     hass, coordinator, device_id
 ):
@@ -603,6 +636,24 @@ async def test_read_resource_surfaces_a_collections_list_body(hass, coordinator,
     assert response["code"] == "2.05"
     assert response["rep"] == {}
     assert response["body"] == batch
+
+
+async def test_read_resource_failure_is_surfaced_as_a_home_assistant_error(
+    hass, coordinator, device_id, monkeypatch
+):
+    """A session/network failure during a live debug read (e.g.
+    smartthings-local's redacted SessionError, or any other exception) must
+    not reach the service caller raw and untranslated -- write_resource
+    already goes through HomeAssistantError on failure, and async_raw_read
+    must match that instead of letting the exception escape uncaught."""
+
+    def _boom(path_segs, href):
+        raise ConnectionError("session closed")
+
+    monkeypatch.setattr(coordinator, "_raw_read_blocking", _boom)
+
+    with pytest.raises(HomeAssistantError):
+        await _call_read(hass, device_id, href="/mode/vs/0")
 
 
 async def test_read_resource_without_href_returns_cached_snapshot_and_does_not_get(

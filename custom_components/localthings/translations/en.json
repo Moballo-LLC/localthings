@@ -1558,6 +1558,9 @@
     "command_failed": {
       "message": "The command to {href} failed even after reconnecting: {error}"
     },
+    "debug_read_failed": {
+      "message": "The read from {href} failed: {error}"
+    },
     "debug_too_many_writes": {
       "message": "Provide between 1 and 10 writes."
     },

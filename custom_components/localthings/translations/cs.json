@@ -1558,6 +1558,9 @@
     "command_failed": {
       "message": "Příkaz pro {href} selhal i po opětovném připojení: {error}"
     },
+    "debug_read_failed": {
+      "message": "Čtení z {href} selhalo: {error}"
+    },
     "debug_too_many_writes": {
       "message": "Zadejte 1 až 10 zápisů."
     },
