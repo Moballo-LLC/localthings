@@ -13,7 +13,7 @@ from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import issue_registry as ir
-from smartthings_local.errors import SessionError
+from smartthings_local.errors import SessionClosedError, SessionError, SessionTimeoutError
 
 from custom_components.localthings.const import (
     CONF_BYPASS_REMOTE_CONTROL,
@@ -530,6 +530,36 @@ async def test_total_poll_failure_downgrades_observe_mode_to_poll(
     # now, not the stale OBSERVE state from before the outage.
     assert coordinator.observe_mode == MODE_POLL
     assert coordinator.last_update_success is True
+
+
+def test_defer_reconnect_for_reconnects_immediately_on_a_confirmed_dead_session(
+    hass: HomeAssistant, mock_entry
+) -> None:
+    """smartthings-local >= 0.1.6 raises SessionClosedError -- a
+    ConnectionError, not a TimeoutError -- the moment a dead reader thread
+    is confirmed, instead of the old behavior of letting the request hang
+    out to its own timeout and surface as an ambiguous TimeoutError.
+    _defer_reconnect_for must never extend the block-ACK tolerance to a
+    failure this unambiguous; see its docstring for the full reasoning."""
+    coordinator = LocalThingsCoordinator(hass, mock_entry)
+    coordinator._discovered = True
+
+    assert coordinator._defer_reconnect_for(SessionClosedError()) is False
+
+
+def test_defer_reconnect_for_still_tolerates_an_ambiguous_timeout(
+    hass: HomeAssistant, mock_entry
+) -> None:
+    """The other half of the same distinction: a plain block-ACK timeout --
+    still a TimeoutError, including smartthings-local's own
+    SessionTimeoutError subclass -- keeps its multi-cycle tolerance rather
+    than being swept into the immediate-reconnect path above."""
+    coordinator = LocalThingsCoordinator(hass, mock_entry)
+    coordinator._discovered = True
+
+    for _ in range(coordinator._POLL_TIMEOUT_LIMIT - 1):
+        assert coordinator._defer_reconnect_for(SessionTimeoutError()) is True
+    assert coordinator._defer_reconnect_for(SessionTimeoutError()) is False
 
 
 async def test_poll_timeout_skips_reconnect_when_push_is_healthy(

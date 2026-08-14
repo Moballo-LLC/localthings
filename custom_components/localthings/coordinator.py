@@ -208,7 +208,10 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     # A block-level ACK timeout on the summary GET doesn't prove the session
     # is dead (see _poll_once) -- require this many in a row before treating
     # it as one, so one slow transfer doesn't tear down a working OBSERVE
-    # subscription.
+    # subscription. Only covers that ambiguous case: smartthings-local
+    # >= 0.1.6 raises a distinct SessionClosedError, not a TimeoutError, the
+    # moment a dead reader thread is confirmed, and _defer_reconnect_for
+    # never defers that -- see its docstring for what changed there.
     _POLL_TIMEOUT_LIMIT: int = 3
 
     # Named (not inline literals) so the write-settle window in
@@ -722,6 +725,14 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         not that the session is dead (earlier blocks succeeded). Left open;
         `_async_update_data` decides whether repeated timeouts warrant a
         reconnect. Any other exception is unambiguous -- close immediately.
+
+        smartthings-local >= 0.1.6 tells those two cases apart itself now:
+        a reader thread that has actually died raises `SessionClosedError`
+        (a ConnectionError, not a TimeoutError) the moment the next request
+        notices, instead of the old behavior of quietly hanging out to this
+        call's own timeout and surfacing as an ambiguous `TimeoutError`.
+        See `_defer_reconnect_for` for what that changes about how soon a
+        confirmed-dead session gets reconnected.
         """
         if self._session is None:
             self._connect_session()
@@ -1255,6 +1266,19 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         the channel is live, so always defer then. Otherwise defer until
         `_POLL_TIMEOUT_LIMIT` consecutive timeouts pile up. Any other
         exception reconnects immediately.
+
+        That includes `SessionClosedError`, which is the point: before
+        smartthings-local 0.1.6, a reader thread that had actually died was
+        indistinguishable from a slow transfer -- both surfaced here only as
+        a `TimeoutError`, so this tolerance was the only thing standing
+        between a truly dead session and a reconnect, worst case about
+        `_POLL_TIMEOUT_LIMIT` poll cycles (~2 minutes at the default 30s
+        interval). 0.1.6 confirms reader death directly and raises a
+        ConnectionError subclass for it instead, which isn't a TimeoutError
+        and so skips this tolerance entirely -- a genuinely dead session now
+        reconnects on the very first occurrence. Intended (see this repo's
+        README, "Known device behavior"), not a regression, but a real
+        change in observed reconnect timing for that one failure mode.
 
         Never defers before first discovery (issue #254): deferring returns
         an empty dict, which the base coordinator treats as a successful
