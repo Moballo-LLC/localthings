@@ -8,6 +8,7 @@ or getting translated into a HomeAssistantError for a service caller.
 
 from __future__ import annotations
 
+import pytest
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -39,7 +40,7 @@ def _coordinator(hass: HomeAssistant) -> LocalThingsCoordinator:
 
 
 async def test_subdevice_enumeration_failure_does_not_abort_first_discovery(
-    hass: HomeAssistant,
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     """_enumerate_subdevices_blocking's own _connect_session() call only
     fires if the session the poll above just used got closed out from under
@@ -48,20 +49,28 @@ async def test_subdevice_enumeration_failure_does_not_abort_first_discovery(
     through this integration's own logging, matching what already happens
     for the main poll's own reconnect.
 
+    Not a one-cycle blip once caught, though: `_discovered` flips True this
+    same cycle regardless (gating first discovery, not subdevice success),
+    so this is the *only* attempt a composite appliance's siblings ever get
+    without a config-entry reload -- logged at warning for exactly that
+    reason, not debug.
+
     Empty resources keep _run_discovery from binding anything (hot/warm
     hrefs stay empty), so _attempt_observe_mode's own session touch never
     runs either -- this test is purely about the enumeration failure not
     escaping _async_update_data.
     """
     coordinator = _coordinator(hass)
-    coordinator._poll_once = dict
+    monkeypatch.setattr(coordinator, "_poll_once", dict)
 
     def _boom(_resources):
         raise ConnectionError("session closed")
 
-    coordinator._enumerate_subdevices_blocking = _boom
+    monkeypatch.setattr(coordinator, "_enumerate_subdevices_blocking", _boom)
 
-    result = await coordinator._async_update_data()
+    with caplog.at_level("WARNING"):
+        result = await coordinator._async_update_data()
 
     assert coordinator._discovered is True
     assert result == {}
+    assert "subdevice enumeration failed" in caplog.text

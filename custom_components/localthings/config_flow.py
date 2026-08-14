@@ -554,7 +554,16 @@ def _resolve_alert(exc: Exception, host: str, port: int, cert_pem: str, key_pem:
         result = _diagnostic_alert(host, port, cert_pem, key_pem)
     except Exception:
         return None
-    return result.alert[1] if result.alert else None
+    if result.alert is None:
+        return None
+    level, name = result.alert
+    # ProbeResult.alert is set for a *received* alert record of either
+    # level -- fatal (2) means the appliance actually broke off the
+    # handshake over it; a warning (1, e.g. close_notify on an otherwise
+    # ordinary close) is not evidence of a rejection and must not be read
+    # as one. The old exception-text path never had this ambiguity: an
+    # OpenSSL exception only ever rendered for a fatal alert.
+    return name if level == 2 else None
 
 
 def _classify_handshake_failure(
@@ -682,12 +691,45 @@ def _read_device(sess, host: str, port: int) -> dict:
     }
 
 
+def _diagnose_failures(
+    host: str,
+    scan: _PortScan,
+    failures: list[tuple[int, Exception]],
+    cert_pem: str,
+    key_pem: str,
+) -> dict[int, str]:
+    """At most one diagnostic handshake (see _diagnostic_alert) across every
+    port `_handshake_and_read` just gave up on -- not one per port.
+
+    Called only after that loop has fully exhausted `scan.candidates`, never
+    interleaved with it: `_diagnostic_alert`'s own docstring says the extra
+    orphaned association it costs is a fair trade "on a path the user is
+    about to retry regardless" -- true for the retry `_probe_and_validate`
+    itself makes on a CertRejected (a fresh `_handshake_and_read` call
+    against this same `scan`), but only if that retry's real handshake
+    attempts are the ones landing on a clean slate. Running the diagnostic
+    per candidate mid-loop would pollute exactly the port(s) that retry is
+    about to reattempt; running several of them multiplies both the latency
+    (each is its own bounded handshake) and the pollution for no extra
+    classification value, since _classify_handshake_failure only ever needs
+    one alert to decide.
+
+    Targets a confirmed-live port over an unconfirmed sweep candidate --
+    the one actually worth spending the extra handshake on.
+    """
+    if not failures:
+        return {}
+    by_port = dict(failures)
+    port = next((p for p in scan.confirmed if p in by_port), next(iter(by_port)))
+    alert = _resolve_alert(by_port[port], host, port, cert_pem, key_pem)
+    return {port: alert} if alert is not None else {}
+
+
 def _handshake_and_read(host: str, scan: _PortScan, cert_pem: str, key_pem: str) -> dict:
     """Handshake each candidate in turn, returning the first device that answers."""
     from smartthings_local.protocol.dtls_session import DtlsCoapSession
 
     failures: list[tuple[int, Exception]] = []
-    alerts: dict[int, str] = {}
     for port in scan.candidates:
         sess = None
         try:
@@ -702,13 +744,11 @@ def _handshake_and_read(host: str, scan: _PortScan, cert_pem: str, key_pem: str)
         except Exception as exc:
             failures.append((port, exc))
             _LOGGER.debug("port %d failed: %s", port, exc)
-            alert = _resolve_alert(exc, host, port, cert_pem, key_pem)
-            if alert is not None:
-                alerts[port] = alert
         finally:
             if sess is not None:
                 with contextlib.suppress(Exception):
                     sess.close()
+    alerts = _diagnose_failures(host, scan, failures, cert_pem, key_pem)
     raise _classify_handshake_failure(host, scan, failures, alerts)
 
 

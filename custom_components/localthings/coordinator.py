@@ -1395,9 +1395,24 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     # keeps the value _poll_once already returned, so
                     # discovery below still runs on the master's own data,
                     # same posture _poll_subdevice_seed takes for one sibling
-                    # going quiet. self.subdevices/_discovered are still
-                    # unset, so the probe retries naturally next cycle.
-                    self._log.debug("subdevice enumeration failed: %s", e)
+                    # going quiet.
+                    #
+                    # Not a one-cycle blip, though: `_run_discovery` a few
+                    # lines below sets `self._discovered = True`
+                    # unconditionally this same cycle, which is what gates
+                    # this whole block -- there is no next cycle where this
+                    # is retried. A composite appliance whose enumeration
+                    # fails here loses its sibling subdevices' entities for
+                    # this config entry's lifetime (a reload probes again).
+                    # warning, not debug, because of that: it's silent and
+                    # permanent otherwise, with nothing in the log pointing
+                    # at why a device is missing entities it should have.
+                    self._log.warning(
+                        "subdevice enumeration failed on first discovery; "
+                        "any sibling subdevices will be missing until this "
+                        "config entry is reloaded: %s",
+                        e,
+                    )
 
         source = "sweep" if self._discovered else "poll"
         first_cycle = not self._discovered
@@ -1710,6 +1725,14 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # path a raw session exception would otherwise reach a user
                 # untranslated (write_resource already goes through
                 # HomeAssistantError; this brings read_resource in line).
+                if not isinstance(e, TimeoutError):
+                    # Same TimeoutError-vs-anything-else split as
+                    # _poll_once: a block-ACK timeout alone doesn't prove
+                    # the session is dead, but anything else does -- and
+                    # leaving a confirmed-dead one installed would fail
+                    # every read/write identically until the next real
+                    # poll cycle's own reconnect notices.
+                    await self.hass.async_add_executor_job(self._close_session)
                 self._log.warning("debug read failed for %s: %s", norm_href, e)
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
@@ -1823,6 +1846,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             verified: dict[str, Any] = {}
             async with self._session_lock:
                 for href in dict.fromkeys(r["href"] for r in results):
+                    read_error: str | None = None
                     try:
                         vcode, vrep, _vbody = await self.hass.async_add_executor_job(
                             self._raw_read_blocking, _href_to_path_segs(href), href
@@ -1836,9 +1860,12 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         # one href's failure shouldn't stop the rest of the
                         # batch from being checked. Same "couldn't verify"
                         # posture as a 4.04/empty read below: held stays
-                        # None, not False.
+                        # None, not False -- but raw_code 0 alone is also
+                        # what a 4.04 produces, so read_error is what tells
+                        # the two apart for a caller inspecting the response.
                         self._log.debug("raw write verification read failed for %s: %s", href, e)
                         vcode, vrep = 0, {}
+                        read_error = str(e)
                     # None, not False, when the re-read brought back nothing
                     # to compare: every comparison against an empty rep is
                     # False, which would report a 4.04 as a revert -- the one
@@ -1853,6 +1880,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             if read_ok
                             else None
                         ),
+                        "read_error": read_error,
                     }
             response["verified"] = verified
 

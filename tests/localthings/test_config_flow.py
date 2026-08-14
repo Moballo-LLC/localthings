@@ -528,6 +528,39 @@ async def test_rejected_reused_leaf_is_reminted_against_a_redacted_library(
     assert diagnosed == [49154]
 
 
+def test_diagnostic_handshake_runs_once_not_once_per_failing_port(monkeypatch) -> None:
+    """_diagnostic_alert commits association state on the device (see its
+    own docstring) -- running it once per failing candidate instead of once
+    overall would both add latency (each is its own bounded handshake) and
+    multiply that pollution right before _probe_and_validate might retry a
+    real handshake against these very same ports. Three candidates fail
+    here; the diagnostic must run exactly once, against the confirmed-live
+    port, not three times against every candidate in scan order."""
+    from custom_components.localthings import config_flow
+
+    FakeSession.instances = []
+    FakeSession.reject_certs = {MOCK_LEAF_CERT_PEM}
+    FakeSession.redact_rejection = True
+    monkeypatch.setattr("smartthings_local.protocol.dtls_session.DtlsCoapSession", FakeSession)
+
+    diagnosed: list[int] = []
+
+    class _DiagnosticResult:
+        alert = (2, "bad_certificate")
+
+    def _diagnostic_alert(host, port, cert_pem, key_pem):
+        diagnosed.append(port)
+        return _DiagnosticResult()
+
+    monkeypatch.setattr(config_flow, "_diagnostic_alert", _diagnostic_alert)
+
+    scan = _scan(confirmed=[49153, 49154], candidates=[49153, 49154, 49155])
+    with pytest.raises(config_flow.CertRejected):
+        config_flow._handshake_and_read(MOCK_HOST, scan, MOCK_LEAF_CERT_PEM, "KEY")
+
+    assert diagnosed == [49153]  # confirmed-live, and only once
+
+
 async def test_unconfirmed_port_failure_is_not_reminted(
     hass: HomeAssistant, monkeypatch, fake_dtls
 ) -> None:
@@ -651,6 +684,26 @@ def test_resolve_alert_falls_back_to_the_diagnostic_handshake() -> None:
     with patch.object(config_flow, "_diagnostic_alert", lambda *a, **k: _Result()):
         name = config_flow._resolve_alert(SessionError(), MOCK_HOST, 49154, "CERT", "KEY")
     assert name == "bad_certificate"
+
+
+def test_resolve_alert_ignores_a_non_fatal_alert() -> None:
+    """ProbeResult.alert is set for a *received* alert of either level, but
+    only a fatal one (2) means the appliance actually broke off the
+    handshake over it -- a warning-level alert (e.g. close_notify on an
+    otherwise ordinary close) is not evidence of a rejection. The old
+    exception-text path never had this ambiguity: OpenSSL's exception only
+    ever rendered for a fatal alert, so nothing pre-0.1.3 could confuse the
+    two -- the diagnostic-handshake fallback must not introduce the mix-up."""
+    from smartthings_local.errors import SessionError
+
+    from custom_components.localthings import config_flow
+
+    class _Result:
+        alert = (1, "close_notify")  # warning level, not fatal
+
+    with patch.object(config_flow, "_diagnostic_alert", lambda *a, **k: _Result()):
+        name = config_flow._resolve_alert(SessionError(), MOCK_HOST, 49154, "CERT", "KEY")
+    assert name is None
 
 
 def test_resolve_alert_is_none_when_the_diagnostic_handshake_also_fails() -> None:
