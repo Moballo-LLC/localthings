@@ -268,8 +268,6 @@ Samsung's firmware occasionally drops the DTLS session briefly — this is norma
 
 If reconnects become persistent (more than a handful per minute), something's actually wrong. Check the appliance's Wi-Fi link first, then look for a competing DTLS client on the LAN — only one active session per appliance is allowed at a time.
 
-Reconnect *timing* depends on how confidently the drop was detected. An ambiguous failure — one block's ACK on the summary poll came back late, which doesn't by itself prove the session is dead — is tolerated for a few consecutive poll cycles (worst case ~2 minutes at the default 30s interval) before the integration gives up and reconnects, so one slow transfer can't tear down a working push subscription. A confirmed dead connection skips that tolerance and reconnects immediately: `smartthings-local` (>= 0.1.6) detects its own reader thread exiting and raises a distinct error for it, rather than the ambiguous timeout that failure used to produce on older library versions. So you may see a reconnect log line appear sooner than that old ~2-minute worst case for a session that's actually gone — that's the fast path working as intended, not a new source of flapping.
-
 Deregistering a device in SmartThings causes a reset of its network settings as soon as it accesses Samsung's servers, dropping it off Wi-Fi until it's re-onboarded through the SmartThings app. As such, consider keeping devices registered even if egress-blocked, to avoid them resetting upon brief internet access.
 
 ### Multi-subdevice ("2-in-1") air conditioner systems
