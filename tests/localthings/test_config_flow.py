@@ -238,6 +238,11 @@ class FakeSession:
 
     instances: ClassVar[list[FakeSession]] = []
     reject_certs: ClassVar[set[str]] = set()
+    # smartthings-local >= 0.1.3 ("redacted typed failures") no longer puts
+    # the alert in connect()'s exception text -- set True to model that, so
+    # a test can check the diagnostic-handshake fallback (_resolve_alert)
+    # instead of the legacy _alert_name text-parsing path.
+    redact_rejection: ClassVar[bool] = False
 
     def __init__(self, host, port, cert_pem=None, key_pem=None, **kwargs):
         self.host, self.port, self.cert_pem = host, port, cert_pem
@@ -245,6 +250,10 @@ class FakeSession:
 
     def connect(self):
         if self.cert_pem in FakeSession.reject_certs:
+            if FakeSession.redact_rejection:
+                from smartthings_local.errors import SessionError
+
+                raise SessionError()
             raise ConnectionError(
                 "DTLS handshake error: [('SSL routines', '', 'sslv3 alert bad certificate')]"
             )
@@ -268,6 +277,7 @@ def fake_dtls(monkeypatch):
 
     FakeSession.instances = []
     FakeSession.reject_certs = set()
+    FakeSession.redact_rejection = False
     monkeypatch.setattr(config_flow, "_fetch_samsung_uuid", lambda: "test-uuid")
     monkeypatch.setattr(
         config_flow,
@@ -480,6 +490,44 @@ async def test_rejected_reused_leaf_is_reminted(
     assert [s.cert_pem for s in FakeSession.instances] == [MOCK_LEAF_CERT_PEM, "FULLCHAIN"]
 
 
+async def test_rejected_reused_leaf_is_reminted_against_a_redacted_library(
+    hass: HomeAssistant, monkeypatch, fake_dtls
+) -> None:
+    """Same flow as test_rejected_reused_leaf_is_reminted, but against a
+    connect() failure shaped like smartthings-local >= 0.1.3 -- a fixed,
+    redacted exception with no alert text at all (see errors.py's
+    "Classified errors"). The re-mint decision has to come from
+    _resolve_alert's diagnostic-handshake fallback instead of _alert_name."""
+    from custom_components.localthings import config_flow
+
+    existing = MockConfigEntry(domain=DOMAIN, data=ENTRY_DATA, unique_id="localthings_other")
+    existing.add_to_hass(hass)
+    _patch_clienthello(monkeypatch, {49154})
+    FakeSession.reject_certs = {MOCK_LEAF_CERT_PEM}
+    FakeSession.redact_rejection = True
+
+    class _DiagnosticResult:
+        alert = (2, "bad_certificate")
+
+    diagnosed: list[int] = []
+
+    def _diagnostic_alert(host, port, cert_pem, key_pem):
+        diagnosed.append(port)
+        return _DiagnosticResult()
+
+    monkeypatch.setattr(config_flow, "_diagnostic_alert", _diagnostic_alert)
+
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_HOST: MOCK_HOST}
+    )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_LEAF_CERT_PEM] == "FULLCHAIN"
+    assert [s.cert_pem for s in FakeSession.instances] == [MOCK_LEAF_CERT_PEM, "FULLCHAIN"]
+    assert diagnosed == [49154]
+
+
 async def test_unconfirmed_port_failure_is_not_reminted(
     hass: HomeAssistant, monkeypatch, fake_dtls
 ) -> None:
@@ -552,6 +600,72 @@ def test_cert_alert_is_reported_as_a_certificate_problem() -> None:
         )
         assert isinstance(err, CertRejected), alert
         assert err.error_key == "cert_rejected"
+
+
+def test_classify_handshake_failure_uses_a_resolved_alert_over_exception_text() -> None:
+    """_handshake_and_read passes its own resolved `alerts` mapping (built
+    via _resolve_alert, which is what actually classifies a failure against
+    smartthings-local >= 0.1.3's redacted exceptions) -- it must win even
+    when the exception text itself says nothing."""
+    from custom_components.localthings.config_flow import (
+        CertRejected,
+        _classify_handshake_failure,
+    )
+
+    err = _classify_handshake_failure(
+        MOCK_HOST,
+        _scan(confirmed=[49154]),
+        [(49154, RuntimeError("session operation failed"))],
+        {49154: "bad_certificate"},
+    )
+    assert isinstance(err, CertRejected)
+    assert err.error_key == "cert_rejected"
+
+
+def test_resolve_alert_prefers_exception_text_over_the_diagnostic_handshake() -> None:
+    """A library still stamping the alert into its exception text (< 0.1.3)
+    answers for free; the diagnostic handshake must not run at all then."""
+    from custom_components.localthings.config_flow import _resolve_alert
+
+    def _must_not_run(*args, **kwargs):
+        raise AssertionError("must not run the diagnostic handshake")
+
+    with patch("custom_components.localthings.config_flow._diagnostic_alert", _must_not_run):
+        name = _resolve_alert(
+            _openssl_alert("tlsv1 alert unknown ca"), MOCK_HOST, 49154, "CERT", "KEY"
+        )
+    assert name == "unknown_ca"
+
+
+def test_resolve_alert_falls_back_to_the_diagnostic_handshake() -> None:
+    """smartthings-local >= 0.1.3 redacts the exception text (see errors.py's
+    "Classified errors"), so the only way left to learn *why* a handshake
+    failed is the library's own classification of the raw alert record."""
+    from smartthings_local.errors import SessionError
+
+    from custom_components.localthings import config_flow
+
+    class _Result:
+        alert = (2, "bad_certificate")
+
+    with patch.object(config_flow, "_diagnostic_alert", lambda *a, **k: _Result()):
+        name = config_flow._resolve_alert(SessionError(), MOCK_HOST, 49154, "CERT", "KEY")
+    assert name == "bad_certificate"
+
+
+def test_resolve_alert_is_none_when_the_diagnostic_handshake_also_fails() -> None:
+    """A best-effort extra probe: its own failure must not raise out of
+    _resolve_alert, it just leaves the caller with no alert to report."""
+    from smartthings_local.errors import SessionError, SessionTimeoutError
+
+    from custom_components.localthings import config_flow
+
+    def _boom(*args, **kwargs):
+        raise SessionTimeoutError()
+
+    with patch.object(config_flow, "_diagnostic_alert", _boom):
+        name = config_flow._resolve_alert(SessionError(), MOCK_HOST, 49154, "CERT", "KEY")
+    assert name is None
 
 
 def test_non_cert_alert_is_kept_distinct_from_a_cert_problem() -> None:
