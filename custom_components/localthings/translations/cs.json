@@ -958,7 +958,10 @@
         "name": "Doba sušení"
       },
       "dryer_type": {
-        "name": "Typ sušičky"
+        "name": "Typ sušičky",
+        "state": {
+          "electricity": "Elektřina"
+        }
       },
       "dust": {
         "name": "Prach"
@@ -1098,6 +1101,7 @@
           "steaming": "Napařování",
           "airwashing": "Osvěžení vzduchem",
           "drying": "Sušení",
+          "dryingwithdooropen": "Větrání",
           "cooling": "Chlazení",
           "predrain": "Vypouštění",
           "prewash": "Předpírka"

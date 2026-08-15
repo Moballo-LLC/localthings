@@ -1151,7 +1151,10 @@
         "name": "Tiempo de secado"
       },
       "dryer_type": {
-        "name": "Tipo de secadora"
+        "name": "Tipo de secadora",
+        "state": {
+          "electricity": "Electricidad"
+        }
       },
       "dust": {
         "name": "Polvo"
@@ -1291,6 +1294,7 @@
           "steaming": "Vaporización",
           "airwashing": "Lavado con aire",
           "drying": "Secado",
+          "dryingwithdooropen": "Ventilación",
           "cooling": "Enfriamiento",
           "predrain": "Drenaje previo",
           "prewash": "Prelavado"

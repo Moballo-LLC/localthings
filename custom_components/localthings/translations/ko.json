@@ -958,7 +958,10 @@
         "name": "건조 시간"
       },
       "dryer_type": {
-        "name": "건조기 유형"
+        "name": "건조기 유형",
+        "state": {
+          "electricity": "전기"
+        }
       },
       "dust": {
         "name": "미세먼지"
@@ -1098,6 +1101,7 @@
           "steaming": "스팀",
           "airwashing": "에어워시",
           "drying": "건조",
+          "dryingwithdooropen": "환기",
           "cooling": "냉각",
           "predrain": "사전 배수",
           "prewash": "애벌빨래"

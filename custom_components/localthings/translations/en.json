@@ -958,7 +958,10 @@
         "name": "Dry time"
       },
       "dryer_type": {
-        "name": "Dryer type"
+        "name": "Dryer type",
+        "state": {
+          "electricity": "Electricity"
+        }
       },
       "dust": {
         "name": "Dust"
@@ -1098,6 +1101,7 @@
           "steaming": "Steaming",
           "airwashing": "Air washing",
           "drying": "Drying",
+          "dryingwithdooropen": "Venting",
           "cooling": "Cooling",
           "predrain": "Pre-drain",
           "prewash": "Pre-wash"

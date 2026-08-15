@@ -958,7 +958,10 @@
         "name": "Droogtijd"
       },
       "dryer_type": {
-        "name": "Type droger"
+        "name": "Type droger",
+        "state": {
+          "electricity": "Elektriciteit"
+        }
       },
       "dust": {
         "name": "Stof"
@@ -1098,6 +1101,7 @@
           "steaming": "Stomen",
           "airwashing": "Luchtreiniging",
           "drying": "Drogen",
+          "dryingwithdooropen": "Ventileren",
           "cooling": "Koelen",
           "predrain": "Vooraf afpompen",
           "prewash": "Voorwas"

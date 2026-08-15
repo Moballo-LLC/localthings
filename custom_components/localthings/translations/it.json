@@ -958,7 +958,10 @@
         "name": "Tempo di asciugatura"
       },
       "dryer_type": {
-        "name": "Tipo di asciugatrice"
+        "name": "Tipo di asciugatrice",
+        "state": {
+          "electricity": "Elettricità"
+        }
       },
       "dust": {
         "name": "Polvere"
@@ -1098,6 +1101,7 @@
           "steaming": "Vapore",
           "airwashing": "Lavaggio ad aria",
           "drying": "Asciugatura",
+          "dryingwithdooropen": "Ventilazione",
           "cooling": "Raffreddamento",
           "predrain": "Scarico preliminare",
           "prewash": "Prelavaggio"

@@ -27,7 +27,17 @@ DRYER_SETTINGS = Capability(
     entities=(
         SensorDesc(key="dry_level", field="x.com.samsung.da.dryLevel", icon="mdi:water-percent"),
         SensorDesc(key="dry_time", field="x.com.samsung.da.dryTime", icon="mdi:timer"),
-        SensorDesc(key="dryer_type", field="x.com.samsung.da.dryerType", icon="mdi:tumble-dryer"),
+        SensorDesc(
+            key="dryer_type",
+            field="x.com.samsung.da.dryerType",
+            icon="mdi:tumble-dryer",
+            device_class="enum",
+            # Only 'Electricity' confirmed across shipped fixtures (#366); an
+            # unrecognized value still passes through raw via sensor.py's
+            # options property rather than breaking the entity.
+            options=("electricity",),
+            value_fn=lambda v: v.lower() if isinstance(v, str) else v,
+        ),
         SwitchDesc(
             key="wrinkle_prevent",
             field="x.com.samsung.da.wrinklePrevent",
