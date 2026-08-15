@@ -1558,12 +1558,10 @@ AIR_QUALITY = Capability(
         # CO2 (PR #316, ACA-KR-TP2-21-AN9000) -- a type this file's other AC
         # families don't report. Same field/shape air_monitor.SENSORS
         # already models with device_class='carbon_dioxide'/unit='ppm', so
-        # this matches that descriptor rather than guessing fresh -- unlike
-        # the pm10/pm25/pm1 mapping air_monitor.py's own docstring
-        # deliberately rejects for the three dust-type keys above (Samsung's
-        # two-tier PM10/PM2.5 convention doesn't confirm where a third tier
-        # or PM1 fits), ppm for a field literally named CO2 isn't a guess of
-        # that kind.
+        # this matches that descriptor rather than guessing fresh. The dust
+        # keys above stay untyped for the reason in _sensor_item_value: the
+        # pm10/pm25/pm1 mapping is confirmed for the purifier and monitor
+        # families (issue #325), but no AC family has evidence of its own.
         SensorDesc(
             key="co2",
             field="x.com.samsung.da.items",
