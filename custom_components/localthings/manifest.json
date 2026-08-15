@@ -13,5 +13,5 @@
     "pyOpenSSL>=23.0",
     "smartthings-local>=0.1.6"
   ],
-  "version": "0.21.2"
+  "version": "0.22.0"
 }
