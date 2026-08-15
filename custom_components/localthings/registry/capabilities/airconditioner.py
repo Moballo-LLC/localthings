@@ -372,6 +372,33 @@ def _has_option_token(prefix):
     )
 
 
+def _has_option_token_any_board(prefix):
+    """Token-presence test with no board-generation gate.
+
+    `_has_option_token` above requires `is_legacy_board`, which was right for
+    the settings it guards but wrong for a token whose presence is itself the
+    only signal that needs checking -- issue #367 found `OutdoorTemp_` live
+    on 14 of 23 recorded fixtures despite none of them being legacy boards.
+    Same shape as `beep`'s Volume_ test and `_has_display_light_option`,
+    which already treat token presence as sufficient across generations."""
+    return lambda rep, resources: _option_token(rep, prefix) is not None
+
+
+def _reports_celsius(resources):
+    """Whether this subdevice's own /temperatures/vs/0 declares Celsius (or
+    says nothing at all, `_temps_vs_unit`'s default).
+
+    Guards `OutdoorTemp_`'s -55 offset below: issue #367's field validation
+    (48h against weather.forecast_home, r=0.92) ran on Celsius-locale boards
+    only -- 13 of the 14 non-legacy fixtures that carry the token declare
+    Celsius, and the offset's own calibration comment is a Celsius reading
+    too. The one Fahrenheit-locale exception on record
+    (`airconditioner_lnx_rac_heatpump`) has nothing to confirm the same
+    additive constant, or degrees C rather than F, still hold -- so this
+    stays off boards that declare anything else, rather than guess."""
+    return _temps_vs_unit(resources.get(HREF_TEMPS_VS) or {}) == "°C"
+
+
 def _option_token_on(prefix):
     return lambda rep: _option_token(rep, prefix) == "On"
 
@@ -782,13 +809,34 @@ CLIMATE = Capability(
         ),
         # Outdoor temperature, offset by 55 -- calibrated against an
         # independent thermometer (token 75 while it read 20.3°C).
+        #
+        # exists_fn is token-presence-only (issue #367), not is_legacy_board:
+        # gating it there dropped the sensor on every non-legacy board that
+        # reports it -- 14 of 17 fixtures carrying the token in the issue's
+        # own survey. A 48h/289-sample field capture correlated it against
+        # weather.forecast_home at r=0.92, ruling out a firmware constant.
+        # `_reports_celsius` keeps that presence check from also claiming
+        # the -55 Celsius offset for board generations it was never
+        # validated on -- see its own docstring.
+        #
+        # enabled_default=False: multi-split installs (multiple indoor heads
+        # on one outdoor condenser) report the same token on every head, so
+        # a fix here creates one identical sensor per head rather than one
+        # per physical unit (same duplication as the shared energy/power
+        # counters in issue #329). Left disabled so a user with several
+        # heads can enable just one instead of getting N duplicates active
+        # by default.
         SensorDesc(
             key="outdoor_temperature",
             rep_fn=_option_token_num("OutdoorTemp", offset=55),
-            exists_fn=_has_option_token("OutdoorTemp"),
+            exists_fn=lambda rep, resources: (
+                _has_option_token_any_board("OutdoorTemp")(rep, resources)
+                and _reports_celsius(resources)
+            ),
             device_class="temperature",
             state_class="measurement",
             unit="°C",
+            enabled_default=False,
             icon="mdi:home-thermometer-outline",
         ),
         # Filter time in tenths of an hour, counting UP since last filter

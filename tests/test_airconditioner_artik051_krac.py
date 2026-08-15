@@ -129,20 +129,33 @@ def test_token_entities_present_with_calibrated_values():
 
 
 def test_token_entities_stay_off_newer_boards():
-    """Newer families carry Volume/Sleep/OutdoorTemp/Autoclean tokens too,
-    while also exposing those settings as dedicated resources -- ungated, the
-    token entities would duplicate them (auto clean) or apply a scale
-    calibrated on another board generation (outdoor temperature)."""
+    """Newer families carry Volume/Sleep/Autoclean tokens too, while also
+    exposing those settings as dedicated resources -- ungated, the token
+    entities would duplicate them."""
     state = _state("airconditioner_tp1x_rac")
     for key in (
         "spi",
         "auto_clean_legacy",
         "air_monitoring",
         "good_sleep",
-        "outdoor_temperature",
         "filter_time",
     ):
         assert key not in state, key
+
+
+def test_outdoor_temperature_is_not_gated_to_legacy_boards():
+    """issue #367: OutdoorTemp_ is not paired with any dedicated resource on
+    newer boards -- /temperatures/vs/0 carries indoor temperature only, no
+    outdoor equivalent exists anywhere in this fixture's 23 hrefs -- so unlike
+    auto_clean_legacy et al. above, gating it to is_legacy_board only dropped
+    a real reading. A 48h field capture correlated the token against
+    weather.forecast_home at r=0.92 across several non-legacy boards,
+    confirming it is live per-site data rather than a firmware constant."""
+    resources = _load_device("airconditioner_tp1x_rac")
+    assert is_legacy_board(resources) is False
+    bound, _ = _discover(resources)
+    state = flatten(bound, resources)
+    assert state["outdoor_temperature"] == 37.0  # OutdoorTemp_92, the fixture's own value
 
 
 def test_climate_legacy_airflow_gate_agrees_with_is_legacy_board():

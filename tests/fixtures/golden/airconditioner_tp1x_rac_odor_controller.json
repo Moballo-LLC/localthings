@@ -20,6 +20,7 @@
     "mute_once",
     "odor_controller_active",
     "odor_controller_progress",
+    "outdoor_temperature",
     "selfcheck_error",
     "selfcheck_result",
     "selfcheck_status",
