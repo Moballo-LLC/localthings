@@ -6,6 +6,7 @@ Shared by dryer/dishwasher/oven/washer families.
 import math
 from datetime import UTC, datetime, timedelta
 
+from ...catalog import translated_states
 from ..capability import Capability
 from ..entities import BinarySensorDesc, ButtonDesc, NumberDesc, SensorDesc
 
@@ -25,7 +26,7 @@ def _to_ocf(v):
 
 
 def _progress(v):
-    return "Idle" if v in (None, "None") else v
+    return "idle" if v in (None, "None") else str(v).lower()
 
 
 def _int(v):
@@ -201,13 +202,17 @@ OPERATIONAL_STATE = Capability(
         SensorDesc(
             key="progress",
             icon="mdi:progress-wrench",
+            device_class="enum",
+            options=tuple(sorted(translated_states("sensor", "progress"))),
             rep_fn=lambda rep: (
-                "Idle"
+                "idle"
                 if not _state_is_active(rep)
                 else _progress(rep.get("x.com.samsung.da.progress"))
             ),
             sticky_fn=_just_finished,
-            sticky_value_fn=lambda rep: "Finish",
+            # The catalog key, not the device's 'Finish': rep_fn is normalized
+            # now, and a held value outside `options` is what HA rejects.
+            sticky_value_fn=lambda rep: "finish",
             sticky_bypass_fn=_new_cycle_running,
         ),
         SensorDesc(

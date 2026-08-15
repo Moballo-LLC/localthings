@@ -11,6 +11,7 @@ the /course/vs/0 cycle select -- lives in laundry.py.
 
 from ..capability import Capability
 from ..entities import SensorDesc, SwitchDesc
+from .common import diagnosis_status
 from .laundry import cycle_select, drum_clean_cycles_remaining, drum_clean_last_cleaned
 
 
@@ -69,7 +70,6 @@ DRYER_COURSE = Capability(
         ),
         SensorDesc(
             key="drum_clean_cycles_remaining",
-            unit="cycles",
             icon="mdi:tumble-dryer-alert",
             state_class="measurement",
             exists_fn=lambda rep, resources: drum_clean_cycles_remaining(rep) is not None,
@@ -91,7 +91,12 @@ DRYER_DIAGNOSIS = Capability(
     poll_tier="warm",
     entities=(
         SensorDesc(
-            key="diagnosis", field="x.com.samsung.da.diagnosisStart", entity_category="diagnostic"
+            key="diagnosis",
+            field="x.com.samsung.da.diagnosisStart",
+            entity_category="diagnostic",
+            device_class="enum",
+            options=("ready",),
+            value_fn=diagnosis_status,
         ),
     ),
 )

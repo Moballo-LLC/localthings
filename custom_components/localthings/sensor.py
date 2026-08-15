@@ -49,8 +49,8 @@ class LocalThingsSensor(LocalThingsEntity, SensorEntity):
             SensorDeviceClass(desc.device_class) if desc.device_class else None
         )
         self._attr_state_class = SensorStateClass(desc.state_class) if desc.state_class else None
-        if desc.options:
-            self._attr_options = list(desc.options)
+        # Always set, so the `options` property below can read it unguarded.
+        self._attr_options = list(desc.options) if desc.options else None
         self._hysteresis_value = None
         self._sticky_value = None
         self._sticky_until: float | None = None
@@ -62,6 +62,23 @@ class LocalThingsSensor(LocalThingsEntity, SensorEntity):
         if desc.unit_fn is not None:
             return desc.unit_fn(self.coordinator.resource(self._bound.href))
         return self._attr_native_unit_of_measurement
+
+    @property
+    def options(self):
+        """Declared options, plus whatever this device is actually reporting.
+
+        HA raises for an enum state outside `options`, which would turn any
+        device value we don't have a translation for into a broken entity --
+        the opposite of this registry's rule that an unrecognized value
+        renders raw. Admitting the live value keeps it displayable; it just
+        shows untranslated (PR #341 review).
+        """
+        if self._attr_options is None:
+            return None
+        value = self.native_value
+        if not isinstance(value, str) or value in self._attr_options:
+            return self._attr_options
+        return [*self._attr_options, value]
 
     @property
     def native_value(self):

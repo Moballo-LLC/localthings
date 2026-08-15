@@ -92,10 +92,10 @@ def test_holds_finish_after_state_leaves_active():
     sensor, coordinator = _sensor(_PROGRESS_DESC)
 
     _replace(coordinator, state="Run", progress="Finish", progressPercentage="100")
-    assert sensor.native_value == "Finish"
+    assert sensor.native_value == "finish"
 
     _replace(coordinator, state="Ready")  # device has moved on
-    assert sensor.native_value == "Finish"
+    assert sensor.native_value == "finish"
 
 
 def test_holds_finish_even_when_state_already_idle_at_first_observation():
@@ -106,11 +106,11 @@ def test_holds_finish_even_when_state_already_idle_at_first_observation():
     sensor, coordinator = _sensor(_PROGRESS_DESC)
 
     _replace(coordinator, state="Ready", progress="Finish", progressPercentage="100")
-    assert sensor.native_value == "Finish"
+    assert sensor.native_value == "finish"
 
     # Still held on a later poll, even once the device stops repeating it.
     _replace(coordinator, state="Ready")
-    assert sensor.native_value == "Finish"
+    assert sensor.native_value == "finish"
 
 
 def test_progress_percentage_holds_100_regardless_of_the_raw_field_at_finish():
@@ -132,10 +132,10 @@ def test_real_data_flows_through_unheld_while_active():
     sensor, coordinator = _sensor(_PROGRESS_DESC)
 
     _replace(coordinator, state="Run", progress="Spin")
-    assert sensor.native_value == "Spin"
+    assert sensor.native_value == "spin"
 
     _replace(coordinator, state="Run", progress="Rinse")
-    assert sensor.native_value == "Rinse"
+    assert sensor.native_value == "rinse"
 
 
 def test_never_finished_stays_idle():
@@ -144,10 +144,10 @@ def test_never_finished_stays_idle():
     sensor, coordinator = _sensor(_PROGRESS_DESC)
 
     _replace(coordinator, state="Run", progress="Spin")
-    assert sensor.native_value == "Spin"
+    assert sensor.native_value == "spin"
 
     _replace(coordinator, state="Ready")
-    assert sensor.native_value == "Idle"
+    assert sensor.native_value == "idle"
 
 
 def test_a_new_cycle_starting_overrides_the_hold():
@@ -156,13 +156,13 @@ def test_a_new_cycle_starting_overrides_the_hold():
     sensor, coordinator = _sensor(_PROGRESS_DESC)
 
     _replace(coordinator, state="Run", progress="Finish", progressPercentage="100")
-    assert sensor.native_value == "Finish"
+    assert sensor.native_value == "finish"
 
     _replace(coordinator, state="Ready")
-    assert sensor.native_value == "Finish"  # still held
+    assert sensor.native_value == "finish"  # still held
 
     _replace(coordinator, state="Run", progress="Wash")
-    assert sensor.native_value == "Wash"
+    assert sensor.native_value == "wash"
 
 
 def test_a_running_stage_after_finish_does_not_break_the_hold():
@@ -177,24 +177,24 @@ def test_a_running_stage_after_finish_does_not_break_the_hold():
     sensor, coordinator = _sensor(desc)
 
     _replace(coordinator, state="Run", progress="Drying", progressPercentage="40")
-    assert sensor.native_value == "Drying"
+    assert sensor.native_value == "drying"
 
     _replace(coordinator, state="Run", progress="Cooling", progressPercentage="95")
-    assert sensor.native_value == "Cooling"
+    assert sensor.native_value == "cooling"
 
     _replace(coordinator, state="Run", progress="Finish", progressPercentage="100")
-    assert sensor.native_value == "Finish"
+    assert sensor.native_value == "finish"
 
     # The tail: a running stage again, state already idle.
     _replace(coordinator, state="Ready", progress="Drying", progressPercentage="100")
-    assert sensor.native_value == "Finish"
+    assert sensor.native_value == "finish"
 
     # ...then the device settles, still inside the window.
     _replace(coordinator, state="Ready", progress="None")
-    assert sensor.native_value == "Finish"
+    assert sensor.native_value == "finish"
 
     time.sleep(0.25)
-    assert sensor.native_value == "Idle"
+    assert sensor.native_value == "idle"
 
 
 def test_progress_percentage_survives_the_same_tail():
@@ -223,16 +223,16 @@ def test_a_paused_new_cycle_is_left_to_the_window_rather_than_released():
     sensor, coordinator = _sensor(desc)
 
     _replace(coordinator, state="Run", progress="Finish", progressPercentage="100")
-    assert sensor.native_value == "Finish"
+    assert sensor.native_value == "finish"
 
     _replace(coordinator, state="Pause", progress="Wash")
-    assert sensor.native_value == "Finish"  # held out, not released
+    assert sensor.native_value == "finish"  # held out, not released
 
     time.sleep(0.1)
-    assert sensor.native_value == "Idle"  # what a paused appliance always shows
+    assert sensor.native_value == "idle"  # what a paused appliance always shows
 
     _replace(coordinator, state="Run", progress="Wash")
-    assert sensor.native_value == "Wash"
+    assert sensor.native_value == "wash"
 
 
 def test_a_flapping_finish_cannot_ratchet_an_open_window_forward():
@@ -243,20 +243,20 @@ def test_a_flapping_finish_cannot_ratchet_an_open_window_forward():
     sensor, coordinator = _sensor(desc)
 
     _replace(coordinator, state="Ready", progress="Finish")
-    assert sensor.native_value == "Finish"
+    assert sensor.native_value == "finish"
 
     for _ in range(3):
         time.sleep(0.05)
         _replace(coordinator, state="Ready", progress="None")
-        assert sensor.native_value == "Finish"
+        assert sensor.native_value == "finish"
         _replace(coordinator, state="Ready", progress="Finish")
-        assert sensor.native_value == "Finish"
+        assert sensor.native_value == "finish"
 
     # 0.15s of flapping so far -- the window still ends 0.3s after the
     # first Finish, not 0.3s after the most recent re-entry.
     time.sleep(0.2)
     _replace(coordinator, state="Ready", progress="Finish")
-    assert sensor.native_value == "Idle"
+    assert sensor.native_value == "idle"
 
 
 def test_a_finish_after_the_window_closes_does_not_re_arm_it():
@@ -274,23 +274,23 @@ def test_a_finish_after_the_window_closes_does_not_re_arm_it():
     sensor, coordinator = _sensor(desc)
 
     _replace(coordinator, state="Ready", progress="Finish")
-    assert sensor.native_value == "Finish"
+    assert sensor.native_value == "finish"
 
     time.sleep(0.1)
-    assert sensor.native_value == "Idle"
+    assert sensor.native_value == "idle"
 
     _replace(coordinator, state="Ready", progress="None")
-    assert sensor.native_value == "Idle"
+    assert sensor.native_value == "idle"
     _replace(coordinator, state="Ready", progress="Finish")
-    assert sensor.native_value == "Idle"
+    assert sensor.native_value == "idle"
 
     # A real cycle in between is what makes it available again.
     _replace(coordinator, state="Run", progress="Drying")
-    assert sensor.native_value == "Drying"
+    assert sensor.native_value == "drying"
     _replace(coordinator, state="Run", progress="Finish")
-    assert sensor.native_value == "Finish"
+    assert sensor.native_value == "finish"
     _replace(coordinator, state="Ready", progress="None")
-    assert sensor.native_value == "Finish"
+    assert sensor.native_value == "finish"
 
 
 def test_hold_expires_after_sticky_seconds():
@@ -304,13 +304,13 @@ def test_hold_expires_after_sticky_seconds():
     sensor, coordinator = _sensor(desc)
 
     _replace(coordinator, state="Run", progress="Finish", progressPercentage="100")
-    assert sensor.native_value == "Finish"
+    assert sensor.native_value == "finish"
 
     _replace(coordinator, state="Ready")
-    assert sensor.native_value == "Finish"  # still within the window
+    assert sensor.native_value == "finish"  # still within the window
 
     time.sleep(0.1)
-    assert sensor.native_value == "Idle"
+    assert sensor.native_value == "idle"
 
 
 def test_a_progress_stuck_at_finish_does_not_hold_open_the_window_forever():
@@ -325,17 +325,17 @@ def test_a_progress_stuck_at_finish_does_not_hold_open_the_window_forever():
     sensor, coordinator = _sensor(desc)
 
     _replace(coordinator, state="Ready", progress="Finish")
-    assert sensor.native_value == "Finish"
+    assert sensor.native_value == "finish"
 
     time.sleep(0.03)
     # Device still (incorrectly) reports Finish on every subsequent poll --
     # must not restart the window.
     _replace(coordinator, state="Ready", progress="Finish")
-    assert sensor.native_value == "Finish"
+    assert sensor.native_value == "finish"
 
     time.sleep(0.03)  # 0.06s total since the first sighting -- past 0.05s
     _replace(coordinator, state="Ready", progress="Finish")
-    assert sensor.native_value == "Idle"
+    assert sensor.native_value == "idle"
 
 
 def test_non_sticky_sensor_is_unaffected():
@@ -361,11 +361,11 @@ def test_cycle_active_and_machine_state_are_never_held():
     )
 
     _replace(coordinator, state="Run", progress="Finish", progressPercentage="100")
-    assert progress_sensor.native_value == "Finish"
+    assert progress_sensor.native_value == "finish"
     assert machine_state_sensor.native_value == "active"
 
     _replace(coordinator, state="Ready")
-    assert progress_sensor.native_value == "Finish"  # held
+    assert progress_sensor.native_value == "finish"  # held
     assert machine_state_sensor.native_value == "idle"  # real-time, unaffected
 
 
@@ -377,8 +377,8 @@ def test_a_partial_update_that_omits_progress_does_not_erase_the_hold():
     sensor, coordinator = _sensor(_PROGRESS_DESC)
 
     _replace(coordinator, state="Run", progress="Finish", progressPercentage="100")
-    assert sensor.native_value == "Finish"
+    assert sensor.native_value == "finish"
 
     _apply(coordinator, state="Ready")  # partial merge, doesn't restate progress
     assert coordinator.resources[_HREF]["x.com.samsung.da.progress"] == "Finish"
-    assert sensor.native_value == "Finish"
+    assert sensor.native_value == "finish"
