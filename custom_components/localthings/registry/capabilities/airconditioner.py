@@ -101,8 +101,15 @@ def _threshold_write(payload, rep, href=None):
 def _sensor_item_value(items, type_):
     """First value of the /sensors/vs/0 item with the given
     x.com.samsung.da.type. Dust/FineDust/SuperFineDust report a 2-element
-    array; only v[0] is used, since the second element's meaning is
-    unconfirmed. No device_class is set: the resource exposes no unit."""
+    array; only v[0] is used. v[1] is the device's own graded air-quality
+    level for that reading, left unbound because its floor differs by
+    family -- see common.sensor_item_value for the full note.
+
+    No device_class here: unlike air_purifier (issue #325), no AC family
+    has had its dust readings correlated against the app, and every AC
+    fixture reports permanent zeros or ties, so this file's own dumps
+    supply no grade-band evidence either. Returns a string rather than an
+    int, which these diagnostic entities have always done."""
     for it in items or []:
         if isinstance(it, dict) and it.get("x.com.samsung.da.type") == type_:
             v = it.get("x.com.samsung.da.value")

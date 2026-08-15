@@ -190,6 +190,27 @@ def test_confirmed_washer_table_02_missing_course_names():
     }
 
 
+def test_confirmed_washer_table_02_ww90dg5g34able_course_names():
+    """Issue #363: 0A/B0 rendered as raw hex on a WW90DG5G34ABLE
+    (DA_WM_TP1_21_COMMON), whose other Table_02 labels the reporter
+    confirmed were already correct.
+
+    0A joins 33/54/70 as a Towels code -- checked in every locale, since a
+    locale that translated 0A differently from the Towels codes it shares a
+    meaning with would still pass the key-topology test, the same gap
+    issue #343 fell through.
+    """
+    for language in _languages():
+        states = _load(language)["entity"]["select"]["washer_cycle_table_02"]["state"]
+        assert states["0a"] == states["33"], language
+        assert states["b0"] != states["34"], language
+    english = _load("en")["entity"]["select"]["washer_cycle_table_02"]["state"]
+    assert {code: english[code] for code in ("0a", "b0")} == {
+        "0a": "Towels",
+        "b0": "Mixed Load",
+    }
+
+
 def test_reported_washer_standard_courses_all_have_table_02_labels():
     """Every non-personal code in the reported washer's live course list
     must resolve through the Table_02 catalog instead of appearing as raw

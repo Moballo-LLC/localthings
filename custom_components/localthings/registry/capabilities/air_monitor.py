@@ -10,17 +10,23 @@ the same dust/fine_dust/super_fine_dust/odor/clean_level keys so this
 device shares those capabilities' catalog entries. This board additionally
 reports a CO2 reading the other two families don't.
 
-A second `value` list element on the particulate-matter types (e.g. Dust's
-`['31', '2']`) reads like a coarse quality-grade code, but nothing on this
-board confirms what its scale means -- left unbound rather than guessed;
-index 0 is the only slot any family has ever read.
+A second `value` list element on the particulate-matter types (Dust's
+`['31', '2']`) is the device's own graded air-quality level for that
+reading -- see common.sensor_item_value. Still unbound here: the grade's
+floor differs by board family, and CleanLevel already carries the
+aggregate. This board's own readings are load-bearing evidence for the
+PM mapping, though: 23 grading one step above the floor as FineDust is
+what rules out a PM10-width band for that field.
 
-Dust/FineDust/SuperFineDust stay without an HA `device_class`/`unit` on
-this board. The three-tier mapping (Dust=PM10, FineDust=PM2.5,
-SuperFineDust=PM1, µg/m³) is confirmed for the air-purifier family
-(issue #325) but this standalone monitor has no same-moment app
-correlation of its own, so it keeps the untyped measurement sensors
-rather than inheriting that label.
+Dust/FineDust/SuperFineDust nevertheless stay without an HA
+`device_class`/`unit` here, which is now a migration call rather than an
+evidence gap. The mapping confirmed for the purifier family (issue #325,
+Dust=PM10 / FineDust=PM2.5 / SuperFineDust=PM1 in μg/m³) rests on
+device-side grading that this board shares, so it would carry over. But
+these five sensors have recorded unitless long-term statistics since
+issue #210, and stamping a unit onto an existing statistic is what raises
+Home Assistant's "units changed" repair -- a deliberate follow-up, not
+something to fold into the purifier's first typed release.
 """
 
 from datetime import time as dt_time
@@ -35,8 +41,9 @@ from .common import int_or_none, sensor_item_value
 # graded indices on that family, while this board has stamped all five as
 # `measurement` since it was added (issue #210). Consuming state_class would
 # silently drop long-term statistics for two sensors on shipped devices, and
-# the pm10/pm25/pm1 labels are confirmed only for the purifier family
-# (issue #325). The shared rows supply only the key/icon/type here.
+# the pm10/pm25/pm1 labels are held back pending the statistics migration
+# the module docstring describes. The shared rows supply only the
+# key/icon/type here.
 SENSORS = Capability(
     href="/sensors/vs/0",
     poll_tier="warm",

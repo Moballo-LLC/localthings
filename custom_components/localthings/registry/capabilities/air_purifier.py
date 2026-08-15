@@ -67,14 +67,38 @@ def _has_top_level_modes(rep, resources):
 # indices instead, where the mean of a grade isn't obviously meaningful; left
 # without a state_class rather than guessing.
 #
-# device_class/unit confirmed on a live ARTIK051_TVTL against the SmartThings
-# app at the same moment (issue #325): Dust=PM10, FineDust=PM2.5,
-# SuperFineDust=PM1, all µg/m³. Dust matched PM10 exactly; the other two
-# were 1 µg/m³ off the app, same order.
+# device_class/unit: Dust=PM10, FineDust=PM2.5, SuperFineDust=PM1, all
+# μg/m³ (issue #325). Three independent lines, none of them naming order --
+# which is what the earlier "plausible but unconfirmed" note rejected:
+#
+#  1. The device grades its own readings. Each dust item's value[] is
+#     [concentration, grade] (see common.sensor_item_value); the grade band
+#     is not shared across the three fields -- a reading of 18 grades one
+#     step *above* the floor as SuperFineDust (air_monitor fixture) but *at*
+#     the floor as Dust (range_hood fixture), both 1-based families. So the
+#     firmware itself treats them as three different scales ordered
+#     coarse-to-fine, rather than one repeated measurement.
+#  2. Where each field's floor/second-band boundary falls brackets the
+#     Korean CAI bands: Dust good at 18, graded up at 31 (CAI PM10 breaks
+#     at 30/31); FineDust good at 14, graded up at 23 (CAI PM2.5 breaks at
+#     15/16); SuperFineDust good at 9, graded up at 18 (PM2.5-style, which
+#     is what a PM1 reading gets -- there is no standard PM1 index).
+#  3. A live ARTIK051_TVTL read against the SmartThings app at the same
+#     moment: Dust matched the app's PM10 exactly, the other two were 1
+#     μg/m³ off in the same order, and the app shows exactly these three
+#     tiers, so there is no fourth candidate to assign.
+#
+# Dust >= FineDust >= SuperFineDust holds on all 11 fixtures that report
+# this resource, which is the cumulative-mass ordering PM10 >= PM2.5 >= PM1
+# requires by definition. The unit literal must stay HA's own spelling of
+# μg/m³ (U+03BC GREEK SMALL LETTER MU, not U+00B5 MICRO SIGN) -- they render
+# alike but only U+03BC is in DEVICE_CLASS_UNITS, and the mismatch is a
+# runtime warning per entity, not a test failure. Pinned by
+# tests/test_sensor_device_class_units.py.
 _AIR_QUALITY_SENSORS = (
-    ("dust", "mdi:blur", "Dust", "measurement", "pm10", "µg/m³"),
-    ("fine_dust", "mdi:blur", "FineDust", "measurement", "pm25", "µg/m³"),
-    ("super_fine_dust", "mdi:blur", "SuperFineDust", "measurement", "pm1", "µg/m³"),
+    ("dust", "mdi:blur", "Dust", "measurement", "pm10", "μg/m³"),
+    ("fine_dust", "mdi:blur", "FineDust", "measurement", "pm25", "μg/m³"),
+    ("super_fine_dust", "mdi:blur", "SuperFineDust", "measurement", "pm1", "μg/m³"),
     ("odor", "mdi:scent", "Odor", None, None, None),
     ("clean_level", "mdi:air-filter", "CleanLevel", None, None, None),
 )
