@@ -1,13 +1,18 @@
 # Loading a config entry while the appliance is offline
 
-Issue #295 asks for sub-30s recovery when a powered-off appliance comes back,
-instead of HA's `ConfigEntryNotReady` backoff (30s → … → 15 min). PR #303
-tries to get there by catching the first-refresh failure in
-`async_setup_entry` and loading the entry anyway.
+Issue #295 asks for faster recovery when a powered-off appliance comes back,
+instead of waiting out HA's `ConfigEntryNotReady` backoff. PR #303 tried to
+get there by catching the first-refresh failure in `async_setup_entry` and
+loading the entry anyway.
 
 That doesn't work here, and the reason is worth writing down: this
 integration has no static entity list. Every entity comes from discovery,
 and discovery only happens inside a successful poll.
+
+(The issue's "up to 15 minutes" is out of date, incidentally. Current HA
+retries on `2 ** min(tries, 4) * 5` seconds — capped at 80s, not 900. The
+backoff was never the worst part; a device card reading "Retrying setup" with
+no entities behind it is.)
 
 ## What PR #303 produces today
 
@@ -55,51 +60,63 @@ device description* to build entities from — ESPHome keeps its entity list in
 `.storage`, Shelly caches device info. The pattern is portable; the mechanism
 underneath it is the part PR #303 is missing.
 
-## What a working version needs
+## How the implemented version works
 
-Three separable pieces, plus a gating rule.
+Three pieces, plus a gating rule.
 
 ### 1. A persisted discovery snapshot
 
-Write the discovery result back onto the config entry after each successful
-`_run_discovery`. There is already precedent for exactly this shape —
-`_persist_identity` (`coordinator.py:973`), `CONF_LEARNED_MODES`,
-`CONF_CLOUD_COURSES`.
+After each successful first cycle, `_save_snapshot` banks exactly the
+`resources` dict that cycle handed `_run_discovery`, along with the
+pre-narrowing subdevice candidate list and the `DeviceIdentity` read from
+`/oic/*`.
 
-`BoundEntity` holds live `Capability`/`SamsungEntityDescription` objects, so
-it isn't directly serializable, but it is re-derivable: persist
-`device_type_name`, the materialized `Subdevice` list (plain str/tuple
-fields), and per entity the `(subdevice key, capability, desc.key, instance,
-key_override, instance_name)` tuple. Rehydrate by re-resolving through
-`resolve_registry` + `CAPABILITIES`.
+Storing the poll input rather than a rendered entity list is the decision
+that keeps this honest. `BoundEntity` holds live
+`Capability`/`SamsungEntityDescription` objects and isn't serializable, so
+the alternative was a parallel format plus a re-resolution path — a second
+implementation of discovery that could drift from the real one. Replaying the
+input through `_run_discovery` means the same code, the same registry
+resolution, and no second source of truth.
 
-Persist the *post-`_is_included`* set, so rehydration doesn't need reps, and
-flag the coordinator as rehydrated so gate 3 above is skipped for that pass.
+Three things ride along because `_run_discovery` reads them off `self`
+rather than out of `resources`, and getting them wrong would silently resolve
+a *different* registry offline than online — which reconciliation below would
+then see as a real change and reload on every restart:
+
+- `_identity.device_types` routes `resolve_registry`.
+- `self.subdevices` is the candidate list `discover_partitioned` narrows;
+  replaying against the already-narrowed list finds no siblings at all.
+- `_identity.manufacturer`/`model` feed `device_info`.
+
+It lives in `.storage` (`Store`, keyed on entry_id) rather than on the config
+entry: it's device state, not configuration, and runs to tens of kilobytes.
+`async_remove_entry` deletes it with the entry.
 
 ### 2. Reconcile on reconnect
 
-The snapshot is a guess about a device we haven't talked to yet. When the
-first successful poll lands, `_run_discovery` computes the real set; if it
-differs from what was rehydrated, the entry has to reload, because gate 2
-means platforms can't add the difference in place. `async_schedule_reload`
-covers it (available well below the 2025.1.0 floor in `hacs.json`).
+The snapshot is a claim about a device we haven't talked to yet. When the
+first live poll lands, `_reconcile_rehydrated` compares the live entity set
+against the rehydrated one — as `(subdevice key, _key(bound))` pairs, which
+is the unique_id identity — and calls `async_schedule_reload` if they differ.
 
-This is the piece that makes the whole thing safe against a firmware update,
-a newly-appearing subdevice, or a different appliance at the same IP. PR #303
-has no equivalent.
+Gate 2 above is why this has to be a reload rather than an in-place fixup.
+It's what makes the feature safe against a firmware update, a sibling
+subdevice that starts answering, or a different appliance at the same IP.
 
 ### 3. Keep polling with no listeners
 
-Independent of the above, and worth doing on its own merits: hold one
-refresh alive for the entry's lifetime so scheduling never depends on entity
-count.
+`async_setup_entry` holds one listener for the entry's lifetime:
 
 ```python
 entry.async_on_unload(coordinator.async_add_listener(lambda: None))
 ```
 
-That alone fixes the measured "never polls again" bug, and covers the case
-where every rehydrated entity happens to be registry-disabled.
+Registered *before* the first refresh, so scheduling survives a refresh that
+fails. This alone fixes the measured "never polls again" bug, and covers a
+rehydrated set whose entities are all registry-disabled. Removing the last
+listener unschedules the timer, and HA runs `async_on_unload` callbacks when
+setup raises, so the setup-retry path doesn't leak a polling coordinator.
 
 ### Gating rule: only load offline when there's a snapshot
 
@@ -109,6 +126,10 @@ thread — with a snapshot we *do* have metadata to build a device from, and
 without one HA's backoff is still the right behavior. It also leaves room for
 the #168-style flows that need to interact with the device during setup: a
 device that never completed setup still blocks.
+
+It also means `async_remove_config_entry_device` is no longer reachable with
+an empty `coordinator.subdevices`, so an offline load can't offer to delete a
+real-but-unreachable subdevice.
 
 ## What this still won't do
 
@@ -124,26 +145,22 @@ Worth being explicit about, because it is the gap between what PR #303
 promises in the thread ("load their previously recorded states") and what any
 correct version can deliver.
 
-## The cheaper alternative
-
-If the goal is only issue #295's — fast recovery — pieces 1 and 2 are
-unnecessary. Keep `ConfigEntryNotReady`, and add a retry that probes on a
-fixed short interval and calls `async_schedule_reload` on the first success.
-No persistence, no reconcile, no new failure modes. The device tile still
-reads "Retrying setup" while the appliance is off, which is true, and
-recovery drops from up-to-15-min to one probe interval.
+## Rejected: zeroconf
 
 The issue's other suggestion — wire zeroconf so the device's own boot
-announcement triggers the retry — is a non-starter as things stand: there is
-no `zeroconf` or `dhcp` key in `manifest.json` and the config flow is
-user-driven only, so HA has no discovery signal for this integration to hang
-a retry on. It would first need a confirmed mDNS service on the appliance.
+announcement triggers a retry, which is the genuinely idiomatic HA answer —
+is a non-starter as things stand: there is no `zeroconf` or `dhcp` key in
+`manifest.json` and the config flow is user-driven only, so HA has no
+discovery signal for this integration to hang a retry on. It would first need
+a confirmed mDNS service on the appliance. Worth revisiting if one turns up;
+it would make recovery near-instant instead of within one poll interval.
 
-## Recommendation
+## Rejected: the cheap version
 
-The cheap alternative solves the filed issue. The three-piece version solves
-the goal stated later in the PR thread, at the cost of a new persisted
-schema, a reconcile path, and a reload-on-mismatch — and it still leaves
-entities unavailable, which is the part that was actually being asked for.
-Do the cheap one first; treat offline entity materialization as a separate
-change with its own issue.
+Keeping `ConfigEntryNotReady` and adding a probe that calls
+`async_schedule_reload` on first success would have fixed the recovery *time*
+in about twenty lines, with no persistence and no reconcile. It was rejected
+because it leaves the device reading as broken for as long as the appliance
+is off, which is the half of issue #295 that actually bites — an appliance
+switched off at the wall is offline for days, not seconds, and a whole
+integration that looks failed for that entire window is the complaint.
