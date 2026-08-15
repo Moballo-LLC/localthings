@@ -23,6 +23,7 @@
     "last_air_sensing_level",
     "last_air_sensing_time",
     "mute_once",
+    "outdoor_temperature",
     "periodic_air_sensing",
     "periodic_sensing_skip_status",
     "selfcheck_error",

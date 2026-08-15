@@ -372,6 +372,18 @@ def _has_option_token(prefix):
     )
 
 
+def _has_option_token_any_board(prefix):
+    """Token-presence test with no board-generation gate.
+
+    `_has_option_token` above requires `is_legacy_board`, which was right for
+    the settings it guards but wrong for a token whose presence is itself the
+    only signal that needs checking -- issue #367 found `OutdoorTemp_` live
+    on 14 of 23 recorded fixtures despite none of them being legacy boards.
+    Same shape as `beep`'s Volume_ test and `_has_display_light_option`,
+    which already treat token presence as sufficient across generations."""
+    return lambda rep, resources: _option_token(rep, prefix) is not None
+
+
 def _option_token_on(prefix):
     return lambda rep: _option_token(rep, prefix) == "On"
 
@@ -782,13 +794,30 @@ CLIMATE = Capability(
         ),
         # Outdoor temperature, offset by 55 -- calibrated against an
         # independent thermometer (token 75 while it read 20.3°C).
+        #
+        # exists_fn is token-presence-only (issue #367): the token was
+        # previously gated behind is_legacy_board for no reason tied to the
+        # token itself, which silently dropped the sensor on every
+        # non-legacy board that reports it -- 14 of 17 fixtures carrying the
+        # token in the issue's own survey. A 48h/289-sample field capture
+        # correlated it against weather.forecast_home at r=0.92, ruling out
+        # a firmware constant.
+        #
+        # enabled_default=False: multi-split installs (multiple indoor heads
+        # on one outdoor condenser) report the same token on every head, so
+        # a fix here creates one identical sensor per head rather than one
+        # per physical unit (same duplication as the shared energy/power
+        # counters in issue #329). Left disabled so a user with several
+        # heads can enable just one instead of getting N duplicates active
+        # by default.
         SensorDesc(
             key="outdoor_temperature",
             rep_fn=_option_token_num("OutdoorTemp", offset=55),
-            exists_fn=_has_option_token("OutdoorTemp"),
+            exists_fn=_has_option_token_any_board("OutdoorTemp"),
             device_class="temperature",
             state_class="measurement",
             unit="°C",
+            enabled_default=False,
             icon="mdi:home-thermometer-outline",
         ),
         # Filter time in tenths of an hour, counting UP since last filter

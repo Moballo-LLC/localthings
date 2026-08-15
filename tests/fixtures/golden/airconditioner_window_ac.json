@@ -16,6 +16,7 @@
     "firmware_update",
     "humidity",
     "mute_once",
+    "outdoor_temperature",
     "power_watts",
     "selfcheck_error",
     "selfcheck_result",

@@ -25,6 +25,7 @@
     "mute_once",
     "odor_controller_active",
     "odor_controller_progress",
+    "outdoor_temperature",
     "power_energy_kwh",
     "power_watts",
     "selfcheck_error",
