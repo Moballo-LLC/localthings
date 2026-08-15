@@ -1095,6 +1095,7 @@
           "steaming": "Dämpfen",
           "airwashing": "Luftreinigung",
           "drying": "Trocknen",
+          "dryingwithdooropen": "Lüften",
           "cooling": "Abkühlen",
           "predrain": "Abpumpen",
           "prewash": "Vorwäsche"

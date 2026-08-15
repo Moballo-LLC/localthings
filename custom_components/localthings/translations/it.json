@@ -1101,6 +1101,7 @@
           "steaming": "Vapore",
           "airwashing": "Lavaggio ad aria",
           "drying": "Asciugatura",
+          "dryingwithdooropen": "Ventilazione",
           "cooling": "Raffreddamento",
           "predrain": "Scarico preliminare",
           "prewash": "Prelavaggio"

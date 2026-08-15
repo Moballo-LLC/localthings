@@ -1101,6 +1101,7 @@
           "steaming": "Napařování",
           "airwashing": "Osvěžení vzduchem",
           "drying": "Sušení",
+          "dryingwithdooropen": "Větrání",
           "cooling": "Chlazení",
           "predrain": "Vypouštění",
           "prewash": "Předpírka"

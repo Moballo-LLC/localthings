@@ -1101,6 +1101,7 @@
           "steaming": "Steaming",
           "airwashing": "Air washing",
           "drying": "Drying",
+          "dryingwithdooropen": "Venting",
           "cooling": "Cooling",
           "predrain": "Pre-drain",
           "prewash": "Pre-wash"
