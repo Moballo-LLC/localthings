@@ -1151,7 +1151,10 @@
         "name": "Tiempo de secado"
       },
       "dryer_type": {
-        "name": "Tipo de secadora"
+        "name": "Tipo de secadora",
+        "state": {
+          "electricity": "Electricidad"
+        }
       },
       "dust": {
         "name": "Polvo"

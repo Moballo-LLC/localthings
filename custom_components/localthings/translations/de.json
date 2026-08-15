@@ -952,7 +952,10 @@
         "name": "Trockenzeit"
       },
       "dryer_type": {
-        "name": "Trocknertyp"
+        "name": "Trocknertyp",
+        "state": {
+          "electricity": "Strom"
+        }
       },
       "dust": {
         "name": "Staub"

@@ -958,7 +958,10 @@
         "name": "Tempo di asciugatura"
       },
       "dryer_type": {
-        "name": "Tipo di asciugatrice"
+        "name": "Tipo di asciugatrice",
+        "state": {
+          "electricity": "Elettricità"
+        }
       },
       "dust": {
         "name": "Polvere"

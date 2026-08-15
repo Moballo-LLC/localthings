@@ -958,7 +958,10 @@
         "name": "Dry time"
       },
       "dryer_type": {
-        "name": "Dryer type"
+        "name": "Dryer type",
+        "state": {
+          "electricity": "Electricity"
+        }
       },
       "dust": {
         "name": "Dust"

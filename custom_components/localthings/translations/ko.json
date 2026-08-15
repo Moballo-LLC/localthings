@@ -958,7 +958,10 @@
         "name": "건조 시간"
       },
       "dryer_type": {
-        "name": "건조기 유형"
+        "name": "건조기 유형",
+        "state": {
+          "electricity": "전기"
+        }
       },
       "dust": {
         "name": "미세먼지"

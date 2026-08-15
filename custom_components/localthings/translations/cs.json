@@ -958,7 +958,10 @@
         "name": "Doba sušení"
       },
       "dryer_type": {
-        "name": "Typ sušičky"
+        "name": "Typ sušičky",
+        "state": {
+          "electricity": "Elektřina"
+        }
       },
       "dust": {
         "name": "Prach"
