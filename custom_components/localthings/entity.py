@@ -35,12 +35,16 @@ def _is_included(bound: BoundEntity, coordinator: LocalThingsCoordinator) -> boo
     `bound`'s own subdevice's canonical view instead of the raw snapshot,
     same rule as everywhere else a whole-resources-dict scan happens --
     this is a free function, so it can't use self._resources.
+
+    Reads `discovery_resources`, not `last_resources`: on an offline load
+    (issue #295) the live cache is still empty, and judging existence
+    against it would filter every rehydrated entity away.
     """
-    rep = coordinator.last_resources.get(bound.href)
+    rep = coordinator.discovery_resources.get(bound.href)
     if rep is None:
         return False
     if bound.desc.exists_fn is not None:
-        return bound.desc.exists_fn(rep, coordinator.canonical_resources(bound.subdevice))
+        return bound.desc.exists_fn(rep, coordinator.discovery_canonical(bound.subdevice))
     if bound.desc.field:
         if not rep or is_stub_rep(rep):
             return True

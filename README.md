@@ -270,6 +270,12 @@ If reconnects become persistent (more than a handful per minute), something's ac
 
 Deregistering a device in SmartThings causes a reset of its network settings as soon as it accesses Samsung's servers, dropping it off Wi-Fi until it's re-onboarded through the SmartThings app. As such, consider keeping devices registered even if egress-blocked, to avoid them resetting upon brief internet access.
 
+### Restarting while an appliance is powered off
+
+If Home Assistant restarts while an appliance is unplugged or switched off at the wall, its device and entities still load — restored from the last successful discovery, showing `unavailable` until the appliance answers again. Automations and dashboards keep referring to entities that exist, and the integration retries in the background, so the device comes back on its own within a poll cycle of being powered on. Entities read `unavailable` rather than their last known values on purpose: the integration can't verify what a disconnected appliance is doing, and recorded history is kept by the recorder either way.
+
+This only applies to an appliance the integration has reached at least once. A brand-new device that has never answered has nothing to restore from, so setting it up still requires it to be reachable.
+
 ### Multi-subdevice ("2-in-1") air conditioner systems
 
 Some Samsung installs run more than one indoor subdevice off a single outdoor unit, all reachable over the *one* IP/DTLS session your config entry connects to (a floor-standing + wall-mounted 2-in-1 is a common shape). The integration discovers any sibling subdevices automatically, once, right after the first successful poll — there's nothing to configure. Each discovered subdevice gets its own HA device (linked to the main one via "via device") and its own `climate` card, so it lands in its own room in the dashboard instead of being invisible or mixed into the master's state.

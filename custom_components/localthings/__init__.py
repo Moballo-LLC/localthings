@@ -19,7 +19,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.typing import ConfigType
 
 from .const import CONF_DEVICE_TYPE, CONF_HOST, CONF_PORT, CONF_SERIAL, DOMAIN, PLATFORMS
-from .coordinator import LocalThingsCoordinator
+from .coordinator import LocalThingsCoordinator, snapshot_store
 from .registry.identity import resolve_serial
 from .services import async_setup_services
 
@@ -260,17 +260,30 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     coordinator = LocalThingsCoordinator(hass, entry)
+
+    # Before the first refresh, so the coordinator keeps rescheduling even
+    # when that refresh fails and leaves nothing subscribed: the base class
+    # only re-arms its timer while it has listeners, and an offline load can
+    # legitimately have zero live entities (every one of them disabled, say).
+    # Without this the entry loads once and never polls again (issue #295).
+    entry.async_on_unload(coordinator.async_add_listener(lambda: None))
+
     try:
         await coordinator.async_config_entry_first_refresh()
-    except Exception as err:
-        # `_poll_once` deliberately leaves the session up on a TimeoutError
-        # (see its docstring), so a refresh failing that way leaves a live,
-        # bound UDP socket nothing would ever close. HA retries setup with a
-        # new coordinator, and the source port is fixed by design
-        # (`_local_source_port`), so an abandoned socket would squat the
-        # exact port the next attempt binds.
-        await coordinator.async_close()
-        raise ConfigEntryNotReady(f"Cannot connect to device: {err}") from err
+    except ConfigEntryNotReady:
+        # An entry that has polled successfully before comes up on its last
+        # known entity set and keeps retrying on the normal poll interval,
+        # rather than sitting in setup-retry with a device that reads as
+        # broken and entities that exist only as registry rows (issue #295).
+        #
+        # An entry that has never reached the device has no snapshot, so
+        # there is nothing to show and no device metadata to name it with --
+        # that case still fails, which is also what keeps the door open for
+        # setup flows that need to interact with the device (issue #168).
+        if not await coordinator.async_rehydrate():
+            await coordinator.async_close()
+            raise
+
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
     # Send the DTLS close_notify on Core shutdown, not just on unload (issue
@@ -325,6 +338,16 @@ async def async_remove_config_entry_device(
     for subdevice in coordinator.subdevices:
         live |= set(coordinator.device_info_for(subdevice).get("identifiers") or set())
     return not (device.identifiers & live)
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Delete the discovery snapshot this entry accumulated (issue #295).
+
+    Nothing else would: the store is keyed on entry_id, so re-adding the same
+    appliance mints a new one and the old file would linger in .storage
+    forever.
+    """
+    await snapshot_store(hass, entry).async_remove()
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

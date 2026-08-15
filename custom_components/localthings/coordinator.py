@@ -9,6 +9,7 @@ import logging
 import threading
 import time
 import zlib
+from dataclasses import asdict
 from datetime import timedelta
 from typing import Any, cast
 
@@ -18,6 +19,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from smartthings_local.ocf.state_cache import StateCache
 from smartthings_local.protocol.dtls_session import DtlsCoapSession
@@ -47,7 +49,7 @@ from .const import (
 from .learned import LEARNABLE, LearnedModes, persist
 from .observe import GRACE_PERIOD_S, MODE_OBSERVE, MODE_POLL, ObserveManager
 from .registry import CAPABILITIES
-from .registry.adapter import flatten
+from .registry.adapter import _key, flatten
 from .registry.batch import parse_device0_batch
 from .registry.by_type import resolve as resolve_registry
 from .registry.capabilities.common import (
@@ -82,6 +84,20 @@ _KEEP = object()
 _LOGGER = logging.getLogger(__name__)
 
 _SEED_PATH = ["device", "0"]
+
+# Discovery snapshot (issue #295): exactly what the last successful first
+# cycle fed _run_discovery, so a restart can register the same entities
+# while the appliance is unreachable. Kept in .storage rather than on the
+# config entry -- it's device state, not configuration, and runs to tens of
+# kilobytes.
+_SNAPSHOT_VERSION = 1
+
+
+def snapshot_store(hass: HomeAssistant, entry: ConfigEntry) -> Store[dict[str, Any]]:
+    """This entry's discovery-snapshot store. A free function so
+    `async_remove_entry` can delete the file without standing up a whole
+    coordinator to reach it."""
+    return Store(hass, _SNAPSHOT_VERSION, f"{DOMAIN}.{entry.entry_id}.discovery")
 
 
 class _NoOpDescriptor:
@@ -248,6 +264,11 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._identity: DeviceIdentity | None = None
         self._discovered = False
         self.bound = []
+        self._snapshot_store = snapshot_store(hass, entry)
+        # Both set only when this entry loaded from a snapshot instead of a
+        # live poll -- see async_rehydrate.
+        self._rehydrate_resources: dict[str, dict] | None = None
+        self._rehydrated_keys: frozenset[tuple[str, str]] | None = None
         # Sibling indoor subdevices on this connection (issue #177); set
         # once at first discovery, narrowed to the ones with live state (see
         # subdevices.discover_partitioned). Never includes MAIN itself.
@@ -404,6 +425,35 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         view = canonical_view(subdevice, self.entity_resources(), self.subdevices)
         self._canonical_cache[view_key] = view
         return view
+
+    @property
+    def rehydrated(self) -> bool:
+        """True while this entry's entities came from a snapshot rather than
+        a live poll (issue #295)."""
+        return self._rehydrate_resources is not None
+
+    @property
+    def discovery_resources(self) -> dict[str, dict]:
+        """What entity._is_included should judge an entity's existence
+        against: the rehydration snapshot on an offline load, the live cache
+        otherwise.
+
+        Deliberately separate from `last_resources`, which stays empty until
+        the device answers -- that emptiness is what keeps a rehydrated
+        entity `unavailable` instead of rendering a snapshot's stale value.
+        Only read while platforms are being forwarded; nothing consults it
+        once the entities exist.
+        """
+        if self._rehydrate_resources is None:
+            return self.last_resources
+        return self._rehydrate_resources
+
+    def discovery_canonical(self, subdevice: Subdevice) -> dict[str, dict]:
+        """`discovery_resources` in `subdevice`'s canonical view -- the
+        exists_fn counterpart to canonical_resources."""
+        if self._rehydrate_resources is None:
+            return self.canonical_resources(subdevice)
+        return canonical_view(subdevice, self._rehydrate_resources, self.subdevices)
 
     # ------------------------------------------------------------------
     # Learned modes (issue #327)
@@ -999,7 +1049,148 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._entry, data={**self._entry.data, **identity}
         )
 
-    def _run_discovery(self, resources: dict[str, dict]) -> None:
+    # ------------------------------------------------------------------
+    # Discovery snapshot (issue #295)
+    # ------------------------------------------------------------------
+
+    def _bound_keys(self) -> frozenset[tuple[str, str]]:
+        """This entity set's identity: one (subdevice, state key) pair per
+        bound entity. `_key` is the unique_id suffix, so two discoveries that
+        agree here would register byte-identical entities."""
+        return frozenset((b.subdevice.key, _key(b)) for b in self.bound)
+
+    async def _async_save_snapshot(
+        self, resources: dict[str, dict], candidates: list[Subdevice]
+    ) -> None:
+        """Record what this first cycle handed `_run_discovery`, so the next
+        restart can replay it while the appliance is unreachable.
+
+        `candidates` is the pre-narrowing subdevice list (issue #177):
+        `discover_partitioned` takes candidates and returns the live ones, so
+        replaying against the narrowed list would rediscover nothing for a
+        composite appliance's siblings.
+
+        Written now rather than through `async_delay_save`, because a pending
+        delayed write outlives whatever queued it: it lands after
+        `async_remove_entry` has deleted the file and recreates it orphaned,
+        and a reload scheduled by `_reconcile_rehydrated` would read the
+        pre-reload snapshot back off disk. This runs once per entry load, so
+        the immediate write costs nothing worth deferring.
+        """
+        ident = self._identity
+        try:
+            await self._snapshot_store.async_save(
+                {
+                    "resources": dict(resources),
+                    "subdevice_candidates": [asdict(su) for su in candidates],
+                    "identity": asdict(ident) if ident is not None else None,
+                }
+            )
+        except Exception as e:
+            # Never fail a poll over the snapshot -- a board reporting
+            # something the JSON encoder rejects would otherwise break
+            # polling outright. Worst case this entry can't load offline,
+            # which is where it was before any of this existed.
+            self._log.warning("could not write discovery snapshot: %s", e)
+
+    async def async_rehydrate(self) -> bool:
+        """Register the last known entity set without reaching the device.
+
+        Replays the stored snapshot through `_run_discovery`, which is what
+        makes this faithful: same code path, same registry resolution, so an
+        offline load produces the entity set the device last actually
+        reported rather than a guess reconstructed from a parallel format.
+
+        Returns False when there's nothing stored (an entry that has never
+        polled successfully) or the replay produced nothing usable -- the
+        caller raises ConfigEntryNotReady in that case, exactly as before.
+        """
+        try:
+            stored = await self._snapshot_store.async_load()
+        except Exception as e:  # corrupt or unreadable store
+            self._log.warning("could not read discovery snapshot: %s", e)
+            return False
+        if not stored or not stored.get("resources"):
+            return False
+
+        resources = stored["resources"]
+        try:
+            ident = stored.get("identity")
+            if ident is not None:
+                self._identity = DeviceIdentity(
+                    manufacturer=ident.get("manufacturer") or "",
+                    model=ident.get("model") or "",
+                    name=ident.get("name") or "",
+                    serial=ident.get("serial"),
+                    device_types=tuple(ident.get("device_types") or ()),
+                    raw=ident.get("raw") or {},
+                )
+            # JSON gives lists back where Subdevice declares tuples, and it's
+            # a frozen (hashable) dataclass used as a dict key in flatten().
+            self.subdevices = [
+                Subdevice(
+                    kind=su["kind"],
+                    key=su["key"],
+                    seed_path=tuple(su.get("seed_path") or ()),
+                    flat_hrefs=tuple(su.get("flat_hrefs") or ()),
+                )
+                for su in stored.get("subdevice_candidates") or ()
+            ]
+            self._run_discovery(resources, from_snapshot=True)
+        except Exception as e:
+            # A snapshot written by an older release can outlive both the
+            # stored shape and the registry it was discovered against. This
+            # has to catch the rebuild as well as the replay: an exception
+            # escaping here reaches async_setup_entry, which only handles
+            # ConfigEntryNotReady, so the entry would land in SETUP_ERROR --
+            # never retried, and with its session left open.
+            self._log.warning("discovery snapshot could not be replayed: %s", e, exc_info=True)
+            self.bound = []
+            self.subdevices = []
+            return False
+
+        # _run_discovery sets _discovered; put it back. The snapshot only
+        # supplied an entity set to register -- the first live poll must
+        # still enumerate subdevices and rediscover for real.
+        self._discovered = False
+        self._rehydrate_resources = resources
+        self._rehydrated_keys = self._bound_keys()
+        if not self.bound:
+            return False
+        self._log.info(
+            "device unreachable; restored %d entities from the last discovery "
+            "snapshot and will keep retrying every %ds",
+            len(self.bound),
+            SUMMARY_INTERVAL_S,
+        )
+        return True
+
+    @callback
+    def _reconcile_rehydrated(self) -> None:
+        """Reload the entry when a live discovery disagrees with the snapshot
+        this load registered from.
+
+        Platforms enumerate `bound` exactly once, at forward time, so a
+        firmware update, a newly-answering sibling subdevice or a different
+        appliance at the same IP can't be picked up in place -- the entry has
+        to come back up against the live set.
+        """
+        if self._rehydrated_keys is None:
+            return
+        stale = self._rehydrated_keys
+        self._rehydrated_keys = None
+        live = self._bound_keys()
+        if live == stale:
+            return
+        self._log.info(
+            "live discovery differs from the snapshot this entry loaded from "
+            "(%d entities gone, %d new); reloading",
+            len(stale - live),
+            len(live - stale),
+        )
+        self.hass.config_entries.async_schedule_reload(self._entry.entry_id)
+
+    def _run_discovery(self, resources: dict[str, dict], from_snapshot: bool = False) -> None:
         # Diagnostics only -- names the firmware generation (e.g. '7.0 Air
         # conditioner' is Tizen Lite); doesn't route, since every device
         # that reports it is already typed by modelNum.
@@ -1115,7 +1306,13 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             model=model,
         )
         self._persist_identity(serial, model, mfr, device_type_name)
-        self._update_coverage_gap_issue(device_type_name is None, unbound, name)
+        if not from_snapshot:
+            # A coverage gap is a claim about what the device reports, so only
+            # a live poll gets to make it. Replaying a snapshot would restate
+            # last run's conclusion while pointing the user at a diagnostics
+            # download that is empty until the appliance answers, and any
+            # drift in the device name between the two would churn the issue.
+            self._update_coverage_gap_issue(device_type_name is None, unbound, name)
 
         self._hot_hrefs = sorted(hot)
         self._warm_hrefs = sorted(warm)
@@ -1422,7 +1619,13 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # StateCache has no eviction, so the only way to keep them out
             # is to not put them in. Safe to reorder: _run_discovery reads
             # the passed dict, never the cache.
+            candidates = list(self.subdevices)
             self._run_discovery(resources)
+            # Banked before the reconcile below, so a reload it schedules
+            # comes up against this discovery rather than the one that is
+            # being replaced.
+            await self._async_save_snapshot(resources, candidates)
+            self._reconcile_rehydrated()
             resources = self._live_subdevice_resources(resources)
         sweep_mismatch = False
         if self._observe.mode == MODE_OBSERVE:

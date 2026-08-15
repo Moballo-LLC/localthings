@@ -34,6 +34,15 @@ class _FakeCoordinator:
 
         return canonical_view(subdevice, self.last_resources, self._subdevices)
 
+    # _is_included judges existence against the discovery view, which is the
+    # live cache for everything but an offline load (issue #295).
+    @property
+    def discovery_resources(self):
+        return self.last_resources
+
+    def discovery_canonical(self, subdevice):
+        return self.canonical_resources(subdevice)
+
 
 @pytest.mark.parametrize("name", _FIXTURE_NAMES)
 def test_key_is_unique_across_all_bound_entities(name):

@@ -36,6 +36,15 @@ class _FakeCoordinator:
     def canonical_resources(self, subdevice):
         return self.last_resources
 
+    # _is_included judges existence against the discovery view, which is the
+    # live cache for everything but an offline load (issue #295).
+    @property
+    def discovery_resources(self):
+        return self.last_resources
+
+    def discovery_canonical(self, subdevice):
+        return self.canonical_resources(subdevice)
+
 
 def _resources():
     return _load_device("airconditioner_ailp_fac")

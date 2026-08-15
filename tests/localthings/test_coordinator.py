@@ -71,7 +71,12 @@ async def test_summary_interval(hass: HomeAssistant, mock_entry, mock_coordinato
 
 
 async def test_update_failed_on_persistent_poll_error(hass: HomeAssistant, mock_entry) -> None:
-    """ConfigEntryNotReady raised when poll fails even after reconnect."""
+    """ConfigEntryNotReady raised when poll fails even after reconnect.
+
+    An entry with no stored discovery snapshot has never reached this device,
+    so there is nothing to load offline from (issue #295) -- it stays on HA's
+    backoff rather than loading empty.
+    """
 
     with (
         patch("custom_components.localthings.coordinator.LocalThingsCoordinator._connect_session"),
@@ -1824,10 +1829,11 @@ async def test_first_refresh_timeout_recovers_via_reconnect(
 async def test_first_refresh_persistent_timeout_fails_setup(
     hass: HomeAssistant, mock_entry
 ) -> None:
-    """When the reconnect times out too, the first refresh must fail so HA
-    retries on its backoff -- not load an entity-less entry. The session it
-    left open is closed on the way out (`_poll_once` keeps it up on a
-    `TimeoutError`, and the source port is fixed per device)."""
+    """With no snapshot to load from, a reconnect that times out too must
+    fail the first refresh so HA retries on its backoff -- not load an
+    entity-less entry. The session it left open is closed on the way out
+    (`_poll_once` keeps it up on a `TimeoutError`, and the source port is
+    fixed per device)."""
     with (
         patch("custom_components.localthings.coordinator.LocalThingsCoordinator._connect_session"),
         patch(
