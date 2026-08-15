@@ -22,7 +22,6 @@
     "mute_once",
     "odor_controller_active",
     "odor_controller_progress",
-    "outdoor_temperature",
     "power_watts",
     "tropical_night_mode"
   ]

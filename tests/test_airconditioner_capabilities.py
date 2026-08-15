@@ -654,6 +654,22 @@ def test_lnx_rac_heatpump_no_unbound_hrefs():
     assert unbound == []
 
 
+def test_lnx_rac_heatpump_outdoor_temperature_stays_off_fahrenheit_boards():
+    """issue #367's -55 offset was field-validated on Celsius-locale boards
+    only; this fixture's own /temperatures/vs/0 declares Fahrenheit despite
+    carrying an OutdoorTemp_ token, so the sensor stays off rather than
+    apply an unvalidated offset/unit to it (see _reports_celsius)."""
+    reg, resources = _ac_lnx_rac_heatpump()
+    temps_item = resources["/temperatures/vs/0"]["x.com.samsung.da.items"][0]
+    assert temps_item["x.com.samsung.da.unit"] == "Fahrenheit"
+    options = resources["/mode/vs/0"]["x.com.samsung.da.options"]
+    assert any(o.startswith("OutdoorTemp_") for o in options)
+
+    bound = discover(resources, reg.capabilities, reg.pattern_capabilities)
+    state = flatten(bound, resources)
+    assert "outdoor_temperature" not in state
+
+
 def test_lnx_rac_heatpump_absence_power_saving_state():
     reg, resources = _ac_lnx_rac_heatpump()
     bound = discover(resources, reg.capabilities, reg.pattern_capabilities)
