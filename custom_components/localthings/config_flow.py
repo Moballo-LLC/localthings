@@ -793,7 +793,10 @@ def _probe_and_validate(
 
 
 class LocalThingsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    VERSION = 2
+    # v3 relabels the particulate sensors' recorded statistics; a freshly
+    # created entry has none to relabel, so it starts at the migrated
+    # version rather than walking through v2 (see async_migrate_entry).
+    VERSION = 3
 
     def __init__(self) -> None:
         self._host: str = ""

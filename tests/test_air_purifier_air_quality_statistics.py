@@ -69,12 +69,15 @@ def test_metadata_comes_from_the_shared_tuples_own_columns():
         assert (row[4] is None) == (row[5] is None), row
 
 
-def test_air_monitor_keeps_stamping_every_shared_sensor():
-    """air_monitor imports _AIR_QUALITY_SENSORS and discards the extra columns
-    on purpose: that board (issue #210) has stamped all five as `measurement`
-    since it was added, and consuming state_class would silently drop
-    long-term statistics for Odor/CleanLevel there. Guards the import end to
-    end and the deliberate divergence together."""
+def test_air_monitor_takes_the_pm_labels_but_not_the_state_class():
+    """air_monitor imports _AIR_QUALITY_SENSORS and consumes device_class and
+    unit -- the mapping rests on device-side grading that board shares (issue
+    #325), so typing one family and not the other would be an inconsistency.
+
+    state_class is still discarded: that board (issue #210) has stamped all
+    five as `measurement` since it was added, and consuming the column would
+    silently drop long-term statistics for Odor/CleanLevel there. Guards the
+    import end to end and the deliberate divergence together."""
     from custom_components.localthings.registry.capabilities import air_monitor
 
     assert air_monitor.SENSORS.href == "/sensors/vs/0"
@@ -83,8 +86,14 @@ def test_air_monitor_keeps_stamping_every_shared_sensor():
             d for d in air_monitor.SENSORS.entities if d.key == key and isinstance(d, SensorDesc)
         )
         assert desc.state_class == "measurement", key
-        assert desc.device_class is None, key
-        assert desc.unit is None, key
+        assert desc.device_class == _desc(key).device_class, key
+        assert desc.unit == _desc(key).unit, key
+    # And the graded pair stays untyped on both families.
+    for key in GRADED:
+        desc = next(
+            d for d in air_monitor.SENSORS.entities if d.key == key and isinstance(d, SensorDesc)
+        )
+        assert (desc.device_class, desc.unit) == (None, None), key
 
 
 def test_every_air_quality_sensor_still_reads_a_plain_int():

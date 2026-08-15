@@ -18,15 +18,17 @@ aggregate. This board's own readings are load-bearing evidence for the
 PM mapping, though: 23 grading one step above the floor as FineDust is
 what rules out a PM10-width band for that field.
 
-Dust/FineDust/SuperFineDust nevertheless stay without an HA
-`device_class`/`unit` here, which is now a migration call rather than an
-evidence gap. The mapping confirmed for the purifier family (issue #325,
-Dust=PM10 / FineDust=PM2.5 / SuperFineDust=PM1 in μg/m³) rests on
-device-side grading that this board shares, so it would carry over. But
-these five sensors have recorded unitless long-term statistics since
-issue #210, and stamping a unit onto an existing statistic is what raises
-Home Assistant's "units changed" repair -- a deliberate follow-up, not
-something to fold into the purifier's first typed release.
+Dust/FineDust/SuperFineDust carry the same HA `device_class`/`unit` as the
+purifier family (issue #325, Dust=PM10 / FineDust=PM2.5 /
+SuperFineDust=PM1 in μg/m³). The mapping rests on device-side grading this
+board shares rather than on anything purifier-specific, so typing one
+family and not the other would have been an inconsistency, not caution.
+
+These sensors have recorded *unitless* long-term statistics since issue
+#210, though, and Home Assistant suppresses statistics generation outright
+for an entity whose unit no longer matches its recorded metadata -- so
+stamping a unit on would have silently stopped the history it was meant to
+label. __init__.py's v2->v3 entry migration relabels that metadata first.
 """
 
 from datetime import time as dt_time
@@ -36,14 +38,15 @@ from ..entities import BinarySensorDesc, SensorDesc, SwitchDesc, TimeDesc
 from .air_purifier import _AIR_QUALITY_SENSORS
 from .common import int_or_none, sensor_item_value
 
-# Extra columns (state_class, device_class, unit) are deliberately discarded
-# here: air_purifier leaves Odor/CleanLevel unstamped because they read as
+# device_class/unit are taken from the shared rows; state_class deliberately
+# is not. air_purifier leaves Odor/CleanLevel unstamped because they read as
 # graded indices on that family, while this board has stamped all five as
-# `measurement` since it was added (issue #210). Consuming state_class would
-# silently drop long-term statistics for two sensors on shipped devices, and
-# the pm10/pm25/pm1 labels are held back pending the statistics migration
-# the module docstring describes. The shared rows supply only the
-# key/icon/type here.
+# `measurement` since it was added (issue #210) -- consuming that column
+# would silently drop long-term statistics for two sensors on shipped
+# devices. The pm10/pm25/pm1 labels carry over cleanly, though: they rest on
+# device-side grading this board shares (see the module docstring), and
+# __init__.py's v2->v3 entry migration relabels the unitless statistics
+# these five have been recording so the new unit doesn't suppress them.
 SENSORS = Capability(
     href="/sensors/vs/0",
     poll_tier="warm",
@@ -54,9 +57,11 @@ SENSORS = Capability(
                 field="x.com.samsung.da.items",
                 icon=icon,
                 state_class="measurement",
+                device_class=device_class,
+                unit=unit,
                 value_fn=lambda items, t=sensor_type: sensor_item_value(items, t),
             )
-            for key, icon, sensor_type, *_ in _AIR_QUALITY_SENSORS
+            for key, icon, sensor_type, _state_class, device_class, unit in _AIR_QUALITY_SENSORS
         ),
         SensorDesc(
             key="co2",
