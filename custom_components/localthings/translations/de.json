@@ -940,8 +940,7 @@
         }
       },
       "drum_clean_cycles_remaining": {
-        "name": "Trommelreinigung fällig in",
-        "unit_of_measurement": "Zyklen"
+        "name": "Trommelreinigung fällig in"
       },
       "drum_clean_last_cleaned": {
         "name": "Trommel zuletzt gereinigt"

@@ -946,8 +946,7 @@
         }
       },
       "drum_clean_cycles_remaining": {
-        "name": "통세척까지 남은 횟수",
-        "unit_of_measurement": "회"
+        "name": "통세척까지 남은 횟수"
       },
       "drum_clean_last_cleaned": {
         "name": "마지막 통세척"

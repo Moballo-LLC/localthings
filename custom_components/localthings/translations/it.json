@@ -946,8 +946,7 @@
         }
       },
       "drum_clean_cycles_remaining": {
-        "name": "Pulizia cestello fra",
-        "unit_of_measurement": "cicli"
+        "name": "Pulizia cestello fra"
       },
       "drum_clean_last_cleaned": {
         "name": "Ultima pulizia cestello"

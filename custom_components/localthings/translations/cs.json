@@ -946,8 +946,7 @@
         }
       },
       "drum_clean_cycles_remaining": {
-        "name": "Čištění bubnu za",
-        "unit_of_measurement": "cyklů"
+        "name": "Čištění bubnu za"
       },
       "drum_clean_last_cleaned": {
         "name": "Poslední čištění bubnu"

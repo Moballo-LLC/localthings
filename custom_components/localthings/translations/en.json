@@ -946,8 +946,7 @@
         }
       },
       "drum_clean_cycles_remaining": {
-        "name": "Drum clean due in",
-        "unit_of_measurement": "cycles"
+        "name": "Drum clean due in"
       },
       "drum_clean_last_cleaned": {
         "name": "Drum last cleaned"

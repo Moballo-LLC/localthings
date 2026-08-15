@@ -1139,8 +1139,7 @@
         }
       },
       "drum_clean_cycles_remaining": {
-        "name": "Limpieza de tambor en",
-        "unit_of_measurement": "ciclos"
+        "name": "Limpieza de tambor en"
       },
       "drum_clean_last_cleaned": {
         "name": "Última limpieza del tambor"

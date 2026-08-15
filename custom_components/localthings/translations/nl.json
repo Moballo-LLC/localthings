@@ -946,8 +946,7 @@
         }
       },
       "drum_clean_cycles_remaining": {
-        "name": "Trommelreiniging over",
-        "unit_of_measurement": "cycli"
+        "name": "Trommelreiniging over"
       },
       "drum_clean_last_cleaned": {
         "name": "Trommel laatst gereinigd"
