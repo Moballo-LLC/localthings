@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
+import re
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import (
+    CONCENTRATION_MICROGRAMS_PER_CUBIC_METER as PARTICULATE_UNIT,
+)
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
@@ -12,7 +18,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.typing import ConfigType
 
-from .const import CONF_HOST, CONF_PORT, CONF_SERIAL, DOMAIN, PLATFORMS
+from .const import CONF_DEVICE_TYPE, CONF_HOST, CONF_PORT, CONF_SERIAL, DOMAIN, PLATFORMS
 from .coordinator import LocalThingsCoordinator
 from .registry.identity import resolve_serial
 from .services import async_setup_services
@@ -125,6 +131,100 @@ def _repair_placeholder_keys(hass: HomeAssistant, entry: ConfigEntry, serial: st
             )
 
 
+# Registries whose Dust/FineDust/SuperFineDust sensors gained pm10/pm25/pm1
+# and a unit in the release that introduced entry version 3. Deliberately
+# not every family reading /sensors/vs/0: range_hood and airconditioner
+# still declare no unit for their identically-named sensors, and relabelling
+# their statistics to µg/m³ would assert a unit those entities don't report
+# -- creating the very mismatch this migration exists to prevent.
+_PARTICULATE_TYPED_IN_V3 = frozenset({"air_purifier", "air_monitor"})
+
+# unique_id is f"{DOMAIN}_{serial}_{state_key}"; state_key is the descriptor
+# key, optionally carrying a subdevice prefix and a trailing `_<n>` instance
+# (registry/adapter._key, discovery.instance_suffix). Matching the tail rather
+# than rebuilding the whole id keeps this working for a renamed entity, whose
+# entity_id -- and so its statistic_id -- no longer follows from the key.
+_PARTICULATE_KEY_RE = re.compile(r"_(?:super_fine_dust|fine_dust|dust)(?:_\d+)?$")
+
+
+@callback
+def _relabel_particulate_statistics(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Point existing particulate statistics at the unit they always were.
+
+    These sensors recorded long-term statistics with no unit, and the
+    release carrying this migration gives them µg/m³. Home Assistant treats
+    that as a unit change it can't convert and *suppresses statistics
+    generation entirely* for the entity until someone resolves the repair
+    (sensor.recorder._update_issues -> UNITS_CHANGED_ISSUE, and the matching
+    `continue` in its compile path). Silently freezing the history we just
+    finished labelling is the worst of both outcomes, so the metadata is
+    corrected up front instead.
+
+    Only the metadata row is rewritten, never the recorded values. The
+    readings were always µg/m³ concentrations (issue #325); what was missing
+    was the label, so there is nothing to convert and no way for this to
+    distort history. That is also why it uses
+    `async_update_statistics_metadata` and not `change_statistics_unit`,
+    which would scale every stored value.
+
+    A no-op when this device family isn't one that gained the unit, or when
+    the device never recorded any statistics -- the underlying UPDATE simply
+    matches no rows.
+
+    Returns False only when the recorder wasn't loaded, meaning the caller
+    should leave the entry on its old version and try again next start.
+    """
+    if entry.data.get(CONF_DEVICE_TYPE) not in _PARTICULATE_TYPED_IN_V3:
+        return True
+    if "recorder" not in hass.config.components:
+        # after_dependencies orders the recorder ahead of us when it's
+        # configured, so this is either an install without it (nothing to
+        # relabel, and the retry costs one set lookup per start) or a boot
+        # where it failed to come up. Not distinguishable here, and burning
+        # the one-shot migration on the second case would leave the
+        # statistics suppressed for good.
+        _LOGGER.debug("recorder not loaded, deferring statistics relabel")
+        return False
+
+    from homeassistant.components.recorder.statistics import (
+        STATISTIC_UNIT_TO_UNIT_CONVERTER,
+        async_update_statistics_metadata,
+    )
+
+    kwargs: dict[str, Any] = {"new_unit_of_measurement": PARTICULATE_UNIT}
+    # `new_unit_class` only exists from HA 2025.11; hacs.json still supports
+    # 2025.1, where passing it is a TypeError -- which would propagate out of
+    # async_migrate_entry and fail the whole entry. Where it is supported it
+    # must be named, since omitting it is deprecated from HA 2026.11. µg/m³
+    # has a converter, so the value is 'concentration' rather than None.
+    if "new_unit_class" in inspect.signature(async_update_statistics_metadata).parameters:
+        converter = STATISTIC_UNIT_TO_UNIT_CONVERTER.get(PARTICULATE_UNIT)
+        kwargs["new_unit_class"] = converter.UNIT_CLASS if converter is not None else None
+
+    ent_reg = er.async_get(hass)
+    for registry_entry in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
+        if registry_entry.domain != "sensor":
+            continue
+        if not _PARTICULATE_KEY_RE.search(registry_entry.unique_id):
+            continue
+        _LOGGER.debug("relabelling statistics unit for %s", registry_entry.entity_id)
+        try:
+            async_update_statistics_metadata(hass, registry_entry.entity_id, **kwargs)
+        except Exception:
+            # Relabelling is a convenience: without it the user gets Home
+            # Assistant's own units_changed repair, which is where they were
+            # before this migration existed. Never worth failing setup over,
+            # so no recorder-side surprise can cost them the integration.
+            _LOGGER.warning(
+                "Could not relabel statistics unit for %s; Home Assistant will "
+                "offer a units-changed repair for it instead",
+                registry_entry.entity_id,
+                exc_info=True,
+            )
+            return True
+    return True
+
+
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Migrate an entry to the current version.
 
@@ -132,8 +232,11 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     can key its registry entries before the first poll (issue #236), and
     repairs whatever the old placeholder-keyed registration already
     orphaned.
+
+    v2 -> v3 relabels the recorded statistics for the particulate sensors,
+    which gained a device_class/unit in the same release (issue #325).
     """
-    if entry.version > 2:
+    if entry.version > 3:
         return False  # downgrade: this release doesn't know the newer shape
 
     if entry.version == 1:
@@ -146,6 +249,10 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         _repair_placeholder_keys(hass, entry, serial)
         _LOGGER.debug("migrated entry %s to version 2 (serial=%s)", entry.entry_id, serial)
+
+    if entry.version == 2 and _relabel_particulate_statistics(hass, entry):
+        hass.config_entries.async_update_entry(entry, version=3)
+        _LOGGER.debug("migrated entry %s to version 3", entry.entry_id)
 
     return True
 

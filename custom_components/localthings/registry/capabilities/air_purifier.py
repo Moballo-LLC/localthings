@@ -51,13 +51,13 @@ def _has_top_level_modes(rep, resources):
     return isinstance(rep.get("x.com.samsung.da.supportedModes"), (list, tuple))
 
 
-# The fourth column is state_class, which is what makes Home Assistant keep
-# long-term statistics for a sensor -- without one, a reading is only in the
-# short-term recorder history and disappears with the next purge (10 days by
-# default), so it can't back a long-range air-quality graph. The values are
-# already numeric (sensor_item_value returns int), so nothing else was in the
-# way; three sensors in this same module (filter_progress, fan_speed_level,
-# hepa_filter_usage) already declare one.
+# Columns: key, icon, device item type, state_class, device_class, unit.
+# state_class is what makes Home Assistant keep long-term statistics --
+# without one, a reading is only in the short-term recorder history and
+# disappears with the next purge (10 days by default), so it can't back a
+# long-range air-quality graph. The values are already numeric
+# (sensor_item_value returns int); three sensors in this same module
+# (filter_progress, fan_speed_level, hepa_filter_usage) already declare one.
 #
 # Only the three particulate readings get it. They fall monotonically with
 # particle size on three independent board families -- 11/9/5 on ARTIK051_TVTL
@@ -67,15 +67,40 @@ def _has_top_level_modes(rep, resources):
 # indices instead, where the mean of a grade isn't obviously meaningful; left
 # without a state_class rather than guessing.
 #
-# Deliberately no device_class/unit here: pm1/pm25/pm10 would assert the
-# reading is a µg/m³ concentration, and the dumps never say so. That's a
-# separate call from making the series recordable at all.
+# device_class/unit: Dust=PM10, FineDust=PM2.5, SuperFineDust=PM1, all
+# μg/m³ (issue #325). Three independent lines, none of them naming order --
+# which is what the earlier "plausible but unconfirmed" note rejected:
+#
+#  1. The device grades its own readings. Each dust item's value[] is
+#     [concentration, grade] (see common.sensor_item_value); the grade band
+#     is not shared across the three fields -- a reading of 18 grades one
+#     step *above* the floor as SuperFineDust (air_monitor fixture) but *at*
+#     the floor as Dust (range_hood fixture), both 1-based families. So the
+#     firmware itself treats them as three different scales ordered
+#     coarse-to-fine, rather than one repeated measurement.
+#  2. Where each field's floor/second-band boundary falls brackets the
+#     Korean CAI bands: Dust good at 18, graded up at 31 (CAI PM10 breaks
+#     at 30/31); FineDust good at 14, graded up at 23 (CAI PM2.5 breaks at
+#     15/16); SuperFineDust good at 9, graded up at 18 (PM2.5-style, which
+#     is what a PM1 reading gets -- there is no standard PM1 index).
+#  3. A live ARTIK051_TVTL read against the SmartThings app at the same
+#     moment: Dust matched the app's PM10 exactly, the other two were 1
+#     μg/m³ off in the same order, and the app shows exactly these three
+#     tiers, so there is no fourth candidate to assign.
+#
+# Dust >= FineDust >= SuperFineDust holds on all 11 fixtures that report
+# this resource, which is the cumulative-mass ordering PM10 >= PM2.5 >= PM1
+# requires by definition. The unit literal must stay HA's own spelling of
+# μg/m³ (U+03BC GREEK SMALL LETTER MU, not U+00B5 MICRO SIGN) -- they render
+# alike but only U+03BC is in DEVICE_CLASS_UNITS, and the mismatch is a
+# runtime warning per entity, not a test failure. Pinned by
+# tests/test_sensor_device_class_units.py.
 _AIR_QUALITY_SENSORS = (
-    ("dust", "mdi:blur", "Dust", "measurement"),
-    ("fine_dust", "mdi:blur", "FineDust", "measurement"),
-    ("super_fine_dust", "mdi:blur", "SuperFineDust", "measurement"),
-    ("odor", "mdi:scent", "Odor", None),
-    ("clean_level", "mdi:air-filter", "CleanLevel", None),
+    ("dust", "mdi:blur", "Dust", "measurement", "pm10", "μg/m³"),
+    ("fine_dust", "mdi:blur", "FineDust", "measurement", "pm25", "μg/m³"),
+    ("super_fine_dust", "mdi:blur", "SuperFineDust", "measurement", "pm1", "μg/m³"),
+    ("odor", "mdi:scent", "Odor", None, None, None),
+    ("clean_level", "mdi:air-filter", "CleanLevel", None, None, None),
 )
 
 AIR_QUALITY = Capability(
@@ -87,9 +112,11 @@ AIR_QUALITY = Capability(
             field="x.com.samsung.da.items",
             icon=icon,
             state_class=state_class,
+            device_class=device_class,
+            unit=unit,
             value_fn=lambda items, t=sensor_type: sensor_item_value(items, t),
         )
-        for key, icon, sensor_type, state_class in _AIR_QUALITY_SENSORS
+        for key, icon, sensor_type, state_class, device_class, unit in _AIR_QUALITY_SENSORS
     ),
 )
 

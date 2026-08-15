@@ -38,7 +38,9 @@ async def test_migration_recovers_serial_from_unique_id(
     await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
 
-    assert entry.version == 2
+    # Straight through to the current version: v2 -> v3 is a statistics
+    # relabel that no-ops for a family without particulate sensors.
+    assert entry.version == 3
     assert entry.data[CONF_SERIAL] == MOCK_SERIAL
 
 
@@ -257,7 +259,7 @@ async def test_migration_rejects_a_future_entry_version(hass: HomeAssistant) -> 
     written by a newer release."""
     from custom_components.localthings import async_migrate_entry
 
-    entry = MockConfigEntry(domain=DOMAIN, data=LEGACY_ENTRY_DATA, version=3)
+    entry = MockConfigEntry(domain=DOMAIN, data=LEGACY_ENTRY_DATA, version=4)
     entry.add_to_hass(hass)
 
     assert await async_migrate_entry(hass, entry) is False

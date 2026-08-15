@@ -39,9 +39,12 @@ from .laundry import (
 # editCourseList and screenshots (issue #22, a combo's own course set, not
 # implying anything about a plain washer's '1F'); 3 more (Eco Cold, Towels,
 # Self Clean+) verified directly on a WF50A8600AV/US by reading back the raw
-# code after selecting each cycle on the appliance (issue #80). Two code
-# pairs ('21'/'65' Colors, '27'/'5E' Rinse+Spin, and '24'/'54' Towels)
-# legitimately share a label across different course tables -- not typos.
+# code after selecting each cycle on the appliance (issue #80). 2 more
+# ('0A' Towels, 'B0' Mixed Load) reported for a WW90DG5G34ABLE on the same
+# Table_02 family (issue #363). Several codes legitimately share a label
+# across different course tables -- '21'/'65' Colors, '27'/'5E'/'78'
+# Rinse+Spin, '0A'/'33'/'54'/'70' Towels -- not typos. (This list said
+# "'24' Towels" until issue #343 found 24/33 transposed; 24 is Bedding.)
 #
 # No static fallback list is kept here: other models have different actual
 # course sets, so hardcoding one device's list would show/hide the wrong

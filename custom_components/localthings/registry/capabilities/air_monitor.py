@@ -10,18 +10,25 @@ the same dust/fine_dust/super_fine_dust/odor/clean_level keys so this
 device shares those capabilities' catalog entries. This board additionally
 reports a CO2 reading the other two families don't.
 
-A second `value` list element on the particulate-matter types (e.g. Dust's
-`['31', '2']`) reads like a coarse quality-grade code, but nothing on this
-board confirms what its scale means -- left unbound rather than guessed;
-index 0 is the only slot any family has ever read.
+A second `value` list element on the particulate-matter types (Dust's
+`['31', '2']`) is the device's own graded air-quality level for that
+reading -- see common.sensor_item_value. Still unbound here: the grade's
+floor differs by board family, and CleanLevel already carries the
+aggregate. This board's own readings are load-bearing evidence for the
+PM mapping, though: 23 grading one step above the floor as FineDust is
+what rules out a PM10-width band for that field.
 
-Dust/FineDust/SuperFineDust aren't assigned an HA `device_class`
-(pm10/pm25/pm1) or `unit` despite reading like plausible ug/m3 particulate
-values: Samsung's own two-tier Korean convention maps only to a PM10/PM2.5
-pair, and this board's three-tier naming doesn't confirm where the extra
-tier or a PM1 reading fits. A wrong guess would silently mislabel every
-reading forever, so they're plain `measurement` sensors named after the
-device's own field instead, matching air_purifier.AIR_QUALITY's precedent.
+Dust/FineDust/SuperFineDust carry the same HA `device_class`/`unit` as the
+purifier family (issue #325, Dust=PM10 / FineDust=PM2.5 /
+SuperFineDust=PM1 in μg/m³). The mapping rests on device-side grading this
+board shares rather than on anything purifier-specific, so typing one
+family and not the other would have been an inconsistency, not caution.
+
+These sensors have recorded *unitless* long-term statistics since issue
+#210, though, and Home Assistant suppresses statistics generation outright
+for an entity whose unit no longer matches its recorded metadata -- so
+stamping a unit on would have silently stopped the history it was meant to
+label. __init__.py's v2->v3 entry migration relabels that metadata first.
 """
 
 from datetime import time as dt_time
@@ -31,12 +38,15 @@ from ..entities import BinarySensorDesc, SensorDesc, SwitchDesc, TimeDesc
 from .air_purifier import _AIR_QUALITY_SENSORS
 from .common import int_or_none, sensor_item_value
 
-# _AIR_QUALITY_SENSORS' fourth column (state_class) is deliberately discarded
-# here: air_purifier leaves Odor/CleanLevel unstamped because they read as
+# device_class/unit are taken from the shared rows; state_class deliberately
+# is not. air_purifier leaves Odor/CleanLevel unstamped because they read as
 # graded indices on that family, while this board has stamped all five as
-# `measurement` since it was added (issue #210). Consuming the column would
-# silently drop long-term statistics for two sensors on shipped devices, so
-# the shared rows supply only the key/icon/type here.
+# `measurement` since it was added (issue #210) -- consuming that column
+# would silently drop long-term statistics for two sensors on shipped
+# devices. The pm10/pm25/pm1 labels carry over cleanly, though: they rest on
+# device-side grading this board shares (see the module docstring), and
+# __init__.py's v2->v3 entry migration relabels the unitless statistics
+# these five have been recording so the new unit doesn't suppress them.
 SENSORS = Capability(
     href="/sensors/vs/0",
     poll_tier="warm",
@@ -47,9 +57,11 @@ SENSORS = Capability(
                 field="x.com.samsung.da.items",
                 icon=icon,
                 state_class="measurement",
+                device_class=device_class,
+                unit=unit,
                 value_fn=lambda items, t=sensor_type: sensor_item_value(items, t),
             )
-            for key, icon, sensor_type, _ in _AIR_QUALITY_SENSORS
+            for key, icon, sensor_type, _state_class, device_class, unit in _AIR_QUALITY_SENSORS
         ),
         SensorDesc(
             key="co2",

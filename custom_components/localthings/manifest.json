@@ -1,6 +1,7 @@
 {
   "domain": "localthings",
   "name": "LocalThings",
+  "after_dependencies": ["recorder"],
   "codeowners": ["@mbillow"],
   "config_flow": true,
   "dependencies": [],
