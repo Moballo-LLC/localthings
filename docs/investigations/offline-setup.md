@@ -93,6 +93,14 @@ It lives in `.storage` (`Store`, keyed on entry_id) rather than on the config
 entry: it's device state, not configuration, and runs to tens of kilobytes.
 `async_remove_entry` deletes it with the entry.
 
+The write is awaited, not `async_delay_save`d. A deferred write outlives
+whatever queued it: it lands after `async_remove_entry` has deleted the file
+and recreates it orphaned, and a reload scheduled by the reconcile below
+would read the pre-reload snapshot back off disk. It runs once per entry
+load, so there's nothing worth deferring. A write that fails is logged and
+swallowed — a board reporting something the JSON encoder rejects must not
+break polling.
+
 ### 2. Reconcile on reconnect
 
 The snapshot is a claim about a device we haven't talked to yet. When the

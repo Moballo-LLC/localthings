@@ -23,10 +23,7 @@ from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.localthings.const import DOMAIN, SUMMARY_INTERVAL_S
-from custom_components.localthings.coordinator import (
-    _SNAPSHOT_SAVE_DELAY_S,
-    LocalThingsCoordinator,
-)
+from custom_components.localthings.coordinator import LocalThingsCoordinator
 from custom_components.localthings.registry.identity import DeviceIdentity
 
 from .conftest import _load_fridge_resources as _load_fridge
@@ -65,12 +62,6 @@ def _store_key(entry) -> str:
     return f"{DOMAIN}.{entry.entry_id}.discovery"
 
 
-async def _flush_snapshot(hass: HomeAssistant) -> None:
-    """Run out `async_delay_save`'s timer without reaching the next poll."""
-    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=_SNAPSHOT_SAVE_DELAY_S + 1))
-    await hass.async_block_till_done()
-
-
 async def _tick(hass: HomeAssistant) -> None:
     """Advance past one summary interval so the coordinator polls again.
 
@@ -89,7 +80,6 @@ async def _setup_online_then_unload(hass: HomeAssistant, entry, resources: dict)
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
         entity_ids = {s.entity_id for s in hass.states.async_all()}
-        await _flush_snapshot(hass)
         await hass.config_entries.async_unload(entry.entry_id)
         await hass.async_block_till_done()
     return entity_ids
@@ -106,7 +96,6 @@ async def test_snapshot_written_after_first_discovery(
     """A successful first cycle banks what it handed _run_discovery."""
     await hass.config_entries.async_setup(mock_entry.entry_id)
     await hass.async_block_till_done()
-    await _flush_snapshot(hass)
 
     stored = hass_storage[_store_key(mock_entry)]["data"]
     assert stored["resources"]
@@ -122,11 +111,7 @@ async def test_snapshot_not_written_when_device_never_answers(
     with _unreachable():
         await hass.config_entries.async_setup(mock_entry.entry_id)
         await hass.async_block_till_done()
-        # Asserted before the flush: running the save timer out also runs out
-        # HA's own setup-retry timer, which puts the entry back into
-        # SETUP_IN_PROGRESS.
         assert mock_entry.state is ConfigEntryState.SETUP_RETRY
-        await _flush_snapshot(hass)
 
     assert _store_key(mock_entry) not in hass_storage
 
@@ -135,14 +120,22 @@ async def test_snapshot_removed_when_entry_removed(
     hass: HomeAssistant, mock_entry, mock_coordinator_session, hass_storage
 ) -> None:
     """The store is keyed on entry_id, so re-adding the appliance mints a new
-    one -- the old file has to go with the entry that wrote it."""
+    one -- the old file has to go with the entry that wrote it.
+
+    The clock is run on afterwards because a deferred write would land here:
+    with `async_delay_save` the removal was undone a few seconds later by the
+    save the last poll had queued, leaving the file orphaned for good.
+    """
     await hass.config_entries.async_setup(mock_entry.entry_id)
     await hass.async_block_till_done()
-    await _flush_snapshot(hass)
     assert _store_key(mock_entry) in hass_storage
 
     await hass.config_entries.async_remove(mock_entry.entry_id)
     await hass.async_block_till_done()
+    assert hass_storage.get(_store_key(mock_entry), {}).get("data") is None
+
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=60))
+    await hass.async_block_till_done(wait_background_tasks=True)
 
     assert hass_storage.get(_store_key(mock_entry), {}).get("data") is None
 
@@ -200,6 +193,39 @@ async def test_offline_load_without_snapshot_still_fails(hass: HomeAssistant, mo
     assert not hass.states.async_all()
 
 
+async def test_malformed_snapshot_falls_back_to_setup_retry(
+    hass: HomeAssistant, mock_entry, hass_storage
+) -> None:
+    """A stored row missing a field the current dataclass declares must fail
+    the same way an unreachable device does.
+
+    Anything escaping async_rehydrate reaches async_setup_entry, which only
+    handles ConfigEntryNotReady -- so the entry would land in SETUP_ERROR,
+    which HA never retries, with its DTLS session left open on the fixed
+    source port the next attempt binds.
+    """
+    key = _store_key(mock_entry)
+    hass_storage[key] = {
+        "version": 1,
+        "minor_version": 1,
+        "key": key,
+        "data": {
+            "resources": _load_fridge(),
+            "subdevice_candidates": [{"key": "1"}],  # no "kind"
+        },
+    }
+
+    with (
+        _unreachable(),
+        patch.object(LocalThingsCoordinator, "async_close", autospec=True) as close,
+    ):
+        await hass.config_entries.async_setup(mock_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert mock_entry.state is ConfigEntryState.SETUP_RETRY
+    close.assert_awaited_once()
+
+
 async def test_corrupt_snapshot_falls_back_to_setup_retry(
     hass: HomeAssistant, mock_entry, hass_storage
 ) -> None:
@@ -236,7 +262,6 @@ async def test_snapshot_restores_identity(hass: HomeAssistant, mock_entry) -> No
     with _reachable(resources, identity):
         await hass.config_entries.async_setup(mock_entry.entry_id)
         await hass.async_block_till_done()
-        await _flush_snapshot(hass)
         await hass.config_entries.async_unload(mock_entry.entry_id)
         await hass.async_block_till_done()
 
@@ -278,7 +303,7 @@ async def test_offline_load_keeps_polling_and_recovers(hass: HomeAssistant, mock
 
 
 async def test_reconcile_reloads_when_live_discovery_differs(
-    hass: HomeAssistant, mock_entry
+    hass: HomeAssistant, mock_entry, hass_storage
 ) -> None:
     """Platforms enumerate `bound` once, so a live set that disagrees with the
     snapshot can only be adopted by bringing the entry back up."""
@@ -289,7 +314,6 @@ async def test_reconcile_reloads_when_live_discovery_differs(
         await hass.async_block_till_done()
         coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
         victim = coordinator.bound[0].href
-        await _flush_snapshot(hass)
         await hass.config_entries.async_unload(mock_entry.entry_id)
         await hass.async_block_till_done()
 
@@ -305,6 +329,11 @@ async def test_reconcile_reloads_when_live_discovery_differs(
         await _tick(hass)
 
     reload.assert_called_once_with(mock_entry.entry_id)
+    # Banked before the reload is scheduled, so the entry that comes back up
+    # replays this discovery rather than the one it is replacing -- otherwise
+    # a device that goes quiet again mid-reload rehydrates the stale set and
+    # reconciles all over again.
+    assert victim not in hass_storage[_store_key(mock_entry)]["data"]["resources"]
 
 
 async def test_reconcile_is_quiet_when_live_discovery_agrees(
