@@ -6,7 +6,7 @@ check the dishwasher wiring and its device-specific options.
 """
 
 from custom_components.localthings.registry.capabilities import dishwasher
-from custom_components.localthings.registry.entities import SwitchDesc
+from custom_components.localthings.registry.entities import SensorDesc, SwitchDesc
 
 
 class TestCycleOptions:
@@ -60,3 +60,14 @@ class TestDishwasherOptions:
         assert desc.exists_fn is not None
         assert desc.exists_fn({"x.com.samsung.da.options": []}, {}) is False
         assert desc.exists_fn({"x.com.samsung.da.options": ["AutoDoorRelease_On"]}, {}) is True
+
+
+def test_diagnosis_status_is_a_translatable_enum():
+    desc = next(
+        e
+        for e in dishwasher.DIAGNOSIS.entities
+        if e.key == "diagnosis_status" and isinstance(e, SensorDesc)
+    )
+    assert desc.device_class == "enum"
+    assert desc.options == ("ready",)
+    assert desc.value_fn("Ready") == "ready"

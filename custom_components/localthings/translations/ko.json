@@ -261,7 +261,11 @@
         "name": "부저음",
         "state": {
           "off": "끄기",
-          "on": "켜기"
+          "on": "켜기",
+          "volume_off": "끔",
+          "volume_low": "낮음",
+          "volume_med": "중간",
+          "volume_high": "높음"
         }
       },
       "discharging_time": {
@@ -930,10 +934,16 @@
         "name": "온도"
       },
       "diagnosis": {
-        "name": "진단"
+        "name": "진단",
+        "state": {
+          "ready": "준비됨"
+        }
       },
       "diagnosis_status": {
-        "name": "진단 상태"
+        "name": "진단 상태",
+        "state": {
+          "ready": "준비됨"
+        }
       },
       "drum_clean_cycles_remaining": {
         "name": "통세척까지 남은 횟수"
@@ -1077,7 +1087,21 @@
         "name": "탐침 온도계 현재 온도"
       },
       "progress": {
-        "name": "진행률"
+        "name": "진행률",
+        "state": {
+          "idle": "대기",
+          "weightsensing": "세탁물 감지",
+          "wash": "세탁",
+          "rinse": "헹굼",
+          "spin": "탈수",
+          "finish": "완료",
+          "steaming": "스팀",
+          "airwashing": "에어워시",
+          "drying": "건조",
+          "cooling": "냉각",
+          "predrain": "사전 배수",
+          "prewash": "애벌빨래"
+        }
       },
       "progress_percentage": {
         "name": "진행률"

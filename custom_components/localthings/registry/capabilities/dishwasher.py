@@ -9,6 +9,7 @@ wash, auto release dry) are read locally here.
 
 from ..capability import Capability
 from ..entities import ButtonDesc, SelectDesc, SensorDesc, SwitchDesc
+from .common import diagnosis_status
 from .laundry import bool_option_switch, cycle_select
 
 # ---------------------------------------------------------------------------
@@ -76,6 +77,9 @@ DIAGNOSIS = Capability(
             field="x.com.samsung.da.diagnosisStart",
             icon="mdi:stethoscope",
             entity_category="diagnostic",
+            device_class="enum",
+            options=("ready",),
+            value_fn=diagnosis_status,
         ),
         ButtonDesc(
             key="diagnosis_start",

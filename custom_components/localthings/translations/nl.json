@@ -261,7 +261,11 @@
         "name": "Zoemergeluid",
         "state": {
           "off": "Uit",
-          "on": "Aan"
+          "on": "Aan",
+          "volume_off": "Uit",
+          "volume_low": "Laag",
+          "volume_med": "Gemiddeld",
+          "volume_high": "Hoog"
         }
       },
       "discharging_time": {
@@ -930,10 +934,16 @@
         "name": "Temperatuur"
       },
       "diagnosis": {
-        "name": "Diagnose"
+        "name": "Diagnose",
+        "state": {
+          "ready": "Gereed"
+        }
       },
       "diagnosis_status": {
-        "name": "Diagnosestatus"
+        "name": "Diagnosestatus",
+        "state": {
+          "ready": "Gereed"
+        }
       },
       "drum_clean_cycles_remaining": {
         "name": "Trommelreiniging over"
@@ -1077,7 +1087,21 @@
         "name": "Sondetemperatuur"
       },
       "progress": {
-        "name": "Voortgang"
+        "name": "Voortgang",
+        "state": {
+          "idle": "Inactief",
+          "weightsensing": "Beladingsdetectie",
+          "wash": "Wassen",
+          "rinse": "Spoelen",
+          "spin": "Centrifugeren",
+          "finish": "Voltooid",
+          "steaming": "Stomen",
+          "airwashing": "Luchtreiniging",
+          "drying": "Drogen",
+          "cooling": "Koelen",
+          "predrain": "Vooraf afpompen",
+          "prewash": "Voorwas"
+        }
       },
       "progress_percentage": {
         "name": "Voortgangspercentage"

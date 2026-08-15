@@ -249,6 +249,14 @@ def _power_sensor_exists(rep, resources):
     return not model_allows_power_on_off(resources)
 
 
+def diagnosis_status(value):
+    """'Ready' -> the catalog's 'ready'; anything else is left raw.
+
+    Shared by dishwasher and dryer, which report the same field.
+    """
+    return "ready" if value == "Ready" else value
+
+
 def sensor_item_value(items, sensor_type, index=0):
     """Pull one reading out of a `/sensors/vs/0`-style items[] list -- each
     item is `{type, value: [...]}`; `index` picks which slot to read

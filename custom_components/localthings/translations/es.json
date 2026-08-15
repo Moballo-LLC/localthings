@@ -457,7 +457,11 @@
         "name": "Volumen",
         "state": {
           "off": "Apagado",
-          "on": "Encendido"
+          "on": "Encendido",
+          "volume_off": "Apagado",
+          "volume_low": "Bajo",
+          "volume_med": "Medio",
+          "volume_high": "Alto"
         }
       },
       "discharging_time": {
@@ -1123,10 +1127,16 @@
         "name": "Temperatura"
       },
       "diagnosis": {
-        "name": "Diagnóstico"
+        "name": "Diagnóstico",
+        "state": {
+          "ready": "Listo"
+        }
       },
       "diagnosis_status": {
-        "name": "Estado del diagnóstico"
+        "name": "Estado del diagnóstico",
+        "state": {
+          "ready": "Listo"
+        }
       },
       "drum_clean_cycles_remaining": {
         "name": "Limpieza de tambor en"
@@ -1270,7 +1280,21 @@
         "name": "Temperatura de la sonda"
       },
       "progress": {
-        "name": "Progreso"
+        "name": "Progreso",
+        "state": {
+          "idle": "Inactiva",
+          "weightsensing": "Detección de carga",
+          "wash": "Lavado",
+          "rinse": "Aclarado",
+          "spin": "Centrifugado",
+          "finish": "Finalizado",
+          "steaming": "Vaporización",
+          "airwashing": "Lavado con aire",
+          "drying": "Secado",
+          "cooling": "Enfriamiento",
+          "predrain": "Drenaje previo",
+          "prewash": "Prelavado"
+        }
       },
       "progress_percentage": {
         "name": "Porcentaje de progreso"

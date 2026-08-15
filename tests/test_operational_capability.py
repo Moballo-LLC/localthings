@@ -5,7 +5,7 @@ from custom_components.localthings.registry.capabilities.operational import (
     _just_finished,
     _new_cycle_running,
 )
-from custom_components.localthings.registry.entities import NumberDesc
+from custom_components.localthings.registry.entities import NumberDesc, SensorDesc
 
 
 def test_machine_state_maps_samsung_to_ocf():
@@ -81,6 +81,21 @@ class TestNewCycleRunning:
         assert not _new_cycle_running(
             {"x.com.samsung.da.state": "Run", "x.com.samsung.da.progress": "None"}
         )
+
+
+def test_progress_is_a_translatable_enum():
+    desc = next(
+        e for e in OPERATIONAL_STATE.entities if e.key == "progress" and isinstance(e, SensorDesc)
+    )
+    assert desc.device_class == "enum"
+    assert desc.options is not None
+    assert "rinse" in desc.options
+    assert "Rinse" not in desc.options
+    assert desc.rep_fn is not None
+    assert (
+        desc.rep_fn({"x.com.samsung.da.state": "Run", "x.com.samsung.da.progress": "Rinse"})
+        == "rinse"
+    )
 
 
 class TestProgressPercentage:
