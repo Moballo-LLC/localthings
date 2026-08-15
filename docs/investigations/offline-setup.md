@@ -131,6 +131,19 @@ It also means `async_remove_config_entry_device` is no longer reachable with
 an empty `coordinator.subdevices`, so an offline load can't offer to delete a
 real-but-unreachable subdevice.
 
+### The coverage-gap Repair stays live-only
+
+`_run_discovery(..., from_snapshot=True)` skips `_update_coverage_gap_issue`.
+The Repair points the user at a diagnostics download, which is empty until
+the appliance answers, and a device name that drifts between the snapshot and
+the live poll would churn the issue for no reason.
+
+Not a de-duplication measure — HA already handles that. `async_create_issue`
+is keyed on `(domain, issue_id)`, `dataclasses.replace` in
+`async_get_or_create` leaves `dismissed_version` alone, and the registry
+reloads non-persistent issues with their dismissal intact, so one row per
+entry survives restarts and an "Ignore" sticks.
+
 ## What this still won't do
 
 Entities will be present and `unavailable` — not showing their last values.

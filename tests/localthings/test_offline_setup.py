@@ -18,6 +18,7 @@ from unittest.mock import patch
 import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
@@ -325,6 +326,28 @@ async def test_reconcile_is_quiet_when_live_discovery_agrees(
         await _tick(hass)
 
     reload.assert_not_called()
+
+
+def test_coverage_gap_repair_is_live_only(hass: HomeAssistant, mock_entry) -> None:
+    """A coverage gap is a claim about what the device reports, so replaying
+    a snapshot must not raise the Repair -- it would restate last run's
+    conclusion while the diagnostics download it points at is still empty."""
+    gappy = {
+        "/information/vs/0": {
+            "x.com.samsung.da.modelNum": "TOTALLY_UNKNOWN_BOARD",
+            "x.com.samsung.da.serialNum": "TEST-SERIAL-0000",
+        },
+        "/nothing/maps/this/vs/0": {"someField": 1},
+    }
+    issue_id = f"device_gap_{mock_entry.entry_id}"
+    coordinator = LocalThingsCoordinator(hass, mock_entry)
+
+    coordinator._run_discovery(gappy, from_snapshot=True)
+    assert coordinator._unbound_hrefs  # the gap is real, it just stays quiet
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
+
+    coordinator._run_discovery(gappy)
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
 
 
 async def test_live_load_never_reconciles(

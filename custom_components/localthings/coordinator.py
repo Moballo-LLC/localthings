@@ -1122,7 +1122,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         resources = stored["resources"]
         try:
-            self._run_discovery(resources)
+            self._run_discovery(resources, from_snapshot=True)
         except Exception as e:
             # A snapshot written by an older release can outlive the registry
             # shape it was discovered against. Fall back to the pre-#295
@@ -1172,7 +1172,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self.hass.config_entries.async_schedule_reload(self._entry.entry_id)
 
-    def _run_discovery(self, resources: dict[str, dict]) -> None:
+    def _run_discovery(self, resources: dict[str, dict], from_snapshot: bool = False) -> None:
         # Diagnostics only -- names the firmware generation (e.g. '7.0 Air
         # conditioner' is Tizen Lite); doesn't route, since every device
         # that reports it is already typed by modelNum.
@@ -1288,7 +1288,13 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             model=model,
         )
         self._persist_identity(serial, model, mfr, device_type_name)
-        self._update_coverage_gap_issue(device_type_name is None, unbound, name)
+        if not from_snapshot:
+            # A coverage gap is a claim about what the device reports, so only
+            # a live poll gets to make it. Replaying a snapshot would restate
+            # last run's conclusion while pointing the user at a diagnostics
+            # download that is empty until the appliance answers, and any
+            # drift in the device name between the two would churn the issue.
+            self._update_coverage_gap_issue(device_type_name is None, unbound, name)
 
         self._hot_hrefs = sorted(hot)
         self._warm_hrefs = sorted(warm)
