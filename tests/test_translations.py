@@ -211,6 +211,167 @@ def test_confirmed_washer_table_02_ww90dg5g34able_course_names():
     }
 
 
+def test_confirmed_washer_table_02_wf21t6500kv_course_names():
+    """Issue #376: WF21T6500KV (DA_WM_A51_20_COMMON) reported Korean labels
+    for 21 previously-untranslated Table_02 codes. 20 are added here; '06'
+    is deliberately excluded -- the reporter's own Korean text for it
+    ('이불', Bedding) conflicts with the confirmed 'XXL Laundry' already
+    locked in by test_confirmed_washer_table_02_missing_course_names
+    (issue #342), so it stays as-is pending the reporter (or another
+    Table_02 owner) confirming which device's '06' is wrong.
+
+    Several of the 20 share their Korean text with an already-confirmed
+    code (cross-checked against translations/ko.json, not guessed), so
+    those reuse the established label rather than a fresh translation --
+    checked in every locale per issue #363's precedent, since a locale
+    that translated the shared text differently would still pass the
+    key-topology test alone.
+    """
+    english = _load("en")["entity"]["select"]["washer_cycle_table_02"]["state"]
+    assert {
+        code: english[code]
+        for code in (
+            "02",
+            "03",
+            "05",
+            "07",
+            "09",
+            "0b",
+            "0c",
+            "0d",
+            "0e",
+            "0f",
+            "10",
+            "11",
+            "12",
+            "13",
+            "14",
+            "15",
+            "16",
+            "18",
+            "19",
+            "1a",
+        )
+    } == {
+        "02": "Extra Heavy Duty",
+        "03": "Super Eco Wash",
+        "05": "Wool/Lingerie",
+        "07": "Outdoor",
+        "09": "Drum Clean",
+        "0b": "Boil Wash",
+        "0c": "Baby Care",
+        "0d": "Spin Only",
+        "0e": "Cloudy Day",
+        "0f": "Pure Wash",
+        "10": "Spin Dry",
+        "11": "Summer Bedding",
+        "12": "Cottons",
+        "13": "Black Cottons",
+        "14": "Delicate Underwear",
+        "15": "Activewear",
+        "16": "Blouses",
+        "18": "Soft Bubble",
+        "19": "AI Wash",
+        "1a": "Shirts",
+    }
+    assert english["06"] == "XXL Laundry"  # not '이불'/Bedding -- see docstring
+
+    # Anchors picked among the code's own duplicate-label siblings by
+    # whichever this catalog already has translated consistently -- '2b'
+    # over its "AI 맞춤세탁" twin '69', which nl.json alone translates
+    # differently ("AI wassen" vs "AI Wash"), an existing inconsistency
+    # unrelated to this issue and not one this PR resolves.
+    reused_pairs = (
+        ("07", "75"),
+        ("09", "3a"),
+        ("0c", "2e"),
+        ("15", "2f"),
+        ("16", "6c"),
+        ("19", "2b"),
+        ("1a", "32"),
+    )
+    for language in _languages():
+        states = _load(language)["entity"]["select"]["washer_cycle_table_02"]["state"]
+        for new_code, anchor_code in reused_pairs:
+            assert states[new_code] == states[anchor_code], (language, new_code, anchor_code)
+
+
+def test_confirmed_dryer_table_03_dv19t8745bv_course_names():
+    """Issue #376: DV19T8745BV (DA_WM_TP1_21_COMMON) reported Korean labels
+    for 18 previously-untranslated Table_03 codes -- none conflict with an
+    existing entry. As with the washer table above, codes sharing Korean
+    text with an already-confirmed code (including two, '3c'/'3d', whose
+    text matches a washer_cycle_table_02 entry rather than one on this
+    table) reuse that label instead of a fresh translation, checked in
+    every locale.
+    """
+    english = _load("en")["entity"]["select"]["dryer_cycle_table_03"]["state"]
+    assert {
+        code: english[code]
+        for code in (
+            "02",
+            "03",
+            "05",
+            "07",
+            "09",
+            "0b",
+            "0c",
+            "0e",
+            "0f",
+            "11",
+            "28",
+            "37",
+            "38",
+            "39",
+            "3a",
+            "3b",
+            "3c",
+            "3d",
+        )
+    } == {
+        "02": "AI Dry",
+        "03": "Super Speed",
+        "05": "Bedding",
+        "07": "Delicates",
+        "09": "Shirts",
+        "0b": "Padding Care",
+        "0c": "Outdoor Water-Repellent Care",
+        "0e": "Towels",
+        "0f": "Wool",
+        "11": "Cool air",
+        "28": "Interior Hot Air Sanitize",
+        "37": "Blouses",
+        "38": "Iron dry",
+        "39": "Room Dehumidify",
+        "3a": "Hygiene Care",
+        "3b": "Bedding/Dust Off",
+        "3c": "Activewear",
+        "3d": "Denim",
+    }
+
+    same_table_pairs = (
+        ("02", "29"),
+        ("03", "17"),
+        ("05", "1b"),
+        ("07", "19"),
+        ("09", "1c"),
+        ("0e", "1d"),
+        ("0f", "1a"),
+        ("11", "24"),
+        ("38", "20"),
+        ("3a", "21"),
+    )
+    for language in _languages():
+        d_states = _load(language)["entity"]["select"]["dryer_cycle_table_03"]["state"]
+        w_states = _load(language)["entity"]["select"]["washer_cycle_table_02"]["state"]
+        for new_code, anchor_code in same_table_pairs:
+            assert d_states[new_code] == d_states[anchor_code], (language, new_code, anchor_code)
+        # Cross-table reuse: same Korean text as a washer_cycle_table_02 code.
+        assert d_states["37"] == w_states["6c"], language  # Blouses
+        assert d_states["3c"] == w_states["2f"], language  # Activewear
+        assert d_states["3d"] == w_states["66"], language  # Denim
+
+
 def test_reported_washer_standard_courses_all_have_table_02_labels():
     """Every non-personal code in the reported washer's live course list
     must resolve through the Table_02 catalog instead of appearing as raw
