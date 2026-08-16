@@ -180,10 +180,14 @@ def test_confirmed_washer_table_02_towels_bedding_are_not_swapped():
 def test_confirmed_washer_table_02_missing_course_names():
     """Issue #342: 06/08/a0 had no translation and fell back to the raw
     device code in the UI; 74 was already translated by the time this
-    landed and is pinned here only as a "didn't regress" anchor."""
+    landed and is pinned here only as a "didn't regress" anchor.
+
+    06's wording was corrected by issue #376 (originally 'XXL Laundry';
+    that device's own '이불' report -- the same text as the confirmed
+    Bedding codes 24/6f -- turned out to be the right one)."""
     states = _load("en")["entity"]["select"]["washer_cycle_table_02"]["state"]
     assert {code: states[code] for code in ("06", "08", "74", "a0")} == {
-        "06": "XXL Laundry",
+        "06": "Bedding",
         "08": "Rinse+Spin",
         "74": "Drum Clean",
         "a0": "15' Quick Wash",
@@ -213,19 +217,17 @@ def test_confirmed_washer_table_02_ww90dg5g34able_course_names():
 
 def test_confirmed_washer_table_02_wf21t6500kv_course_names():
     """Issue #376: WF21T6500KV (DA_WM_A51_20_COMMON) reported Korean labels
-    for 21 previously-untranslated Table_02 codes. 20 are added here; '06'
-    is deliberately excluded -- the reporter's own Korean text for it
-    ('이불', Bedding) conflicts with the confirmed 'XXL Laundry' already
-    locked in by test_confirmed_washer_table_02_missing_course_names
-    (issue #342), so it stays as-is pending the reporter (or another
-    Table_02 owner) confirming which device's '06' is wrong.
+    for 21 previously-untranslated Table_02 codes.
 
-    Several of the 20 share their Korean text with an already-confirmed
-    code (cross-checked against translations/ko.json, not guessed), so
-    those reuse the established label rather than a fresh translation --
-    checked in every locale per issue #363's precedent, since a locale
-    that translated the shared text differently would still pass the
-    key-topology test alone.
+    Several share their Korean text with an already-confirmed code
+    (cross-checked against translations/ko.json, not guessed), so those
+    reuse the established label rather than a fresh translation -- checked
+    in every locale per issue #363's precedent, since a locale that
+    translated the shared text differently would still pass the
+    key-topology test alone. That includes '06': its Korean text ('이불')
+    matches the confirmed Bedding codes 24/6f exactly, which superseded
+    the wrong 'XXL Laundry' wording #342 had originally given it (see
+    test_confirmed_washer_table_02_missing_course_names).
     """
     english = _load("en")["entity"]["select"]["washer_cycle_table_02"]["state"]
     assert {
@@ -234,6 +236,7 @@ def test_confirmed_washer_table_02_wf21t6500kv_course_names():
             "02",
             "03",
             "05",
+            "06",
             "07",
             "09",
             "0b",
@@ -256,6 +259,7 @@ def test_confirmed_washer_table_02_wf21t6500kv_course_names():
         "02": "Extra Heavy Duty",
         "03": "Super Eco Wash",
         "05": "Wool/Lingerie",
+        "06": "Bedding",
         "07": "Outdoor",
         "09": "Drum Clean",
         "0b": "Boil Wash",
@@ -274,7 +278,6 @@ def test_confirmed_washer_table_02_wf21t6500kv_course_names():
         "19": "AI Wash",
         "1a": "Shirts",
     }
-    assert english["06"] == "XXL Laundry"  # not '이불'/Bedding -- see docstring
 
     # Anchors picked among the code's own duplicate-label siblings by
     # whichever this catalog already has translated consistently -- '2b'
@@ -282,6 +285,7 @@ def test_confirmed_washer_table_02_wf21t6500kv_course_names():
     # differently ("AI wassen" vs "AI Wash"), an existing inconsistency
     # unrelated to this issue and not one this PR resolves.
     reused_pairs = (
+        ("06", "24"),
         ("07", "75"),
         ("09", "3a"),
         ("0c", "2e"),
