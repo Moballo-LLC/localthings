@@ -7,10 +7,8 @@ import logging
 import re
 from typing import Any
 
+from homeassistant import const as ha_const
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import (
-    CONCENTRATION_MICROGRAMS_PER_CUBIC_METER as PARTICULATE_UNIT,
-)
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
@@ -24,6 +22,22 @@ from .registry.identity import resolve_serial
 from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
+
+# UnitOfDensity is the non-deprecated home for this value from whichever HA
+# release introduces it; CONCENTRATION_MICROGRAMS_PER_CUBIC_METER logs a
+# removal warning (2027.8) on those releases every time it's accessed.
+# hacs.json's floor (2025.1.0) predates UnitOfDensity existing at all, so
+# this is a runtime getattr rather than a static import ty could only ever
+# resolve against one HA generation -- see _relabel_particulate_statistics'
+# own new_unit_class feature-detection below for the same pattern. The
+# getattr short-circuits before the deprecated name is ever touched on a
+# release new enough to have UnitOfDensity.
+_unit_of_density = getattr(ha_const, "UnitOfDensity", None)
+PARTICULATE_UNIT = (
+    _unit_of_density.MICROGRAMS_PER_CUBIC_METER
+    if _unit_of_density is not None
+    else ha_const.CONCENTRATION_MICROGRAMS_PER_CUBIC_METER
+)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
