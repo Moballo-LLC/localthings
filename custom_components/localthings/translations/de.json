@@ -1565,7 +1565,7 @@
       },
       "cloud_courses": {
         "title": "Download-Programme",
-        "description": "Die geführte Einrichtung begleitet Sie dabei: Öffnen Sie in der SmartThings-App (nicht am Gerät selbst) dieses Gerät und tippen Sie auf \"Download-Programme\" -- eine eigene Zeile, getrennt von \"Programm\", weiter unten im Bildschirm, und die, auf die es hier ankommt. Wählen Sie dort ein Programm aus, kommen Sie dann zurück und benennen Sie es, sobald es gefunden wird – eines nach dem anderen.\n\nNamen bearbeiten zeigt alles bisher Gefundene auf einmal an – nutzen Sie es später, um etwas umzubenennen oder zu korrigieren.{status}",
+        "description": "Die geführte Einrichtung begleitet Sie dabei: Öffnen Sie in der SmartThings-App (nicht am Gerät selbst) dieses Gerät und tippen Sie auf \"Download-Programme\" -- eine eigene Zeile, getrennt von \"Programm\", weiter unten im Bildschirm, und die, auf die es hier ankommt. Wählen Sie dort ein Programm aus, kommen Sie dann zurück und benennen Sie es, sobald es gefunden wird – eines nach dem anderen.\n\nNamen bearbeiten zeigt alles bisher Gefundene auf einmal an – nutzen Sie es später, um etwas umzubenennen oder zu korrigieren. Benennen funktioniert so oder so, aber ein benanntes Programm wird nur dann als auswählbares Programm angeboten, wenn \"Heruntergeladene Programme anbieten\" in den Geräteeinstellungen aktiviert ist.",
         "menu_options": {
           "cloud_guided": "Geführte Einrichtung",
           "cloud_manual": "Namen bearbeiten"

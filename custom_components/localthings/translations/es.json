@@ -103,7 +103,7 @@
       },
       "cloud_courses": {
         "title": "Ciclos descargados",
-        "description": "La configuración guiada te acompaña: en la app SmartThings (no en el dispositivo), abre este dispositivo y toca \"Descarga de Programas\" -- una fila aparte de \"Ciclo\", más abajo en la pantalla, y la que importa aquí. Elige un ciclo allí, vuelve aquí y ponle nombre en cuanto se detecte, uno por uno.\n\nEditar nombres muestra todo lo encontrado hasta ahora de una vez — úsalo más adelante para renombrar o corregir algo.{status}",
+        "description": "La configuración guiada te acompaña: en la app SmartThings (no en el dispositivo), abre este dispositivo y toca \"Descarga de Programas\" -- una fila aparte de \"Ciclo\", más abajo en la pantalla, y la que importa aquí. Elige un ciclo allí, vuelve aquí y ponle nombre en cuanto se detecte, uno por uno.\n\nEditar nombres muestra todo lo encontrado hasta ahora de una vez — úsalo más adelante para renombrar o corregir algo. Nombrar funciona en cualquier caso, pero un ciclo con nombre solo se ofrece como ciclo seleccionable mientras \"Ofrecer ciclos descargados\" esté activado en los ajustes del dispositivo.",
         "menu_options": {
           "cloud_guided": "Configuración guiada",
           "cloud_manual": "Editar nombres"

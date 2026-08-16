@@ -588,15 +588,26 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Refresh everything that depends on the cloud-course store or the
         cloud_courses_enabled option: the canonical-view cache (a newly
         learned/named program, or the option flipping, changes what
-        entity_resources() hands out) and the Repair.
+        entity_resources() hands out), the live entities, and the Repair.
 
         Also the __init__.py options-update listener's one hook (issue
         #364): toggling cloud_courses_enabled changes _cloud_view()'s
         answer without touching last_resources, so a canonical view cached
         from before the toggle would otherwise keep answering with it.
+
+        _push_cache_snapshot is what actually gets a change here in front
+        of a user, not just correct on the next read: select.py's
+        current_option comes from coordinator.data, which only moves on
+        async_set_updated_data, and nothing prompts Home Assistant to
+        re-read a live `options` property (cycle's callable options included)
+        without the state-changed signal that call sends. Without it, both
+        this and a name applied through apply_cloud_courses -- which has
+        called this same method since before this option existed -- would
+        sit stale until whatever poll or observe happened to run next.
         """
         self._canonical_cache.clear()
         self._refresh_cloud_course_issue()
+        self._push_cache_snapshot()
 
     @property
     def cloud_courses(self) -> CloudCourses:
@@ -685,12 +696,24 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         _observe_cloud_courses' recording, so turning the option back on
         re-evaluates against everything already learned instead of only
         what arrives afterward.
+
+        Also a no-op with an empty cloud_course_rep (issue #364): this now
+        runs from __init__.py's options-update listener on every entry
+        save, including an unrelated one (CONF_BYPASS_REMOTE_CONTROL, say)
+        made before this device's first poll or while it's rehydrated
+        offline. /course/vs/0 unpolled reads as no advertised slots, which
+        would otherwise delete a Repair a real poll had every reason to
+        raise, on evidence that only means "haven't asked the device yet."
+        Leaves whatever issue state already exists untouched rather than
+        guess either way; the next real poll re-evaluates for real.
         """
         issue_id = f"cloud_courses_{self._entry.entry_id}"
         if not self.cloud_courses_enabled:
             ir.async_delete_issue(self.hass, DOMAIN, issue_id)
             return
         rep = self.cloud_course_rep()
+        if not rep:
+            return
         record = self._cloud.snapshot()
         courses = cycle_options(self.canonical_resources(MAIN))
         pending = cloudcourse.undiscovered(rep, record, courses)

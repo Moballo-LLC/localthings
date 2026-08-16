@@ -1565,7 +1565,7 @@
       },
       "cloud_courses": {
         "title": "Download cycles",
-        "description": "Guided setup walks you through it: in the SmartThings app (not on the appliance itself), open this appliance and tap \"Download cycles\" -- a separate row from \"Cycle\", further down the screen, and the one that matters here. Pick a cycle there, then come back and name it as it's found, one at a time.\n\nEdit names shows everything found so far at once — use it to rename or correct something later.{status}",
+        "description": "Guided setup walks you through it: in the SmartThings app (not on the appliance itself), open this appliance and tap \"Download cycles\" -- a separate row from \"Cycle\", further down the screen, and the one that matters here. Pick a cycle there, then come back and name it as it's found, one at a time.\n\nEdit names shows everything found so far at once — use it to rename or correct something later. Naming works either way, but a named cycle is only offered as a selectable cycle while \"Offer downloaded cycles\" is on in Device settings.",
         "menu_options": {
           "cloud_guided": "Guided setup",
           "cloud_manual": "Edit names"

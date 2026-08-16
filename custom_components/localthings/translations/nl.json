@@ -1565,7 +1565,7 @@
       },
       "cloud_courses": {
         "title": "Gedownloade programma's",
-        "description": "Begeleide installatie loodst je stap voor stap: open in de SmartThings-app (niet op het apparaat zelf) dit apparaat en tik op \"Gedownloade programma's\" -- een aparte regel, los van \"Programma\", verderop op het scherm, en degene die hier telt. Kies daar een programma, kom terug en geef het een naam zodra het gevonden is, één voor één.\n\nNamen bewerken toont in één keer alles wat tot nu toe is gevonden — gebruik dit later om iets te hernoemen of te corrigeren.{status}",
+        "description": "Begeleide installatie loodst je stap voor stap: open in de SmartThings-app (niet op het apparaat zelf) dit apparaat en tik op \"Gedownloade programma's\" -- een aparte regel, los van \"Programma\", verderop op het scherm, en degene die hier telt. Kies daar een programma, kom terug en geef het een naam zodra het gevonden is, één voor één.\n\nNamen bewerken toont in één keer alles wat tot nu toe is gevonden — gebruik dit later om iets te hernoemen of te corrigeren. Namen geven werkt sowieso, maar een benoemd programma wordt alleen als selecteerbaar programma aangeboden zolang \"Gedownloade programma's aanbieden\" aan staat in de apparaatinstellingen.",
         "menu_options": {
           "cloud_guided": "Begeleide installatie",
           "cloud_manual": "Namen bewerken"

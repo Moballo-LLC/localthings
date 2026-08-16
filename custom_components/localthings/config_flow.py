@@ -1042,27 +1042,26 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
         """Entry point for download-cycle setup (issue #342).
 
         Guided setup is offered first because it is the only version of this
-        that a first-time user can confidently: it asks about a
+        that a first-time user can complete confidently: it asks about a
         program in the moment they select it, rather than about a list of hex
         ids some time later. The bulk form stays for renaming afterwards,
         which guided setup is bad at.
+
+        Setup still works with cloud_courses_enabled off (see
+        CONF_CLOUD_COURSES_ENABLED's own comment for why) -- someone who
+        wants to name one cycle without turning the feature fully on for
+        everything else still can (issue #364). The catalog's own
+        description covers that state directly rather than through a
+        description_placeholder built here: a placeholder is a literal
+        substitution HA never runs back through translation, so an
+        English sentence assembled in Python would show untranslated text
+        in every other locale -- unlike the SmartThings screen names
+        quoted elsewhere in this catalog, which stay English everywhere
+        because that's a third-party app's own label, not one of ours.
         """
-        coord = self._coordinator()
-        # Setup still works with the option off (see CONF_CLOUD_COURSES_
-        # ENABLED's comment for why) -- flagged here rather than blocked, so
-        # someone who wants to name one cycle without turning the feature
-        # fully on for everything else still can (issue #364).
-        status = (
-            ""
-            if coord is None or coord.cloud_courses_enabled
-            else '\n\n⚠️ "Offer downloaded cycles" is currently off in Device '
-            "settings, so anything named here won't appear as a selectable cycle until "
-            "it's turned back on. Naming still works and nothing already saved is lost."
-        )
         return self.async_show_menu(
             step_id="cloud_courses",
             menu_options=["cloud_guided", "cloud_manual"],
-            description_placeholders={"status": status},
         )
 
     @callback

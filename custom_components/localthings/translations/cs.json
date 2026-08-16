@@ -1565,7 +1565,7 @@
       },
       "cloud_courses": {
         "title": "Stažené cykly",
-        "description": "Průvodce nastavením vás provede: v aplikaci SmartThings (ne na samotném zařízení) otevřete toto zařízení a klepněte na „Stažené cykly“ -- samostatný řádek odlišný od „Cyklus“, níže na obrazovce, a ten, na kterém zde záleží. Vyberte tam cyklus, vraťte se sem a jakmile je nalezen, pojmenujte ho – jeden po druhém.\n\nÚprava názvů zobrazí vše dosud nalezené najednou – použijte ji později k přejmenování nebo opravě.{status}",
+        "description": "Průvodce nastavením vás provede: v aplikaci SmartThings (ne na samotném zařízení) otevřete toto zařízení a klepněte na „Stažené cykly“ -- samostatný řádek odlišný od „Cyklus“, níže na obrazovce, a ten, na kterém zde záleží. Vyberte tam cyklus, vraťte se sem a jakmile je nalezen, pojmenujte ho – jeden po druhém.\n\nÚprava názvů zobrazí vše dosud nalezené najednou – použijte ji později k přejmenování nebo opravě. Pojmenování funguje v obou případech, ale pojmenovaný cyklus se nabízí jako vybratelný cyklus jen tehdy, když je v nastavení zařízení zapnuto „Nabízet stažené cykly“.",
         "menu_options": {
           "cloud_guided": "Průvodce nastavením",
           "cloud_manual": "Upravit názvy"

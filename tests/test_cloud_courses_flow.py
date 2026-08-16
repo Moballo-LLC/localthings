@@ -332,6 +332,51 @@ async def test_disabling_does_not_stop_passive_observation(hass: HomeAssistant):
     assert entry.data[CONF_CLOUD_COURSES]["slots"]["55"]["blob"] == SPORTS
 
 
+async def test_disabling_pushes_the_new_current_option_immediately(hass: HomeAssistant):
+    """select.py's current_option reads coordinator.data, not
+    canonical_resources() -- clearing only the canonical-view cache left
+    it stale until whatever poll happened to run next. The fixture is
+    sitting on a one-time Jeans ('6B') override, so naming it is what
+    makes the live selection actually depend on the cloud store rather
+    than falling back to the raw course code."""
+    entry = _entry(hass)
+    coordinator = await _coordinator(hass, entry)
+    coordinator.apply_cloud_courses({"55": "Sports", "6B": "Jeans"}, "87")
+    await _flush(hass)
+    assert coordinator.data["cycle"] == "cloud:6B"
+
+    hass.config_entries.async_update_entry(entry, options={CONF_CLOUD_COURSES_ENABLED: False})
+    coordinator._on_cloud_courses_changed()
+
+    assert coordinator.data["cycle"] == "87"
+
+
+async def test_an_unrelated_option_save_before_first_poll_does_not_clear_a_real_repair(
+    hass: HomeAssistant,
+):
+    """_on_cloud_courses_changed now runs from __init__.py's options-update
+    listener on *every* entry save, not just a cloud-course-specific one --
+    including one made before this device's first poll (a fresh restart,
+    still rehydrating). /course/vs/0 unpolled reads as an empty rep, which
+    must not be treated as evidence that nothing is pending: that would
+    delete a Repair a real poll had every reason to raise."""
+    entry = _entry(hass)
+    coordinator = await _coordinator(hass, entry)
+    coordinator._refresh_cloud_course_issue()
+    await _flush(hass)
+    registry = ir.async_get(hass)
+    issue_id = f"cloud_courses_{entry.entry_id}"
+    assert registry.async_get_issue(DOMAIN, issue_id) is not None
+
+    # A second coordinator against the same entry, standing in for a
+    # restart that hasn't polled yet -- its own resource cache is empty.
+    fresh = LocalThingsCoordinator(hass, entry)
+    fresh._on_cloud_courses_changed()
+    await _flush(hass)
+
+    assert registry.async_get_issue(DOMAIN, issue_id) is not None
+
+
 # ---------------------------------------------------------------------------
 # Options flow
 # ---------------------------------------------------------------------------
