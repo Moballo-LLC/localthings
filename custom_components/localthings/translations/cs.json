@@ -1522,11 +1522,12 @@
       },
       "settings": {
         "title": "Nastavení zápisu pro dálkové ovládání",
-        "description": "Některá zařízení přijímají určité zápisy (např. výchozí dávkování pracího prostředku/aviváže v pračce) i když hlásí vypnuté dálkové ovládání. LocalThings ve výchozím nastavení blokuje každý zápis srozumitelnou chybou, kdykoli zařízení hlásí vypnuté dálkové ovládání, místo aby jej zařízení tiše odmítlo. Povolte toto pouze tehdy, pokud jste ověřili, že zápisy na tomto zařízení skutečně fungují i s vypnutým dálkovým ovládáním – jinak tuto srozumitelnou chybu vyměníte za tiché selhání.\n\nNěkterá zařízení hlásí režim, který nikdy neuvedou mezi podporovanými – například klimatizace běžící v režimu Quiet, která nabízí pouze Off/Sleep/Speed. LocalThings si každý takový režim zapamatuje a dál jej nabízí, takže zůstane volitelný, jakmile v něm zařízení alespoň jednou bylo. Vypnutím této volby se budou nabízet pouze režimy, které zařízení samo uvádí; k vymazání již zapamatovaných použijte „Zapomenout zapamatované režimy“ v předchozí nabídce.",
+        "description": "Některá zařízení přijímají určité zápisy (např. výchozí dávkování pracího prostředku/aviváže v pračce) i když hlásí vypnuté dálkové ovládání. LocalThings ve výchozím nastavení blokuje každý zápis srozumitelnou chybou, kdykoli zařízení hlásí vypnuté dálkové ovládání, místo aby jej zařízení tiše odmítlo. Povolte toto pouze tehdy, pokud jste ověřili, že zápisy na tomto zařízení skutečně fungují i s vypnutým dálkovým ovládáním – jinak tuto srozumitelnou chybu vyměníte za tiché selhání.\n\nNěkterá zařízení hlásí režim, který nikdy neuvedou mezi podporovanými – například klimatizace běžící v režimu Quiet, která nabízí pouze Off/Sleep/Speed. LocalThings si každý takový režim zapamatuje a dál jej nabízí, takže zůstane volitelný, jakmile v něm zařízení alespoň jednou bylo. Vypnutím této volby se budou nabízet pouze režimy, které zařízení samo uvádí; k vymazání již zapamatovaných použijte „Zapomenout zapamatované režimy“ v předchozí nabídce. Zařízení pro praní se staženými cykly z cloudu zde dostane připomenutí, jakmile nahlásí cyklus, který Home Assistant zatím nemůže nabídnout -- některá zařízení jej nahlásí, i když jste obrazovku „Stažené cykly“ v aplikaci SmartThings sami nikdy neotevřeli. Vypněte tuto možnost, chcete-li připomenutí zastavit a skrýt už pojmenované stažené cykly ze seznamu cyklů; nic z toho, co je již nastaveno, se neztratí, a po opětovném zapnutí se to hned znovu objeví.",
         "data": {
           "bypass_remote_control_lock": "Povolit zápis i když je dálkové ovládání hlášeno jako vypnuté",
           "finish_time_hysteresis_minutes": "Odhadovaný konec -- minimální změna (minuty)",
-          "learn_device_modes": "Pamatovat si režimy, které zařízení hlásí, ale neuvádí jako podporované"
+          "learn_device_modes": "Pamatovat si režimy, které zařízení hlásí, ale neuvádí jako podporované",
+          "cloud_courses_enabled": "Nabízet stažené cykly"
         }
       },
       "forget_learned_modes": {
@@ -1557,14 +1558,14 @@
       },
       "cloud_manual": {
         "title": "Stažené cykly",
-        "description": "Toto zařízení hlásí {total} stažených cyklů; {found} jich bylo dosud zjištěno.\n\nNastavení staženého cyklu jsou viditelná pouze tehdy, když je daný cyklus právě načtený, a zařízení nikdy nehlásí jejich názvy. Chcete-li doplnit chybějící ({pending}): na zařízení vyberte Stažený program, poté postupně projděte jednotlivé stažené programy, u každého se na pár sekund zastavte, a vraťte se sem.\n\nKaždému z nich zadejte název, který chcete vidět v Home Assistant. Necháte-li název prázdný, daný cyklus zůstane mimo seznam cyklů. Názvy musí být jedinečné.\n\nStažený program je program na tomto zařízení, který spouští stažený cyklus. Rozpoznává se automaticky, ale před použitím jej zde potvrďte: výběrem staženého cyklu se do zařízení zapíše tento kód programu.",
+        "description": "Toto zařízení hlásí {total} stažených cyklů; {found} jich bylo dosud zjištěno.\n\nNastavení staženého cyklu jsou viditelná pouze tehdy, když je daný cyklus právě načtený, a zařízení nikdy nehlásí jejich názvy. Chcete-li doplnit chybějící ({pending}): v aplikaci SmartThings (ne na samotném zařízení) otevřete toto zařízení a klepněte na „Stažené cykly“ -- samostatný řádek odlišný od „Cyklus“, níže na obrazovce, a ten, na kterém zde záleží. Poté postupně projděte jednotlivé stažené programy, u každého se na pár sekund zastavte, aby jej LocalThings zaznamenal, a vraťte se sem.\n\nKaždému z nich zadejte název, který chcete vidět v Home Assistant. Necháte-li název prázdný, daný cyklus zůstane mimo seznam cyklů. Názvy musí být jedinečné.\n\nStažený program je program na tomto zařízení, který spouští stažený cyklus. Rozpoznává se automaticky, ale před použitím jej zde potvrďte: výběrem staženého cyklu se do zařízení zapíše tento kód programu.",
         "data": {
           "download_course": "Kód programu „Stažený program“"
         }
       },
       "cloud_courses": {
         "title": "Stažené cykly",
-        "description": "Průvodce nastavením vás provede zařízením: na zařízení vyberte stažený cyklus a jakmile je nalezen, pojmenujte ho – jeden po druhém.\n\nÚprava názvů zobrazí vše dosud nalezené najednou – použijte ji později k přejmenování nebo opravě.",
+        "description": "Průvodce nastavením vás provede: v aplikaci SmartThings (ne na samotném zařízení) otevřete toto zařízení a klepněte na „Stažené cykly“ -- samostatný řádek odlišný od „Cyklus“, níže na obrazovce, a ten, na kterém zde záleží. Vyberte tam cyklus, vraťte se sem a jakmile je nalezen, pojmenujte ho – jeden po druhém.\n\nÚprava názvů zobrazí vše dosud nalezené najednou – použijte ji později k přejmenování nebo opravě. Pojmenování funguje v obou případech, ale pojmenovaný cyklus se nabízí jako vybratelný cyklus jen tehdy, když je v nastavení zařízení zapnuto „Nabízet stažené cykly“.",
         "menu_options": {
           "cloud_guided": "Průvodce nastavením",
           "cloud_manual": "Upravit názvy"
@@ -1575,7 +1576,7 @@
       },
       "cloud_name": {
         "title": "Pojmenujte tento cyklus",
-        "description": "Zařízení přepnulo na stažený cyklus (pozice {slot}) a hlásí zbývající čas {remaining}.\n\nZadejte název, který chcete vidět v Home Assistant, a poté na zařízení vyberte další cyklus. Necháte-li pole prázdné, tento cyklus zůstane mimo seznam.\n\nDosud pojmenováno ({named} z {total}): {named_list}\n\nNázvy musí být jedinečné. Toto okno můžete kdykoli zavřít – názvy se ukládají průběžně.",
+        "description": "Pozice „Stažené cykly“ zařízení nyní obsahuje nový cyklus (pozice {slot}) a hlásí zbývající čas {remaining}.\n\nZadejte název, který chcete vidět v Home Assistant, a poté na obrazovce „Stažené cykly“ v aplikaci SmartThings vyberte další cyklus, který ještě není označen jako „Stažený“. Necháte-li pole prázdné, tento cyklus zůstane mimo seznam.\n\nDosud pojmenováno ({named} z {total}): {named_list}\n\nNázvy musí být jedinečné. Toto okno můžete kdykoli zavřít – názvy se ukládají průběžně.",
         "data": {
           "name": "Název",
           "download_course": "Kód programu „Stažený program“"
@@ -1583,7 +1584,7 @@
       },
       "cloud_timeout": {
         "title": "Nebyl vybrán žádný cyklus",
-        "description": "Na zařízení nebylo nic vybráno. Ujistěte se, že je nastaveno na Stažený program, a poté postupně procházejte stažené programy.\n\nDosud pojmenováno ({named} z {total}): {named_list}\n\nVše dosud pojmenované je již uloženo.",
+        "description": "Na zařízení se nic nezměnilo. Ujistěte se, že jste v aplikaci SmartThings klepli na „Stažené cykly“ -- samostatný řádek odlišný od „Cyklus“, níže na obrazovce -- a vybrali cyklus, který ještě nebyl označen jako „Stažený“, a poté klepli na Hotovo.\n\nDosud pojmenováno ({named} z {total}): {named_list}\n\nVše dosud pojmenované je již uloženo.",
         "menu_options": {
           "cloud_guided": "Počkat znovu",
           "cloud_finish": "Dokončit"
@@ -1600,7 +1601,7 @@
       "not_loaded": "Toto zařízení ještě není připojeno. Zkuste to znovu, až se načte."
     },
     "progress": {
-      "cloud_wait": "Nyní na zařízení vyberte stažený cyklus.\n\nDosud pojmenováno ({named} z {total}): {named_list}\n\nToto okno můžete kdykoli zavřít – názvy se ukládají průběžně."
+      "cloud_wait": "V aplikaci SmartThings (ne na samotném zařízení) otevřete toto zařízení a klepněte na „Stažené cykly“ -- samostatný řádek odlišný od „Cyklus“, níže na obrazovce, který uvádí pouze cykly rozpoznatelné tímto způsobem. Vyberte cyklus, který ještě není označen jako „Stažený“, a klepněte na Hotovo.\n\nZařízení nemusí být poblíž ani spuštěné -- stačí, když je zapnuté a připojené.\n\nDosud pojmenováno ({named} z {total}): {named_list}\n\nToto okno můžete kdykoli zavřít – názvy se ukládají průběžně."
     }
   },
   "issues": {
@@ -1610,7 +1611,7 @@
     },
     "cloud_courses_undiscovered": {
       "title": "Stažené cykly nejsou nastaveny pro {device_name}",
-      "description": "{device_name} má {pending} z {total} stažených cyklů, které Home Assistant zatím nemůže nabídnout. Stažený cyklus lze použít až poté, co byl na zařízení zjištěn načtený a co jste mu dali název.\n\nChcete-li je nastavit, přejděte do Nastavení > Zařízení a služby > LocalThings > {device_name} > Konfigurovat > Stažené cykly a postupujte podle pokynů."
+      "description": "{device_name} má {pending} z {total} stažených cyklů, které Home Assistant zatím nemůže nabídnout. Stažený cyklus lze použít až poté, co byl na zařízení zjištěn načtený -- na obrazovce „Stažené cykly“ v aplikaci SmartThings, ne na obrazovce „Cyklus“ -- a co jste mu dali název.\n\nChcete-li je nastavit, přejděte do Nastavení > Zařízení a služby > LocalThings > {device_name} > Konfigurovat > Stažené cykly a postupujte podle pokynů.\n\nStažené cykly nepoužíváte? Přejděte místo toho do Konfigurovat > Nastavení zařízení a vypněte „Nabízet stažené cykly“, čímž toto připomenutí natrvalo umlčíte."
     }
   },
   "exceptions": {

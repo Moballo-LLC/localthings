@@ -42,6 +42,7 @@ from .const import (
     CONF_BYPASS_REMOTE_CONTROL,
     CONF_CA_CERT_PEM,
     CONF_CA_KEY_PEM,
+    CONF_CLOUD_COURSES_ENABLED,
     CONF_DEVICE_TYPE,
     CONF_FINISH_TIME_HYSTERESIS_MINUTES,
     CONF_HOST,
@@ -52,6 +53,7 @@ from .const import (
     CONF_MODEL,
     CONF_PORT,
     CONF_SERIAL,
+    DEFAULT_CLOUD_COURSES_ENABLED,
     DEFAULT_FINISH_TIME_HYSTERESIS_MINUTES,
     DEFAULT_LEARN_MODES,
     DOMAIN,
@@ -991,6 +993,12 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
                             CONF_LEARN_MODES, DEFAULT_LEARN_MODES
                         ),
                     ): bool,
+                    vol.Required(
+                        CONF_CLOUD_COURSES_ENABLED,
+                        default=self.config_entry.options.get(
+                            CONF_CLOUD_COURSES_ENABLED, DEFAULT_CLOUD_COURSES_ENABLED
+                        ),
+                    ): bool,
                 }
             ),
         )
@@ -1038,6 +1046,18 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
         program in the moment they select it, rather than about a list of hex
         ids some time later. The bulk form stays for renaming afterwards,
         which guided setup is bad at.
+
+        Setup still works with cloud_courses_enabled off (see
+        CONF_CLOUD_COURSES_ENABLED's own comment for why) -- someone who
+        wants to name one cycle without turning the feature fully on for
+        everything else still can (issue #364). The catalog's own
+        description covers that state directly rather than through a
+        description_placeholder built here: a placeholder is a literal
+        substitution HA never runs back through translation, so an
+        English sentence assembled in Python would show untranslated text
+        in every other locale -- unlike the SmartThings screen names
+        quoted elsewhere in this catalog, which stay English everywhere
+        because that's a third-party app's own label, not one of ours.
         """
         return self.async_show_menu(
             step_id="cloud_courses",

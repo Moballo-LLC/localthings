@@ -1522,11 +1522,12 @@
       },
       "settings": {
         "title": "Device settings",
-        "description": "Some devices accept certain writes (e.g. default detergent/softener dosing on a washer) even while reporting remote control off. By default, LocalThings blocks every write with a clear error whenever a device reports remote control off, rather than letting the device silently reject it. Only enable this if you've confirmed writes actually work on this device with remote control off -- otherwise you'll trade that clear error for a silent failure.\n\nEstimated finish time is recomputed from the device's remaining-time estimate on every poll, which can drift or get revised by a minute or two between updates. Raise the minimum-change value below to hold the sensor at its last reported value until the estimate moves by at least that many minutes, cutting down on history/logbook noise. Set it to 0 to report every computed change.\n\nSome models report a mode they never list as supported -- an air conditioner sitting in Quiet that only offers Off/Sleep/Speed, for instance. LocalThings remembers any such mode it sees and keeps offering it, so it stays selectable once the device has been in it at least once. Turn this off to offer only what the device advertises; use \"Forget remembered modes\" on the previous screen to clear what has already been remembered.",
+        "description": "Some devices accept certain writes (e.g. default detergent/softener dosing on a washer) even while reporting remote control off. By default, LocalThings blocks every write with a clear error whenever a device reports remote control off, rather than letting the device silently reject it. Only enable this if you've confirmed writes actually work on this device with remote control off -- otherwise you'll trade that clear error for a silent failure.\n\nEstimated finish time is recomputed from the device's remaining-time estimate on every poll, which can drift or get revised by a minute or two between updates. Raise the minimum-change value below to hold the sensor at its last reported value until the estimate moves by at least that many minutes, cutting down on history/logbook noise. Set it to 0 to report every computed change.\n\nSome models report a mode they never list as supported -- an air conditioner sitting in Quiet that only offers Off/Sleep/Speed, for instance. LocalThings remembers any such mode it sees and keeps offering it, so it stays selectable once the device has been in it at least once. Turn this off to offer only what the device advertises; use \"Forget remembered modes\" on the previous screen to clear what has already been remembered.\n\nA laundry device with cloud-downloaded cycles gets a reminder here once it's reported one Home Assistant can't offer yet -- some devices report one even if you've never opened the SmartThings app's \"Download cycles\" screen yourself. Turn this off to stop that reminder and hide any already-named downloaded cycles from the cycle list; nothing already set up is lost, and turning it back on brings it right back.",
         "data": {
           "bypass_remote_control_lock": "Allow writes even when remote control is reported off",
           "finish_time_hysteresis_minutes": "Estimated finish -- minimum change (minutes)",
-          "learn_device_modes": "Remember modes the device reports but doesn't advertise"
+          "learn_device_modes": "Remember modes the device reports but doesn't advertise",
+          "cloud_courses_enabled": "Offer downloaded cycles"
         }
       },
       "forget_learned_modes": {
@@ -1557,14 +1558,14 @@
       },
       "cloud_manual": {
         "title": "Download cycles",
-        "description": "This appliance reports {total} downloaded cycle(s); {found} have been seen so far.\n\nA downloaded cycle's settings are only visible while that cycle is loaded, and the appliance never reports their names. To add the missing ones ({pending}): on the appliance, select the Download cycle, then step through each downloaded program in turn, pausing a few seconds on each, and come back here.\n\nGive each one the name you want to see in Home Assistant. Leave a name blank to keep that cycle out of the cycle list. Names must be unique.\n\nThe Download cycle is the course on this appliance that runs a downloaded program. It is detected automatically, but confirm it here before use: selecting a downloaded cycle writes this course code to the appliance.",
+        "description": "This appliance reports {total} downloaded cycle(s); {found} have been seen so far.\n\nA downloaded cycle's settings are only visible while that cycle is loaded, and the appliance never reports their names. To add the missing ones ({pending}): in the SmartThings app (not on the appliance itself), open this appliance and tap \"Download cycles\" -- a separate row from \"Cycle\", further down the screen, and the one that matters here. Step through each downloaded program in turn, pausing a few seconds on each so LocalThings can see it, then come back here.\n\nGive each one the name you want to see in Home Assistant. Leave a name blank to keep that cycle out of the cycle list. Names must be unique.\n\nThe Download cycle is the course on this appliance that runs a downloaded program. It is detected automatically, but confirm it here before use: selecting a downloaded cycle writes this course code to the appliance.",
         "data": {
           "download_course": "Download cycle course code"
         }
       },
       "cloud_courses": {
         "title": "Download cycles",
-        "description": "Guided setup walks the appliance with you: select a downloaded cycle on the appliance and name it as it's found, one at a time.\n\nEdit names shows everything found so far at once — use it to rename or correct something later.",
+        "description": "Guided setup walks you through it: in the SmartThings app (not on the appliance itself), open this appliance and tap \"Download cycles\" -- a separate row from \"Cycle\", further down the screen, and the one that matters here. Pick a cycle there, then come back and name it as it's found, one at a time.\n\nEdit names shows everything found so far at once — use it to rename or correct something later. Naming works either way, but a named cycle is only offered as a selectable cycle while \"Offer downloaded cycles\" is on in Device settings.",
         "menu_options": {
           "cloud_guided": "Guided setup",
           "cloud_manual": "Edit names"
@@ -1575,7 +1576,7 @@
       },
       "cloud_name": {
         "title": "Name this cycle",
-        "description": "The appliance switched to a downloaded cycle (slot {slot}) and reports {remaining} remaining.\n\nGive it the name you want to see in Home Assistant, then select the next one on the appliance. Leave it blank to keep this cycle out of the list.\n\nNamed so far ({named} of {total}): {named_list}\n\nNames must be unique. You can close this dialog whenever you like — names are saved as you go.",
+        "description": "The appliance's \"Download cycles\" slot now holds a new cycle (slot {slot}) and reports {remaining} remaining.\n\nGive it the name you want to see in Home Assistant, then in the SmartThings app's \"Download cycles\" screen pick the next one that isn't already marked \"Downloaded\". Leave it blank to keep this cycle out of the list.\n\nNamed so far ({named} of {total}): {named_list}\n\nNames must be unique. You can close this dialog whenever you like — names are saved as you go.",
         "data": {
           "name": "Name",
           "download_course": "Download cycle course code"
@@ -1583,7 +1584,7 @@
       },
       "cloud_timeout": {
         "title": "No cycle selected",
-        "description": "Nothing was selected on the appliance. Make sure it's set to the Download cycle, then step through the downloaded programs.\n\nNamed so far ({named} of {total}): {named_list}\n\nEverything named so far is already saved.",
+        "description": "Nothing changed on the appliance. Make sure you tapped \"Download cycles\" in the SmartThings app -- a separate row from \"Cycle\", further down the screen -- and picked one that wasn't already marked \"Downloaded\", then tapped Done.\n\nNamed so far ({named} of {total}): {named_list}\n\nEverything named so far is already saved.",
         "menu_options": {
           "cloud_guided": "Wait again",
           "cloud_finish": "Finish"
@@ -1600,7 +1601,7 @@
       "not_loaded": "This device isn't connected yet. Try again once it has loaded."
     },
     "progress": {
-      "cloud_wait": "Select a downloaded cycle on the appliance now.\n\nNamed so far ({named} of {total}): {named_list}\n\nYou can close this dialog at any time — names are saved as you go."
+      "cloud_wait": "In the SmartThings app (not on the appliance itself), open this appliance and tap \"Download cycles\" -- a separate row from \"Cycle\", further down the screen, that lists only the cycles this can detect. Pick one that isn't already marked \"Downloaded\", then tap Done.\n\nThe appliance doesn't need to be nearby or running the cycle -- just powered on and connected.\n\nNamed so far ({named} of {total}): {named_list}\n\nYou can close this dialog at any time — names are saved as you go."
     }
   },
   "issues": {
@@ -1610,7 +1611,7 @@
     },
     "cloud_courses_undiscovered": {
       "title": "Downloaded cycles not set up for {device_name}",
-      "description": "{device_name} has {pending} of {total} downloaded cycle(s) that Home Assistant can't offer yet. A downloaded cycle can only be used once the appliance has been seen with it loaded and you've given it a name.\n\nTo set them up, go to Settings > Devices & Services > LocalThings > {device_name} > Configure > Download cycles and follow the instructions there."
+      "description": "{device_name} has {pending} of {total} downloaded cycle(s) that Home Assistant can't offer yet. A downloaded cycle can only be used once the appliance has been seen with it loaded -- in the SmartThings app's \"Download cycles\" screen, not the \"Cycle\" one -- and you've given it a name.\n\nTo set them up, go to Settings > Devices & Services > LocalThings > {device_name} > Configure > Download cycles and follow the instructions there.\n\nDon't use downloaded cycles? Go to Configure > Device settings instead and turn off \"Offer downloaded cycles\" to silence this reminder for good."
     }
   },
   "exceptions": {

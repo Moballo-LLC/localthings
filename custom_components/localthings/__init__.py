@@ -317,6 +317,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _async_close_on_stop)
     )
 
+    # Nothing else reacts to an options-flow save (issue #364): the cloud-
+    # courses Repair and canonical-view cache are only refreshed from
+    # _on_cloud_courses_changed, which only runs when a poll/observe
+    # actually reports new data. Without this, turning "Download cycles"
+    # off would leave an already-open Repair sitting there -- and an
+    # already-named program still offered as a cycle -- until the next
+    # unrelated change happened to fire it, indistinguishable from the
+    # toggle not working. Every other option (CONF_LEARN_MODES,
+    # CONF_BYPASS_REMOTE_CONTROL, ...) is read live on its own next use and
+    # has no comparable standing state to refresh, so this listener exists
+    # for cloud courses specifically rather than as a general
+    # options-changed hook. Must be a coroutine function -- HA wraps
+    # whatever an update listener returns in async_create_task, which raises
+    # on a plain callback's None.
+    async def _async_options_updated(_hass: HomeAssistant, _entry: ConfigEntry) -> None:
+        coordinator._on_cloud_courses_changed()
+
+    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 

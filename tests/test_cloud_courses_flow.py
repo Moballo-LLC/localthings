@@ -22,7 +22,11 @@ from homeassistant.helpers import issue_registry as ir
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.localthings import cloudcourse
-from custom_components.localthings.const import CONF_CLOUD_COURSES, DOMAIN
+from custom_components.localthings.const import (
+    CONF_CLOUD_COURSES,
+    CONF_CLOUD_COURSES_ENABLED,
+    DOMAIN,
+)
 from custom_components.localthings.coordinator import LocalThingsCoordinator
 from custom_components.localthings.registry.entities import SelectDesc
 from custom_components.localthings.registry.subdevices import MAIN
@@ -55,10 +59,11 @@ async def _flush(hass: HomeAssistant) -> None:
     await hass.async_block_till_done()
 
 
-def _entry(hass: HomeAssistant, data=None) -> MockConfigEntry:
+def _entry(hass: HomeAssistant, data=None, options=None) -> MockConfigEntry:
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={**ENTRY_DATA, **(data or {})},
+        options=options or {},
         unique_id="localthings_CLOUD-COURSE-TEST",
     )
     entry.add_to_hass(hass)
@@ -238,6 +243,138 @@ async def test_a_malformed_entry_record_does_not_block_setup(hass: HomeAssistant
     coordinator = await _coordinator(hass, entry)
     # Dropped on restore, then relearned from the live poll.
     assert coordinator.cloud_courses.snapshot()["slots"]["55"]["blob"] == SPORTS
+
+
+# ---------------------------------------------------------------------------
+# cloud_courses_enabled toggle (issue #364) -- some devices report a
+# downloaded program's payload before the owner has ever meant to use the
+# feature, so the Repair and the entity offering need a way to be turned
+# off entirely without discarding what was already learned.
+# ---------------------------------------------------------------------------
+
+
+def test_cloud_courses_enabled_defaults_to_true(hass: HomeAssistant):
+    coordinator = LocalThingsCoordinator(hass, _entry(hass))
+    assert coordinator.cloud_courses_enabled is True
+
+
+async def test_disabling_suppresses_the_repair(hass: HomeAssistant):
+    entry = _entry(hass, options={CONF_CLOUD_COURSES_ENABLED: False})
+    coordinator = await _coordinator(hass, entry)
+    coordinator._refresh_cloud_course_issue()
+    await _flush(hass)
+
+    registry = ir.async_get(hass)
+    assert registry.async_get_issue(DOMAIN, f"cloud_courses_{entry.entry_id}") is None
+
+
+async def test_disabling_clears_an_already_open_repair(hass: HomeAssistant):
+    """Turning the option off has to reach a Repair that's already showing,
+    not just prevent a future one -- otherwise the toggle looks broken to
+    anyone who flips it after already seeing the nudge."""
+    entry = _entry(hass)
+    coordinator = await _coordinator(hass, entry)
+    coordinator._refresh_cloud_course_issue()
+    await _flush(hass)
+    registry = ir.async_get(hass)
+    issue_id = f"cloud_courses_{entry.entry_id}"
+    assert registry.async_get_issue(DOMAIN, issue_id) is not None
+
+    hass.config_entries.async_update_entry(entry, options={CONF_CLOUD_COURSES_ENABLED: False})
+    coordinator._refresh_cloud_course_issue()
+    await _flush(hass)
+
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_disabling_hides_an_already_named_program_from_the_cycle_select(
+    hass: HomeAssistant,
+):
+    """`coordinator._on_cloud_courses_changed()` after the option write
+    stands in for __init__.py's options-update listener, which this
+    lightweight coordinator (no async_setup_entry) never registers --
+    see test_disabling_clears_an_already_open_repair for the same shape."""
+    entry = _entry(hass)
+    coordinator = await _coordinator(hass, entry)
+    coordinator.apply_cloud_courses({"55": "Sports"}, "87")
+    await _flush(hass)
+    assert "cloud:55" in _cycle_options(coordinator)
+
+    hass.config_entries.async_update_entry(entry, options={CONF_CLOUD_COURSES_ENABLED: False})
+    coordinator._on_cloud_courses_changed()
+    assert "cloud:55" not in _cycle_options(coordinator)
+    # Not discarded -- the store itself is untouched, only what
+    # entity_resources() hands the registry changes.
+    assert coordinator.cloud_courses.named() == {"55": "Sports"}
+    assert entry.data[CONF_CLOUD_COURSES]["slots"]["55"]["name"] == "Sports"
+
+
+async def test_re_enabling_immediately_restores_the_offering(hass: HomeAssistant):
+    entry = _entry(hass, options={CONF_CLOUD_COURSES_ENABLED: False})
+    coordinator = await _coordinator(hass, entry)
+    coordinator.apply_cloud_courses({"55": "Sports"}, "87")
+    await _flush(hass)
+    assert "cloud:55" not in _cycle_options(coordinator)
+
+    hass.config_entries.async_update_entry(entry, options={CONF_CLOUD_COURSES_ENABLED: True})
+    coordinator._on_cloud_courses_changed()
+    assert "cloud:55" in _cycle_options(coordinator)
+
+
+async def test_disabling_does_not_stop_passive_observation(hass: HomeAssistant):
+    """Guided/manual setup depend on live observation to detect a newly
+    selected program at all -- see CONF_CLOUD_COURSES_ENABLED's own comment
+    for why the option leaves this running rather than gating it too."""
+    entry = _entry(hass, options={CONF_CLOUD_COURSES_ENABLED: False})
+    coordinator = await _coordinator(hass, entry)
+
+    assert coordinator.cloud_courses.snapshot()["slots"]["55"]["blob"] == SPORTS
+    assert entry.data[CONF_CLOUD_COURSES]["slots"]["55"]["blob"] == SPORTS
+
+
+async def test_disabling_pushes_the_new_current_option_immediately(hass: HomeAssistant):
+    """select.py's current_option reads coordinator.data, not
+    canonical_resources() -- clearing only the canonical-view cache left
+    it stale until whatever poll happened to run next. The fixture is
+    sitting on a one-time Jeans ('6B') override, so naming it is what
+    makes the live selection actually depend on the cloud store rather
+    than falling back to the raw course code."""
+    entry = _entry(hass)
+    coordinator = await _coordinator(hass, entry)
+    coordinator.apply_cloud_courses({"55": "Sports", "6B": "Jeans"}, "87")
+    await _flush(hass)
+    assert coordinator.data["cycle"] == "cloud:6B"
+
+    hass.config_entries.async_update_entry(entry, options={CONF_CLOUD_COURSES_ENABLED: False})
+    coordinator._on_cloud_courses_changed()
+
+    assert coordinator.data["cycle"] == "87"
+
+
+async def test_an_unrelated_option_save_before_first_poll_does_not_clear_a_real_repair(
+    hass: HomeAssistant,
+):
+    """_on_cloud_courses_changed now runs from __init__.py's options-update
+    listener on *every* entry save, not just a cloud-course-specific one --
+    including one made before this device's first poll (a fresh restart,
+    still rehydrating). /course/vs/0 unpolled reads as an empty rep, which
+    must not be treated as evidence that nothing is pending: that would
+    delete a Repair a real poll had every reason to raise."""
+    entry = _entry(hass)
+    coordinator = await _coordinator(hass, entry)
+    coordinator._refresh_cloud_course_issue()
+    await _flush(hass)
+    registry = ir.async_get(hass)
+    issue_id = f"cloud_courses_{entry.entry_id}"
+    assert registry.async_get_issue(DOMAIN, issue_id) is not None
+
+    # A second coordinator against the same entry, standing in for a
+    # restart that hasn't polled yet -- its own resource cache is empty.
+    fresh = LocalThingsCoordinator(hass, entry)
+    fresh._on_cloud_courses_changed()
+    await _flush(hass)
+
+    assert registry.async_get_issue(DOMAIN, issue_id) is not None
 
 
 # ---------------------------------------------------------------------------

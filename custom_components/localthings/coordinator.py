@@ -30,6 +30,7 @@ from .cloudcourse import persist as cloud_persist
 from .const import (
     CONF_BYPASS_REMOTE_CONTROL,
     CONF_CLOUD_COURSES,
+    CONF_CLOUD_COURSES_ENABLED,
     CONF_DEVICE_TYPE,
     CONF_HOST,
     CONF_LEAF_CERT_PEM,
@@ -40,6 +41,7 @@ from .const import (
     CONF_MODEL,
     CONF_PORT,
     CONF_SERIAL,
+    DEFAULT_CLOUD_COURSES_ENABLED,
     DEFAULT_LEARN_MODES,
     DEVICE_SUPPORT_ISSUE_URL,
     DOMAIN,
@@ -379,11 +381,20 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         rep = snapshot.get(cloudcourse.COURSE_HREF)
         if rep is None:
             return snapshot
-        view = self._cloud.view()
+        view = self._cloud_view()
         if not view:
             return snapshot
         snapshot[cloudcourse.COURSE_HREF] = {**rep, cloudcourse.FIELD: view}
         return snapshot
+
+    def _cloud_view(self) -> dict:
+        """`self._cloud.view()`, or nothing while cloud_courses_enabled is
+        off (issue #364) -- entity_resources/entity_rep's one gate so a
+        previously-named program stops being offered the moment the option
+        is turned off, symmetric with how it starts being offered again the
+        moment it's turned back on. The store itself is untouched either
+        way; only what these two hand to the registry changes."""
+        return self._cloud.view() if self.cloud_courses_enabled else {}
 
     def entity_rep(self, href: str) -> dict:
         """One href's rep as descriptors see it -- `resource()` plus the
@@ -393,7 +404,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         rep = self.resource(href)
         if href != cloudcourse.COURSE_HREF or not rep:
             return rep
-        view = self._cloud.view()
+        view = self._cloud_view()
         return {**rep, cloudcourse.FIELD: view} if view else rep
 
     def device_resources(self, subdevice: Subdevice) -> dict[str, dict]:
@@ -540,15 +551,29 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     # Cloud "Download" programs (issue #342) -- see cloudcourse.py
     # ------------------------------------------------------------------
 
+    @property
+    def cloud_courses_enabled(self) -> bool:
+        """Whether downloaded programs are offered as cycles and nagged
+        about via the "not set up yet" Repair (issue #364).
+
+        Deliberately does NOT gate `_observe_cloud_courses` below -- see
+        CONF_CLOUD_COURSES_ENABLED's own comment for why passive recording
+        keeps running (cheap, and what guided/manual setup depend on)
+        while only the Repair and the entity offering stop.
+        """
+        return bool(
+            self._entry.options.get(CONF_CLOUD_COURSES_ENABLED, DEFAULT_CLOUD_COURSES_ENABLED)
+        )
+
     def _observe_cloud_courses(self, rep: dict) -> None:
         """Learn a downloaded program's replay payload from one applied
         /course/vs/0 rep. Runs on whichever thread applied the update, so
         both the persist and the Repairs refresh go through hass.add_job.
 
-        Unlike learned modes this has no opt-out option: it records only
+        Always records, regardless of cloud_courses_enabled: it records only
         what the appliance itself reports about programs it itself
-        advertises, and nothing is offered in the UI until the user names it.
-        """
+        advertises, and nothing is offered in the UI until both the option
+        is on and the user has named it."""
         if not self._cloud.observe(rep):
             return
         self.hass.add_job(self._persist_cloud_courses)
@@ -556,9 +581,33 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     @callback
     def _persist_cloud_courses(self) -> None:
         cloud_persist(self.hass, self._entry, self._cloud.snapshot())
-        # A newly learned program changes what entity_resources() hands out.
+        self._on_cloud_courses_changed()
+
+    @callback
+    def _on_cloud_courses_changed(self) -> None:
+        """Refresh everything that depends on the cloud-course store or the
+        cloud_courses_enabled option: the canonical-view cache (a newly
+        learned/named program, or the option flipping, changes what
+        entity_resources() hands out), the live entities, and the Repair.
+
+        Also the __init__.py options-update listener's one hook (issue
+        #364): toggling cloud_courses_enabled changes _cloud_view()'s
+        answer without touching last_resources, so a canonical view cached
+        from before the toggle would otherwise keep answering with it.
+
+        _push_cache_snapshot is what actually gets a change here in front
+        of a user, not just correct on the next read: select.py's
+        current_option comes from coordinator.data, which only moves on
+        async_set_updated_data, and nothing prompts Home Assistant to
+        re-read a live `options` property (cycle's callable options included)
+        without the state-changed signal that call sends. Without it, both
+        this and a name applied through apply_cloud_courses -- which has
+        called this same method since before this option existed -- would
+        sit stale until whatever poll or observe happened to run next.
+        """
         self._canonical_cache.clear()
         self._refresh_cloud_course_issue()
+        self._push_cache_snapshot()
 
     @property
     def cloud_courses(self) -> CloudCourses:
@@ -638,9 +687,33 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         nothing they do in Home Assistant could clear it. Running one
         downloaded program is what turns the nudge on, and naming them is
         what turns it off.
+
+        Also gated on cloud_courses_enabled (issue #364): a device can seed a
+        slot's payload before the owner has ever meant to use the feature --
+        reporters observed one auto-populate from a SmartThings-provided
+        example -- so "at least one payload seen" alone isn't proof of
+        intent to use it. Checked here rather than skipping
+        _observe_cloud_courses' recording, so turning the option back on
+        re-evaluates against everything already learned instead of only
+        what arrives afterward.
+
+        Also a no-op with an empty cloud_course_rep (issue #364): this now
+        runs from __init__.py's options-update listener on every entry
+        save, including an unrelated one (CONF_BYPASS_REMOTE_CONTROL, say)
+        made before this device's first poll or while it's rehydrated
+        offline. /course/vs/0 unpolled reads as no advertised slots, which
+        would otherwise delete a Repair a real poll had every reason to
+        raise, on evidence that only means "haven't asked the device yet."
+        Leaves whatever issue state already exists untouched rather than
+        guess either way; the next real poll re-evaluates for real.
         """
         issue_id = f"cloud_courses_{self._entry.entry_id}"
+        if not self.cloud_courses_enabled:
+            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+            return
         rep = self.cloud_course_rep()
+        if not rep:
+            return
         record = self._cloud.snapshot()
         courses = cycle_options(self.canonical_resources(MAIN))
         pending = cloudcourse.undiscovered(rep, record, courses)

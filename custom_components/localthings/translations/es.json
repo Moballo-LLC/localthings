@@ -60,11 +60,12 @@
       },
       "settings": {
         "title": "Ajustes del dispositivo",
-        "description": "Algunos dispositivos aceptan ciertas escrituras (p. ej. la dosificación por defecto de detergente/suavizante en una lavadora) incluso cuando informan de control remoto desactivado. Por defecto, LocalThings bloquea cada escritura con un error claro cuando un dispositivo informa de control remoto desactivado, en lugar de dejar que el dispositivo la rechace en silencio. Solo actívalo si has confirmado que las escrituras funcionan de verdad en este dispositivo con el control remoto desactivado; si no, cambiarás ese error claro por un fallo silencioso.\n\nLa hora estimada de finalización se recalcula a partir de la estimación de tiempo restante del dispositivo en cada sondeo, que puede variar o revisarse uno o dos minutos entre actualizaciones. Sube el valor de cambio mínimo siguiente para mantener el sensor en su último valor notificado hasta que la estimación varíe al menos esa cantidad de minutos, reduciendo el ruido en el historial/registro de actividad. Ponlo a 0 para notificar cada cambio calculado.\n\nAlgunos modelos notifican un modo que nunca incluyen entre los admitidos: por ejemplo, un aire acondicionado en modo Quiet que solo ofrece Off/Sleep/Speed. LocalThings recuerda cualquier modo así que detecte y lo sigue ofreciendo, de modo que quede seleccionable en cuanto el dispositivo haya estado en él al menos una vez. Desactívalo para ofrecer solo lo que el dispositivo anuncia; usa «Olvidar los modos recordados» en la pantalla anterior para borrar lo ya recordado.",
+        "description": "Algunos dispositivos aceptan ciertas escrituras (p. ej. la dosificación por defecto de detergente/suavizante en una lavadora) incluso cuando informan de control remoto desactivado. Por defecto, LocalThings bloquea cada escritura con un error claro cuando un dispositivo informa de control remoto desactivado, en lugar de dejar que el dispositivo la rechace en silencio. Solo actívalo si has confirmado que las escrituras funcionan de verdad en este dispositivo con el control remoto desactivado; si no, cambiarás ese error claro por un fallo silencioso.\n\nLa hora estimada de finalización se recalcula a partir de la estimación de tiempo restante del dispositivo en cada sondeo, que puede variar o revisarse uno o dos minutos entre actualizaciones. Sube el valor de cambio mínimo siguiente para mantener el sensor en su último valor notificado hasta que la estimación varíe al menos esa cantidad de minutos, reduciendo el ruido en el historial/registro de actividad. Ponlo a 0 para notificar cada cambio calculado.\n\nAlgunos modelos notifican un modo que nunca incluyen entre los admitidos: por ejemplo, un aire acondicionado en modo Quiet que solo ofrece Off/Sleep/Speed. LocalThings recuerda cualquier modo así que detecte y lo sigue ofreciendo, de modo que quede seleccionable en cuanto el dispositivo haya estado en él al menos una vez. Desactívalo para ofrecer solo lo que el dispositivo anuncia; usa «Olvidar los modos recordados» en la pantalla anterior para borrar lo ya recordado. Un dispositivo de lavandería con ciclos descargados de la nube recibe aquí un aviso en cuanto informa de uno que Home Assistant aún no puede ofrecer -- algunos dispositivos informan de uno incluso si nunca has abierto tú mismo la pantalla \"Descarga de Programas\" de la app SmartThings. Desactiva esto para detener ese aviso y ocultar los ciclos descargados ya nombrados de la lista de ciclos; no se pierde nada de lo ya configurado, y al volver a activarlo reaparece de inmediato.",
         "data": {
           "bypass_remote_control_lock": "Permitir escrituras incluso cuando el control remoto se notifica como desactivado",
           "finish_time_hysteresis_minutes": "Finalización estimada -- cambio mínimo (minutos)",
-          "learn_device_modes": "Recordar los modos que el dispositivo notifica pero no anuncia"
+          "learn_device_modes": "Recordar los modos que el dispositivo notifica pero no anuncia",
+          "cloud_courses_enabled": "Ofrecer ciclos descargados"
         }
       },
       "forget_learned_modes": {
@@ -95,14 +96,14 @@
       },
       "cloud_manual": {
         "title": "Ciclos descargados",
-        "description": "Este dispositivo informa de {total} ciclos descargados; se han detectado {found} hasta ahora.\n\nLos ajustes de un ciclo descargado solo son visibles mientras ese ciclo está cargado, y el dispositivo nunca informa de sus nombres. Para añadir los que faltan ({pending}): en el dispositivo, selecciona Descarga de Programas y ve pasando por cada programa descargado uno a uno, deteniéndote unos segundos en cada uno, y vuelve aquí.\n\nDa a cada uno el nombre que quieras ver en Home Assistant. Deja un nombre en blanco para mantener ese ciclo fuera de la lista de ciclos. Los nombres deben ser únicos.\n\nDescarga de Programas es el programa de este dispositivo que ejecuta un ciclo descargado. Se detecta automáticamente, pero confírmalo aquí antes de usarlo: seleccionar un ciclo descargado escribe este código de programa en el dispositivo.",
+        "description": "Este dispositivo informa de {total} ciclos descargados; se han detectado {found} hasta ahora.\n\nLos ajustes de un ciclo descargado solo son visibles mientras ese ciclo está cargado, y el dispositivo nunca informa de sus nombres. Para añadir los que faltan ({pending}): en la app SmartThings (no en el dispositivo), abre este dispositivo y toca \"Descarga de Programas\" -- una fila aparte de \"Ciclo\", más abajo en la pantalla, y la que importa aquí. Ve pasando por cada programa descargado uno a uno, deteniéndote unos segundos en cada uno para que LocalThings pueda detectarlo, y vuelve aquí.\n\nDa a cada uno el nombre que quieras ver en Home Assistant. Deja un nombre en blanco para mantener ese ciclo fuera de la lista de ciclos. Los nombres deben ser únicos.\n\nDescarga de Programas es el programa de este dispositivo que ejecuta un ciclo descargado. Se detecta automáticamente, pero confírmalo aquí antes de usarlo: seleccionar un ciclo descargado escribe este código de programa en el dispositivo.",
         "data": {
           "download_course": "Código de programa de Descarga de Programas"
         }
       },
       "cloud_courses": {
         "title": "Ciclos descargados",
-        "description": "La configuración guiada te acompaña con el dispositivo: selecciona un ciclo descargado en el dispositivo y ponle nombre en cuanto se detecte, uno por uno.\n\nEditar nombres muestra todo lo encontrado hasta ahora de una vez — úsalo más adelante para renombrar o corregir algo.",
+        "description": "La configuración guiada te acompaña: en la app SmartThings (no en el dispositivo), abre este dispositivo y toca \"Descarga de Programas\" -- una fila aparte de \"Ciclo\", más abajo en la pantalla, y la que importa aquí. Elige un ciclo allí, vuelve aquí y ponle nombre en cuanto se detecte, uno por uno.\n\nEditar nombres muestra todo lo encontrado hasta ahora de una vez — úsalo más adelante para renombrar o corregir algo. Nombrar funciona en cualquier caso, pero un ciclo con nombre solo se ofrece como ciclo seleccionable mientras \"Ofrecer ciclos descargados\" esté activado en los ajustes del dispositivo.",
         "menu_options": {
           "cloud_guided": "Configuración guiada",
           "cloud_manual": "Editar nombres"
@@ -113,7 +114,7 @@
       },
       "cloud_name": {
         "title": "Nombra este ciclo",
-        "description": "El dispositivo cambió a un ciclo descargado (ranura {slot}) e informa de {remaining} restantes.\n\nDale el nombre que quieras ver en Home Assistant y luego selecciona el siguiente en el dispositivo. Déjalo en blanco para mantener este ciclo fuera de la lista.\n\nNombrados hasta ahora ({named} de {total}): {named_list}\n\nLos nombres deben ser únicos. Puedes cerrar este cuadro de diálogo cuando quieras — los nombres se guardan sobre la marcha.",
+        "description": "La ranura \"Descarga de Programas\" del dispositivo ahora tiene un ciclo nuevo (ranura {slot}) e informa de {remaining} restantes.\n\nDale el nombre que quieras ver en Home Assistant y luego, en la pantalla \"Descarga de Programas\" de la app SmartThings, elige el siguiente que no esté ya marcado como \"Descargado\". Déjalo en blanco para mantener este ciclo fuera de la lista.\n\nNombrados hasta ahora ({named} de {total}): {named_list}\n\nLos nombres deben ser únicos. Puedes cerrar este cuadro de diálogo cuando quieras — los nombres se guardan sobre la marcha.",
         "data": {
           "name": "Nombre",
           "download_course": "Código de programa de Descarga de Programas"
@@ -121,7 +122,7 @@
       },
       "cloud_timeout": {
         "title": "No se seleccionó ningún ciclo",
-        "description": "No se seleccionó nada en el dispositivo. Asegúrate de que esté puesto en Descarga de Programas y luego ve pasando por los programas descargados.\n\nNombrados hasta ahora ({named} de {total}): {named_list}\n\nTodo lo nombrado hasta ahora ya está guardado.",
+        "description": "No ha cambiado nada en el dispositivo. Asegúrate de haber tocado \"Descarga de Programas\" en la app SmartThings -- una fila aparte de \"Ciclo\", más abajo en la pantalla -- y de haber elegido uno que no estuviera ya marcado como \"Descargado\", y luego tocado Hecho.\n\nNombrados hasta ahora ({named} de {total}): {named_list}\n\nTodo lo nombrado hasta ahora ya está guardado.",
         "menu_options": {
           "cloud_guided": "Esperar de nuevo",
           "cloud_finish": "Finalizar"
@@ -138,7 +139,7 @@
       "not_loaded": "Este dispositivo aún no está conectado. Inténtalo de nuevo cuando se haya cargado."
     },
     "progress": {
-      "cloud_wait": "Selecciona ahora un ciclo descargado en el dispositivo.\n\nNombrados hasta ahora ({named} de {total}): {named_list}\n\nPuedes cerrar este cuadro de diálogo en cualquier momento — los nombres se guardan sobre la marcha."
+      "cloud_wait": "En la app SmartThings (no en el dispositivo), abre este dispositivo y toca \"Descarga de Programas\" -- una fila aparte de \"Ciclo\", más abajo en la pantalla, que solo lista los ciclos que se pueden detectar así. Elige uno que no esté ya marcado como \"Descargado\" y toca Hecho.\n\nEl dispositivo no necesita estar cerca ni ejecutando el ciclo -- solo encendido y conectado.\n\nNombrados hasta ahora ({named} de {total}): {named_list}\n\nPuedes cerrar este cuadro de diálogo en cualquier momento — los nombres se guardan sobre la marcha."
     }
   },
   "issues": {
@@ -148,7 +149,7 @@
     },
     "cloud_courses_undiscovered": {
       "title": "Ciclos descargados sin configurar para {device_name}",
-      "description": "{device_name} tiene {pending} de {total} ciclos descargados que Home Assistant todavía no puede ofrecer. Un ciclo descargado solo se puede usar una vez que el dispositivo se ha visto con él cargado y le has dado un nombre.\n\nPara configurarlos, ve a Ajustes > Dispositivos y servicios > LocalThings > {device_name} > Configurar > Ciclos descargados y sigue las instrucciones que aparecen allí."
+      "description": "{device_name} tiene {pending} de {total} ciclos descargados que Home Assistant todavía no puede ofrecer. Un ciclo descargado solo se puede usar una vez que el dispositivo se ha visto con él cargado -- en la pantalla \"Descarga de Programas\" de la app SmartThings, no en la de \"Ciclo\" -- y le has dado un nombre.\n\nPara configurarlos, ve a Ajustes > Dispositivos y servicios > LocalThings > {device_name} > Configurar > Ciclos descargados y sigue las instrucciones que aparecen allí.\n\n¿No usas ciclos descargados? Ve a Configurar > Ajustes del dispositivo y desactiva \"Ofrecer ciclos descargados\" para silenciar este aviso definitivamente."
     }
   },
   "exceptions": {
