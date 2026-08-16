@@ -42,6 +42,7 @@ from .const import (
     CONF_BYPASS_REMOTE_CONTROL,
     CONF_CA_CERT_PEM,
     CONF_CA_KEY_PEM,
+    CONF_CLOUD_COURSES_ENABLED,
     CONF_DEVICE_TYPE,
     CONF_FINISH_TIME_HYSTERESIS_MINUTES,
     CONF_HOST,
@@ -52,6 +53,7 @@ from .const import (
     CONF_MODEL,
     CONF_PORT,
     CONF_SERIAL,
+    DEFAULT_CLOUD_COURSES_ENABLED,
     DEFAULT_FINISH_TIME_HYSTERESIS_MINUTES,
     DEFAULT_LEARN_MODES,
     DOMAIN,
@@ -991,6 +993,12 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
                             CONF_LEARN_MODES, DEFAULT_LEARN_MODES
                         ),
                     ): bool,
+                    vol.Required(
+                        CONF_CLOUD_COURSES_ENABLED,
+                        default=self.config_entry.options.get(
+                            CONF_CLOUD_COURSES_ENABLED, DEFAULT_CLOUD_COURSES_ENABLED
+                        ),
+                    ): bool,
                 }
             ),
         )
@@ -1034,14 +1042,27 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
         """Entry point for download-cycle setup (issue #342).
 
         Guided setup is offered first because it is the only version of this
-        that a first-time user can complete confidently: it asks about a
+        that a first-time user can confidently: it asks about a
         program in the moment they select it, rather than about a list of hex
         ids some time later. The bulk form stays for renaming afterwards,
         which guided setup is bad at.
         """
+        coord = self._coordinator()
+        # Setup still works with the option off (see CONF_CLOUD_COURSES_
+        # ENABLED's comment for why) -- flagged here rather than blocked, so
+        # someone who wants to name one cycle without turning the feature
+        # fully on for everything else still can (issue #364).
+        status = (
+            ""
+            if coord is None or coord.cloud_courses_enabled
+            else '\n\n⚠️ "Offer downloaded cycles" is currently off in Device '
+            "settings, so anything named here won't appear as a selectable cycle until "
+            "it's turned back on. Naming still works and nothing already saved is lost."
+        )
         return self.async_show_menu(
             step_id="cloud_courses",
             menu_options=["cloud_guided", "cloud_manual"],
+            description_placeholders={"status": status},
         )
 
     @callback

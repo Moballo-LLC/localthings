@@ -15,6 +15,7 @@ from custom_components.localthings.const import (
     CONF_BYPASS_REMOTE_CONTROL,
     CONF_CA_CERT_PEM,
     CONF_CA_KEY_PEM,
+    CONF_CLOUD_COURSES_ENABLED,
     CONF_HOST,
     CONF_LEAF_CERT_PEM,
     CONF_LEARN_MODES,
@@ -1178,6 +1179,43 @@ async def test_learned_modes_option_can_be_turned_off(hass: HomeAssistant) -> No
 
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert entry.options[CONF_LEARN_MODES] is False
+
+
+async def test_cloud_courses_enabled_option_defaults_to_on(hass: HomeAssistant) -> None:
+    """Issue #364's toggle starts on -- devices that already have a working
+    downloaded-cycle setup keep it without having to find the option first."""
+    entry = MockConfigEntry(domain=DOMAIN, data=ENTRY_DATA, unique_id=f"localthings_{MOCK_SERIAL}")
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "settings"}
+    )
+
+    data_schema = result["data_schema"]
+    assert data_schema is not None
+    assert data_schema({})[CONF_CLOUD_COURSES_ENABLED] is True
+
+
+async def test_cloud_courses_enabled_option_can_be_turned_off(hass: HomeAssistant) -> None:
+    entry = MockConfigEntry(domain=DOMAIN, data=ENTRY_DATA, unique_id=f"localthings_{MOCK_SERIAL}")
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "settings"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            CONF_BYPASS_REMOTE_CONTROL: False,
+            CONF_LEARN_MODES: True,
+            CONF_CLOUD_COURSES_ENABLED: False,
+        },
+    )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert entry.options[CONF_CLOUD_COURSES_ENABLED] is False
 
 
 @pytest.mark.parametrize(

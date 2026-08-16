@@ -57,6 +57,21 @@ DEFAULT_LEARN_MODES = True
 # {"download_course": "87"|null, "slots": {slot: {"blob": ..., "name": ...}}}
 CONF_CLOUD_COURSES = "cloud_courses"
 
+# Options-flow key: whether downloaded programs are offered as selectable
+# cycles and nagged about via the "not set up yet" Repair (issue #364).
+# Defaults to on. Unlike CONF_LEARN_MODES this does not also stop passive
+# observation -- a device that merely *advertises* download slots without
+# the owner ever meaning to use them (SmartThings appears to seed one from
+# the cloud automatically, per #364's reporters) is exactly the case this
+# exists for, and turning it off is the fix. Guided/manual setup stay
+# reachable and still record what they see either way: they are a deliberate
+# per-session action, not the passive background behavior this silences, and
+# leaving them working means flipping the option back on immediately surfaces
+# anything set up in the meantime instead of asking the user to redo it. See
+# coordinator.cloud_courses_enabled for exactly what it gates.
+CONF_CLOUD_COURSES_ENABLED = "cloud_courses_enabled"
+DEFAULT_CLOUD_COURSES_ENABLED = True
+
 # Options-flow key (entry.options, not entry.data): lets a user override
 # the device-wide remote-control-off write block for a specific device
 # (issue #54). Some devices accept certain writes even while reporting

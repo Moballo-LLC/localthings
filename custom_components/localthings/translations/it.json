@@ -1522,11 +1522,12 @@
       },
       "settings": {
         "title": "Impostazioni dispositivo",
-        "description": "Alcuni dispositivi accettano determinate scritture (ad esempio, il dosaggio predefinito di detersivo/ammorbidente su una lavatrice) anche quando segnalano che il controllo remoto è disattivato. Per impostazione predefinita, LocalThings blocca ogni scrittura con un errore chiaro ogni volta che un dispositivo segnala che il controllo remoto è disattivato, invece di consentire al dispositivo di rifiutarla silenziosamente. Abilitare questa opzione solo se si è verificato che le scritture funzionano effettivamente su questo dispositivo con il controllo remoto disattivato; in caso contrario, si sostituirà l'errore chiaro con un errore silenzioso.\n\nIl tempo di fine stimato viene ricalcolato dalla stima del tempo rimanente del dispositivo a ogni interrogazione, che può variare o essere rivista di uno o due minuti tra un aggiornamento e l'altro. Aumentare il valore di variazione minima riportato di seguito per mantenere il sensore al suo ultimo valore segnalato finché la stima non si sposta di almeno quel numero di minuti, riducendo il rumore nella cronologia/registro. Impostarlo su 0 per segnalare ogni variazione calcolata.\n\nAlcuni modelli segnalano una modalità che non elencano mai tra quelle supportate: ad esempio un condizionatore in modalità Quiet che offre solo Off/Sleep/Speed. LocalThings memorizza ogni modalità di questo tipo che rileva e continua a proporla, così resta selezionabile una volta che il dispositivo vi è stato almeno una volta. Disattivare questa opzione per proporre solo ciò che il dispositivo dichiara; usare «Dimentica le modalità memorizzate» nella schermata precedente per cancellare quanto già memorizzato.",
+        "description": "Alcuni dispositivi accettano determinate scritture (ad esempio, il dosaggio predefinito di detersivo/ammorbidente su una lavatrice) anche quando segnalano che il controllo remoto è disattivato. Per impostazione predefinita, LocalThings blocca ogni scrittura con un errore chiaro ogni volta che un dispositivo segnala che il controllo remoto è disattivato, invece di consentire al dispositivo di rifiutarla silenziosamente. Abilitare questa opzione solo se si è verificato che le scritture funzionano effettivamente su questo dispositivo con il controllo remoto disattivato; in caso contrario, si sostituirà l'errore chiaro con un errore silenzioso.\n\nIl tempo di fine stimato viene ricalcolato dalla stima del tempo rimanente del dispositivo a ogni interrogazione, che può variare o essere rivista di uno o due minuti tra un aggiornamento e l'altro. Aumentare il valore di variazione minima riportato di seguito per mantenere il sensore al suo ultimo valore segnalato finché la stima non si sposta di almeno quel numero di minuti, riducendo il rumore nella cronologia/registro. Impostarlo su 0 per segnalare ogni variazione calcolata.\n\nAlcuni modelli segnalano una modalità che non elencano mai tra quelle supportate: ad esempio un condizionatore in modalità Quiet che offre solo Off/Sleep/Speed. LocalThings memorizza ogni modalità di questo tipo che rileva e continua a proporla, così resta selezionabile una volta che il dispositivo vi è stato almeno una volta. Disattivare questa opzione per proporre solo ciò che il dispositivo dichiara; usare «Dimentica le modalità memorizzate» nella schermata precedente per cancellare quanto già memorizzato. Un dispositivo per il bucato con cicli scaricati dal cloud riceve qui un promemoria non appena ne segnala uno che Home Assistant non può ancora offrire -- alcuni dispositivi ne segnalano uno anche se non è mai stata aperta la schermata \"Cicli scaricati\" dell'app SmartThings. Disattivarlo per interrompere il promemoria e nascondere dall'elenco dei cicli quelli scaricati già nominati; nulla di quanto già configurato va perso, e riattivandolo riappare subito.",
         "data": {
           "bypass_remote_control_lock": "Consenti la scrittura anche quando il controllo remoto risulta disattivato.",
           "finish_time_hysteresis_minutes": "Tempo finale stimato - variazione minima (minuti)",
-          "learn_device_modes": "Memorizza le modalità che il dispositivo segnala ma non dichiara supportate"
+          "learn_device_modes": "Memorizza le modalità che il dispositivo segnala ma non dichiara supportate",
+          "cloud_courses_enabled": "Offri cicli scaricati"
         }
       },
       "forget_learned_modes": {
@@ -1557,14 +1558,14 @@
       },
       "cloud_manual": {
         "title": "Cicli scaricati",
-        "description": "Questo dispositivo segnala {total} cicli scaricati; finora ne sono stati rilevati {found}.\n\nLe impostazioni di un ciclo scaricato sono visibili solo mentre quel ciclo è caricato, e il dispositivo non ne segnala mai il nome. Per aggiungere quelli mancanti ({pending}): sul dispositivo selezionare il ciclo Scaricato, quindi scorrere ciascun programma scaricato uno alla volta, sostando qualche secondo su ognuno, e tornare qui.\n\nAssegnare a ciascuno il nome che si desidera vedere in Home Assistant. Lasciare un nome vuoto per escludere quel ciclo dall'elenco dei cicli. I nomi devono essere univoci.\n\nIl ciclo Scaricato è il programma su questo dispositivo che esegue un programma scaricato. Viene rilevato automaticamente, ma confermarlo qui prima dell'uso: selezionare un ciclo scaricato scrive questo codice di programma sul dispositivo.",
+        "description": "Questo dispositivo segnala {total} cicli scaricati; finora ne sono stati rilevati {found}.\n\nLe impostazioni di un ciclo scaricato sono visibili solo mentre quel ciclo è caricato, e il dispositivo non ne segnala mai il nome. Per aggiungere quelli mancanti ({pending}): nell'app SmartThings (non sul dispositivo), aprire questo dispositivo e toccare \"Cicli scaricati\" -- una riga separata da \"Ciclo\", più in basso nella schermata, ed è quella che conta qui. Scorrere ciascun programma scaricato uno alla volta, sostando qualche secondo su ognuno perché LocalThings possa rilevarlo, e tornare qui.\n\nAssegnare a ciascuno il nome che si desidera vedere in Home Assistant. Lasciare un nome vuoto per escludere quel ciclo dall'elenco dei cicli. I nomi devono essere univoci.\n\nIl ciclo Scaricato è il programma su questo dispositivo che esegue un programma scaricato. Viene rilevato automaticamente, ma confermarlo qui prima dell'uso: selezionare un ciclo scaricato scrive questo codice di programma sul dispositivo.",
         "data": {
           "download_course": "Codice programma del ciclo Scaricato"
         }
       },
       "cloud_courses": {
         "title": "Cicli scaricati",
-        "description": "La configurazione guidata accompagna l'utente al dispositivo: selezionare un ciclo scaricato sul dispositivo e assegnargli un nome non appena viene rilevato, uno alla volta.\n\nModifica nomi mostra tutto ciò che è stato trovato finora in una sola volta — usarla in seguito per rinominare o correggere qualcosa.",
+        "description": "La configurazione guidata accompagna l'utente: nell'app SmartThings (non sul dispositivo), aprire questo dispositivo e toccare \"Cicli scaricati\" -- una riga separata da \"Ciclo\", più in basso nella schermata, ed è quella che conta qui. Scegliere un ciclo lì, poi tornare qui e assegnargli un nome non appena viene rilevato, uno alla volta.\n\nModifica nomi mostra tutto ciò che è stato trovato finora in una sola volta — usarla in seguito per rinominare o correggere qualcosa.{status}",
         "menu_options": {
           "cloud_guided": "Configurazione guidata",
           "cloud_manual": "Modifica nomi"
@@ -1575,7 +1576,7 @@
       },
       "cloud_name": {
         "title": "Assegna un nome a questo ciclo",
-        "description": "Il dispositivo è passato a un ciclo scaricato (slot {slot}) e segnala {remaining} rimanenti.\n\nAssegnargli il nome che si desidera vedere in Home Assistant, quindi selezionare il successivo sul dispositivo. Lasciare vuoto per escludere questo ciclo dall'elenco.\n\nAssegnati finora ({named} di {total}): {named_list}\n\nI nomi devono essere univoci. È possibile chiudere questa finestra in qualsiasi momento — i nomi vengono salvati man mano.",
+        "description": "Lo slot \"Cicli scaricati\" del dispositivo ora contiene un nuovo ciclo (slot {slot}) e segnala {remaining} rimanenti.\n\nAssegnargli il nome che si desidera vedere in Home Assistant, quindi nella schermata \"Cicli scaricati\" dell'app SmartThings scegliere il successivo non ancora contrassegnato come \"Scaricato\". Lasciare vuoto per escludere questo ciclo dall'elenco.\n\nAssegnati finora ({named} di {total}): {named_list}\n\nI nomi devono essere univoci. È possibile chiudere questa finestra in qualsiasi momento — i nomi vengono salvati man mano.",
         "data": {
           "name": "Nome",
           "download_course": "Codice programma del ciclo Scaricato"
@@ -1583,7 +1584,7 @@
       },
       "cloud_timeout": {
         "title": "Nessun ciclo selezionato",
-        "description": "Non è stato selezionato nulla sul dispositivo. Assicurarsi che sia impostato sul ciclo Scaricato, quindi scorrere i programmi scaricati.\n\nAssegnati finora ({named} di {total}): {named_list}\n\nTutto ciò che è stato assegnato finora è già salvato.",
+        "description": "Non è cambiato nulla sul dispositivo. Assicurarsi di aver toccato \"Cicli scaricati\" nell'app SmartThings -- una riga separata da \"Ciclo\", più in basso nella schermata -- e di aver scelto un ciclo non ancora contrassegnato come \"Scaricato\", quindi di aver toccato Fine.\n\nAssegnati finora ({named} di {total}): {named_list}\n\nTutto ciò che è stato assegnato finora è già salvato.",
         "menu_options": {
           "cloud_guided": "Attendi di nuovo",
           "cloud_finish": "Fine"
@@ -1600,7 +1601,7 @@
       "not_loaded": "Questo dispositivo non è ancora connesso. Riprova dopo il caricamento."
     },
     "progress": {
-      "cloud_wait": "Selezionare ora un ciclo scaricato sul dispositivo.\n\nAssegnati finora ({named} di {total}): {named_list}\n\nÈ possibile chiudere questa finestra in qualsiasi momento — i nomi vengono salvati man mano."
+      "cloud_wait": "Nell'app SmartThings (non sul dispositivo), aprire questo dispositivo e toccare \"Cicli scaricati\" -- una riga separata da \"Ciclo\", più in basso nella schermata, che elenca solo i cicli rilevabili in questo modo. Scegliere uno non ancora contrassegnato come \"Scaricato\", quindi toccare Fine.\n\nIl dispositivo non deve essere nelle vicinanze né in esecuzione -- deve solo essere acceso e connesso.\n\nAssegnati finora ({named} di {total}): {named_list}\n\nÈ possibile chiudere questa finestra in qualsiasi momento — i nomi vengono salvati man mano."
     }
   },
   "issues": {
@@ -1610,7 +1611,7 @@
     },
     "cloud_courses_undiscovered": {
       "title": "Cicli scaricati non configurati per {device_name}",
-      "description": "{device_name} ha {pending} cicli scaricati su {total} che Home Assistant non può ancora offrire. Un ciclo scaricato può essere usato solo dopo che il dispositivo è stato rilevato con quel ciclo caricato ed è stato assegnato un nome.\n\nPer configurarli, andare su Impostazioni > Dispositivi e servizi > LocalThings > {device_name} > Configura > Cicli scaricati e seguire le istruzioni presenti lì."
+      "description": "{device_name} ha {pending} cicli scaricati su {total} che Home Assistant non può ancora offrire. Un ciclo scaricato può essere usato solo dopo che il dispositivo è stato rilevato con quel ciclo caricato -- nella schermata \"Cicli scaricati\" dell'app SmartThings, non in quella \"Ciclo\" -- ed è stato assegnato un nome.\n\nPer configurarli, andare su Impostazioni > Dispositivi e servizi > LocalThings > {device_name} > Configura > Cicli scaricati e seguire le istruzioni presenti lì.\n\nNon si usano cicli scaricati? Andare invece su Configura > Impostazioni dispositivo e disattivare \"Offri cicli scaricati\" per silenziare questo promemoria definitivamente."
     }
   },
   "exceptions": {
