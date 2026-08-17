@@ -1,24 +1,13 @@
 """Move an entry's registry entries from one device key to another.
 
-The key a device's registry entries are minted from (see
-registry.identity.resolve_device_key) appears in three permanent places:
-the config entry's unique_id, the device registry's identifiers, and every
-entity's unique_id. Changing it therefore can't be a matter of writing a
-new value and restarting -- everything already in the registries would be
-orphaned, and the user would find a duplicate device whose entities all
-carry a `_2` suffix, with their history, area and automations attached to
-the dead copy.
+The key (registry.identity.resolve_device_key) is permanent in three
+places, so changing it means rewriting the registries rather than storing
+a new value -- anything left behind is orphaned. Rewriting rather than
+recreating is what keeps an entity's entity_id, and with it its history,
+area and automations.
 
-So the key change is performed *on* the registries instead. Rewriting
-beats deleting: an entity keeps its entity_id, and with it its name, area,
-long-term statistics and every automation and dashboard that references
-it.
-
-Lives in its own module rather than in __init__.py because both callers
-need it and they sit on opposite sides of an import edge: the v1 -> v2
-migration in __init__.py, and the coordinator's first-poll adoption of the
-OCF device UUID (issue #381), which can only happen once the device has
-actually been reached.
+Its own module because both callers need it: the v1 -> v2 migration in
+__init__.py and the coordinator's first-poll adoption (issue #381).
 """
 
 from __future__ import annotations
@@ -39,25 +28,16 @@ _LOGGER = logging.getLogger(__name__)
 def rekey_entry(hass: HomeAssistant, entry: ConfigEntry, old_key: str, new_key: str) -> None:
     """Rewrite everything this entry registered under `old_key` to `new_key`.
 
-    Covers all three places the key is permanent: the entity registry
-    (unique_ids are f"{DOMAIN}_{key}_{state_key}"), the device registry
-    (identifiers are (DOMAIN, key) for the device itself and
-    (DOMAIN, f"{key}_{subdevice}") for each subdevice of a composite
-    appliance -- see coordinator.device_info_for), and the config entry's
-    own unique_id.
+    All three permanent places move together: entity unique_ids
+    (f"{DOMAIN}_{key}_{state_key}"), device identifiers ((DOMAIN, key), plus
+    (DOMAIN, f"{key}_{subdevice}") per subdevice -- see device_info_for),
+    and the entry's own unique_id. Leaving that last one behind would let
+    the config flow's duplicate check wave through a re-add of this very
+    appliance.
 
-    Leaving the entry's unique_id behind would half-migrate it: the config
-    flow's duplicate check (_abort_if_unique_id_configured) would still be
-    comparing new devices against the key this entry no longer uses, so
-    re-adding this very appliance would be waved through as a second entry.
-
-    Idempotent: a second call finds nothing left under `old_key` and does
-    nothing, which is what makes it safe to attempt on every poll rather
-    than having to track whether it has already run.
-
-    Where both keys somehow already exist, the `old_key` copy is the dead
-    one -- unavailable since whichever restart created the split -- so it
-    is removed rather than rewritten over the live entry.
+    Idempotent, so it is safe to attempt on every poll rather than tracking
+    whether it has run. Where both keys already exist the `old_key` copy is
+    the dead one, so it is removed rather than rewritten over the live entry.
 
     Must run on the event loop; the registry helpers require it.
     """

@@ -36,17 +36,11 @@ _SENSITIVE_SUBSTRINGS = (
 # from the SmartThings app and can carry a person's name -- the device-type
 # signal we actually want from that resource is `rt`, which is not redacted.
 #
-# OCF's /oic/d `di` and /oic/p `pi` used to be redacted here too. They are
-# not account data: they're randomly-assigned per-unit UUIDs, carrying no
-# more about their owner than the appliance-internal subdeviceIdList
-# diagnostics already reports for the same reason (see diagnostics.py).
-# Redacting them cost more than it bought -- issue #381 was two units
-# colliding on a duplicated serialNum, and the first diagnostics download
-# asking whether their `di`/`pi` differed came back with both values
-# blanked, so the question could only be answered by walking the reporter
-# through a manual read_resource call. They are now also what
-# resolve_device_key mints registry keys from, so a report that hides them
-# hides the identity every entity in it is named after.
+# /oic/d's `di` and /oic/p's `pi` are deliberately not redacted: they're
+# randomly-assigned per-unit UUIDs rather than account data, and they are
+# what registry keys are minted from (issue #381), so blanking them hides
+# the identity every entity in a report is named after -- which is exactly
+# what made #381's first diagnostics download unable to answer it.
 _SENSITIVE_EXACT = frozenset({"n"})
 
 

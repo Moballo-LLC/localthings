@@ -66,19 +66,12 @@ def resolve_serial(raw_serial: str | None, host: str) -> str:
 def is_usable_device_id(value: str | None) -> bool:
     """True for an OCF `di`/`pi` that actually identifies one unit.
 
-    Firmware that never had a UUID assigned reports OCF's nil UUID
-    (all-zero, dashes aside), which is identical on every unit of the
-    family -- the #189 failure mode transplanted onto a new field, and not
-    something `is_placeholder_serial`'s repeated-hex-digit rule catches,
-    because the dashes make more than one distinct character.
-
-    Past that, the same known-junk rules that disqualify a serialNum
-    disqualify a UUID: a board firmware-flashed with 'Nothing(SVC)' in one
-    identity field is not a board to trust in another. Anything else is
-    accepted as-is. A *shared but well-formed* `di` would be undetectable
-    here, exactly as issue #381's shared-but-well-formed serialNum is --
-    heuristics can't see that, which is the whole reason this moves onto a
-    field the protocol itself has to keep distinct.
+    Rejects OCF's nil UUID, which firmware that never had one assigned
+    reports on every unit of the family -- the #189 failure mode on a new
+    field, and one `is_placeholder_serial`'s repeated-digit rule misses
+    because the dashes make more than one distinct character. Past that the
+    same known-junk rules apply: a board flashed with 'Nothing(SVC)' in one
+    identity field is not one to trust in another.
     """
     s = (value or "").strip()
     if not s:
@@ -92,16 +85,11 @@ def ocf_device_key(identity: DeviceIdentity | None) -> str | None:
     """The OCF-derived half of resolve_device_key's chain, or None when the
     device reported no usable UUID.
 
-    Split out because "the device has no UUID" and "the device has this
-    UUID" are different answers to a caller holding an existing key: the
-    coordinator must never demote an entry from a UUID back onto a
-    serialNum just because one poll couldn't read /oic/d (a reconnect, a
-    timeout), which is exactly what it would do if it only saw the
-    collapsed string resolve_device_key returns.
-
-    Normalized because the result is compared against its stored form on
-    every poll; firmware that changes case between reads would otherwise
-    look like a different appliance.
+    Split out because "no UUID" and "this UUID" are different answers to a
+    caller holding an existing key: the coordinator must never demote an
+    entry off its UUID just because one poll couldn't read /oic/d.
+    Normalized so firmware that changes case between reads doesn't look
+    like a different appliance.
     """
     if identity is None:
         return None
@@ -116,26 +104,18 @@ def resolve_device_key(identity: DeviceIdentity | None, raw_serial: str | None, 
 
     Tried in order: /oic/d's `di`, /oic/p's `pi`, the serialNum, the host.
 
-    `di` leads because it is the identifier the protocol we are already
-    speaking uses to address this endpoint -- if it were wrong or shared,
-    OCF discovery and the DTLS association would not work in the first
-    place. serialNum, by contrast, is a vendor-populated string no part of
-    the stack depends on, which is why three separate firmware families
-    have shipped it unusable: 'Nothing(SVC)' (#83), a flash-unset sentinel
-    (#189), and -- unfixable by any heuristic -- a well-formed serial
-    duplicated across every unit of the model (#381).
+    `di` leads because it is what the protocol already uses to address this
+    endpoint: if it were wrong or shared, OCF discovery and the DTLS
+    association would not work at all. serialNum is a vendor-populated
+    string nothing depends on, which is why three firmware families have
+    shipped it unusable -- 'Nothing(SVC)' (#83), a flash-unset sentinel
+    (#189), and a well-formed serial duplicated across every unit (#381).
 
-    `pi` is only the fallback despite the OCF spec calling it immutable:
-    it identifies the *platform*, so a board hosting more than one logical
-    OCF device shares one `pi` across all of them, reintroducing the very
-    collision this exists to prevent. `di` is device-scoped, which is the
-    granularity of a config entry.
-
-    The serial stays in the chain below both so a board that answers
-    neither OCF resource lands exactly where it did before this existed,
-    and the host stays last for the same reason -- it is an address rather
-    than an identity (a new DHCP lease silently makes it someone else's),
-    so it is strictly a last resort.
+    `pi` is only the fallback despite the spec calling it immutable: it is
+    *platform*-scoped, so a board hosting several logical OCF devices
+    shares one across all of them. `di` is device-scoped, the granularity
+    of a config entry. The serial and host stay below both so a board
+    answering neither resource lands where it always did.
     """
     return ocf_device_key(identity) or resolve_serial(raw_serial, host)
 

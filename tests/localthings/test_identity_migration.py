@@ -1,24 +1,16 @@
 """Moving an existing install onto the OCF device UUID (issue #381).
 
-Every other migration this integration has done finishes inside
-`async_migrate_entry`. This one can't: the UUID is only readable from the
-appliance, and an entry can load entirely from its stored snapshot while
-the appliance is off (issue #295). So the config-entry version bumps up
-front and the coordinator adopts the UUID on the first *live* poll,
-rewriting the entity registry, the device registry and the entry's own
+This migration can't finish inside `async_migrate_entry` -- the UUID is
+only readable from the appliance, and an entry can load from its snapshot
+while that appliance is off (issue #295) -- so the coordinator adopts it
+on the first live poll, rewriting both registries and the entry's
 unique_id together.
 
-That makes this the riskiest migration in the codebase: it rewrites the
-identity of registry rows a user's automations, dashboards, history and
-areas all hang off. The suite is therefore organised around what an
-existing user must not lose, rather than around the functions involved:
-
-* the entity_id, and every customization carried on that registry row
-* long-term statistics (keyed by entity_id -- see the end-to-end test in
-  tests/test_rekey_statistics_end_to_end.py, which drives a real recorder)
-* the device row, its area, and a composite appliance's subdevice links
-* other config entries' rows, which this must never touch
-* stability: an upgrade that happens twice, or offline, must not churn
+That makes it the riskiest migration here: it rewrites the identity of
+rows a user's automations, history and areas hang off. These tests are
+organised around what must not break rather than around the functions
+involved. Statistics are covered separately, against a real recorder, in
+tests/test_rekey_statistics_end_to_end.py.
 """
 
 from __future__ import annotations
