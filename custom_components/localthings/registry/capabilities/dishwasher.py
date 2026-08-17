@@ -10,7 +10,12 @@ wash, auto release dry) are read locally here.
 from ..capability import Capability
 from ..entities import ButtonDesc, SelectDesc, SensorDesc, SwitchDesc
 from .common import diagnosis_status
-from .laundry import bool_option_switch, cycle_select
+from .laundry import (
+    bool_option_switch,
+    cycle_select,
+    drum_clean_cycles_remaining,
+    drum_clean_last_cleaned,
+)
 
 # ---------------------------------------------------------------------------
 # /dishwasher/vs/0 — cycle wash/dry settings
@@ -52,6 +57,14 @@ DISHWASHER_SETTINGS = Capability(
 # kind of adjacent pair a manual screenshot transcription slips on. The
 # reporter's live confirmation (selecting 'Normal' ran the physical Express
 # 60 program and vice versa) settled it: '86' is Express 60, '83' is Normal.
+#
+# Drum Clean+ maintenance tracking reuses washer.py/dryer.py's (issues #9,
+# #258) DrumCleanProposal_/WashingTimes_/DrumCleanLog_ tokens riding on this
+# same options[] array -- a live dump confirmed the dishwasher reports the
+# identical trio (WashingTimes_18/DrumCleanProposal_20, plus a '|'-joined
+# DrumCleanLog_ history matching the dryer's multi-entry shape), so the
+# shared laundry.drum_clean_cycles_remaining/drum_clean_last_cleaned readers
+# apply unchanged; see laundry.py for the field semantics.
 
 CYCLE_OPTIONS = Capability(
     href="/course/vs/0",
@@ -60,6 +73,22 @@ CYCLE_OPTIONS = Capability(
         bool_option_switch("storm_wash", "mdi:weather-lightning-rainy", "StormWashZone"),
         bool_option_switch(
             "auto_release_dry", "mdi:door-open", "AutoDoorRelease", gate_on_presence=True
+        ),
+        SensorDesc(
+            key="drum_clean_cycles_remaining",
+            unit="cycles",
+            icon="mdi:dishwasher-alert",
+            state_class="measurement",
+            exists_fn=lambda rep, resources: drum_clean_cycles_remaining(rep) is not None,
+            rep_fn=drum_clean_cycles_remaining,
+        ),
+        SensorDesc(
+            key="drum_clean_last_cleaned",
+            device_class="timestamp",
+            icon="mdi:calendar-clock",
+            entity_category="diagnostic",
+            exists_fn=lambda rep, resources: drum_clean_last_cleaned(rep) is not None,
+            rep_fn=drum_clean_last_cleaned,
         ),
     ),
 )

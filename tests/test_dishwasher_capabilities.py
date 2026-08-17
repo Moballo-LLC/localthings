@@ -5,6 +5,8 @@ cycle_options, cycle_write) is tested in test_laundry_capabilities.py; here we
 check the dishwasher wiring and its device-specific options.
 """
 
+from datetime import UTC, datetime
+
 from custom_components.localthings.registry.capabilities import dishwasher
 from custom_components.localthings.registry.entities import SensorDesc, SwitchDesc
 
@@ -60,6 +62,53 @@ class TestDishwasherOptions:
         assert desc.exists_fn is not None
         assert desc.exists_fn({"x.com.samsung.da.options": []}, {}) is False
         assert desc.exists_fn({"x.com.samsung.da.options": ["AutoDoorRelease_On"]}, {}) is True
+
+
+class TestDrumClean:
+    """Drum Clean+ maintenance tracking shares washer.py's (issue #9) /
+    dryer.py's (issue #258) options[]-array readers -- a live dishwasher
+    dump confirmed the same WashingTimes_/DrumCleanProposal_/DrumCleanLog_
+    trio, so these entities are wired the same way here."""
+
+    def test_cycles_remaining(self):
+        desc = next(
+            e for e in dishwasher.CYCLE_OPTIONS.entities if e.key == "drum_clean_cycles_remaining"
+        )
+        assert desc.rep_fn is not None
+        rep = {"x.com.samsung.da.options": ["WashingTimes_18", "DrumCleanProposal_20"]}
+        assert desc.rep_fn(rep) == 2
+
+    def test_cycles_remaining_exists_only_when_computable(self):
+        desc = next(
+            e for e in dishwasher.CYCLE_OPTIONS.entities if e.key == "drum_clean_cycles_remaining"
+        )
+        assert desc.exists_fn is not None
+        assert desc.exists_fn({"x.com.samsung.da.options": []}, {}) is False
+        rep = {"x.com.samsung.da.options": ["WashingTimes_18", "DrumCleanProposal_20"]}
+        assert desc.exists_fn(rep, {}) is True
+
+    def test_last_cleaned(self):
+        """A live dump's DrumCleanLog_ is a '|'-joined history (the dryer
+        shape, not the washer's single-entry one) -- the last entry wins."""
+        desc = next(
+            e for e in dishwasher.CYCLE_OPTIONS.entities if e.key == "drum_clean_last_cleaned"
+        )
+        assert desc.rep_fn is not None
+        rep = {
+            "x.com.samsung.da.options": [
+                "DrumCleanLog_2026-06-26T04:18:58|2026-06-28T00:36:34",
+            ]
+        }
+        assert desc.rep_fn(rep) == datetime(2026, 6, 28, 0, 36, 34, tzinfo=UTC)
+
+    def test_last_cleaned_missing(self):
+        desc = next(
+            e for e in dishwasher.CYCLE_OPTIONS.entities if e.key == "drum_clean_last_cleaned"
+        )
+        assert desc.rep_fn is not None
+        assert desc.rep_fn({"x.com.samsung.da.options": []}) is None
+        assert desc.exists_fn is not None
+        assert desc.exists_fn({"x.com.samsung.da.options": []}, {}) is False
 
 
 def test_diagnosis_status_is_a_translatable_enum():
