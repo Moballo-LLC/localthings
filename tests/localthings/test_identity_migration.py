@@ -114,6 +114,14 @@ def _entry(
     return entry
 
 
+def _reporting_serial(resources: dict, serial: str) -> dict:
+    """`resources` with the serialNum the device reports swapped out, so a
+    test can pair a fixture with the identity its scenario implies."""
+    info = dict(resources["/information/vs/0"])
+    info["x.com.samsung.da.serialNum"] = serial
+    return {**resources, "/information/vs/0": info}
+
+
 def _seed_registry(hass: HomeAssistant, entry: MockConfigEntry, key: str, **entity_kwargs):
     """A device and one entity keyed on `key`, as a running install has."""
     dev_reg = dr.async_get(hass)
@@ -229,10 +237,14 @@ async def test_the_two_units_from_the_issue_migrate_to_separate_identities(
     including their entity unique_ids, which is where issue #83's Bug 4
     silently dropped the second unit's entities even once its entry existed.
     """
+    # Both units report the shared serial, as the real ones do -- so the
+    # entry's stored identity still matches what the device says, and only
+    # the UUID separates them.
+    resources = _reporting_serial(fridge_resources, SHARED_SERIAL)
     first = _entry(hass, version=3, key=SHARED_SERIAL, host="192.168.0.3")
     _, first_entity = _seed_registry(hass, first, SHARED_SERIAL, suggested_object_id="purifier_a")
 
-    with _reachable(fridge_resources, UUID_A):
+    with _reachable(resources, UUID_A):
         await hass.config_entries.async_setup(first.entry_id)
         await hass.async_block_till_done()
 
@@ -243,7 +255,7 @@ async def test_the_two_units_from_the_issue_migrate_to_separate_identities(
     second = _entry(hass, version=3, key=SHARED_SERIAL, host="192.168.0.14")
     _, second_entity = _seed_registry(hass, second, SHARED_SERIAL, suggested_object_id="purifier_b")
 
-    with _reachable(fridge_resources, UUID_B):
+    with _reachable(resources, UUID_B):
         await hass.config_entries.async_setup(second.entry_id)
         await hass.async_block_till_done()
 
@@ -453,14 +465,16 @@ async def test_an_offline_load_never_rewrites_the_registry(
     snapshot says, because that is last run's answer rather than the
     device's.
 
-    Constructed so the two disagree: the snapshot was banked against a
-    device reporting one serial, while the entry is registered under
-    another. A replay that trusted the snapshot would rewrite every
-    registry row to match it -- without the appliance having been reachable
-    at any point -- and would then freeze that answer into CONF_DEVICE_KEY,
-    so the real UUID could never be adopted afterwards.
+    Modelled on a placeholder-serial board (issues #83/#189), which is
+    where the two can genuinely disagree: the entry is keyed on its address
+    because the board reports no usable serial, while the snapshot banked
+    whatever serial the polled resources carried. A replay that trusted the
+    snapshot would rewrite every registry row onto that serial -- without
+    the appliance having been reachable at any point -- and would then
+    freeze the answer into CONF_DEVICE_KEY, so the real UUID could never be
+    adopted afterwards.
     """
-    entry = _entry(hass, version=3, key=MOCK_SERIAL)
+    entry = _entry(hass, version=3, key=MOCK_HOST)
 
     with _reachable(fridge_resources, None):
         await hass.config_entries.async_setup(entry.entry_id)
@@ -468,30 +482,29 @@ async def test_an_offline_load_never_rewrites_the_registry(
         await hass.config_entries.async_unload(entry.entry_id)
         await hass.async_block_till_done()
 
-    # The entry is registered under a different identity than the snapshot's,
-    # and back on the pre-v4 shape the upgrade finds.
+    # Back to the pre-v4 shape the upgrade finds, still keyed on the address.
     hass.config_entries.async_update_entry(
         entry,
         data={
             **{k: v for k, v in entry.data.items() if k != CONF_DEVICE_KEY},
-            CONF_SERIAL: "LEGACY-KEY",
+            CONF_SERIAL: MOCK_HOST,
         },
-        unique_id=f"{DOMAIN}_LEGACY-KEY",
+        unique_id=f"{DOMAIN}_{MOCK_HOST}",
         version=3,
     )
-    device, existing = _seed_registry(hass, entry, "LEGACY-KEY")
+    device, existing = _seed_registry(hass, entry, MOCK_HOST)
 
     with _unreachable():
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    assert coordinator.device_key == "LEGACY-KEY"
+    assert coordinator.device_key == MOCK_HOST
     assert CONF_DEVICE_KEY not in entry.data
-    assert entry.unique_id == f"{DOMAIN}_LEGACY-KEY"
-    assert dr.async_get(hass).async_get(device.id).identifiers == {(DOMAIN, "LEGACY-KEY")}
+    assert entry.unique_id == f"{DOMAIN}_{MOCK_HOST}"
+    assert dr.async_get(hass).async_get(device.id).identifiers == {(DOMAIN, MOCK_HOST)}
     assert er.async_get(hass).async_get(existing.entity_id).unique_id == (
-        f"{DOMAIN}_LEGACY-KEY_connection_mode"
+        f"{DOMAIN}_{MOCK_HOST}_connection_mode"
     )
 
     # And the deferred adoption still works once the appliance answers --
@@ -660,6 +673,39 @@ async def test_a_different_appliance_on_the_same_address_keeps_the_registered_id
         assert coordinator.device_key == UUID_A
         assert entry.data[CONF_DEVICE_KEY] == UUID_A
         assert entry.data[CONF_SERIAL] == "SOME-OTHER-APPLIANCE"
+
+
+async def test_a_pre_v4_entry_defends_itself_against_a_different_appliance(
+    hass: HomeAssistant, fridge_resources
+) -> None:
+    """The "same IP, different appliance" guard applies to an entry that has
+    not migrated yet, exactly as it does to one that has.
+
+    A pre-v4 entry is the population this change exists to move, but it is
+    also the population that has been running longest -- so it is the last
+    one that should hand its entity_ids, history and automations to an
+    appliance that merely happens to have taken over its address. Adoption
+    is the migration's job only when the identity is corroborated.
+    """
+    entry = _entry(hass, version=3, key=MOCK_SERIAL)
+    device, existing = _seed_registry(hass, entry, MOCK_SERIAL)
+
+    # Neither the serial nor (therefore) the UUID belongs to the registered
+    # appliance.
+    resources = _reporting_serial(fridge_resources, "SOME-OTHER-APPLIANCE")
+    with _reachable(resources, UUID_B):
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    coordinator = hass.data[DOMAIN][entry.entry_id]
+    assert coordinator.device_key == MOCK_SERIAL
+    assert entry.data[CONF_DEVICE_KEY] == MOCK_SERIAL
+    assert entry.data[CONF_SERIAL] == MOCK_SERIAL
+    assert entry.unique_id == f"{DOMAIN}_{MOCK_SERIAL}"
+    assert dr.async_get(hass).async_get(device.id).identifiers == {(DOMAIN, MOCK_SERIAL)}
+    assert er.async_get(hass).async_get(existing.entity_id).unique_id == (
+        f"{DOMAIN}_{MOCK_SERIAL}_connection_mode"
+    )
 
 
 # ---------------------------------------------------------------------------

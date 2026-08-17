@@ -895,6 +895,28 @@ class LocalThingsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected error during device probe")
                 errors["base"] = "unknown"
             else:
+                # An entry created before v4 still carries the serial-keyed
+                # unique_id until its first *live* poll adopts the UUID
+                # (coordinator._resolve_identity) -- which can be a long
+                # while for an appliance that is off, since an entry loads
+                # from its snapshot in the meantime (issue #295). The UUID
+                # check below can't see such an entry, so re-adding this
+                # very appliance during that window would be waved through
+                # as a second entry; the two would then collide the moment
+                # the older one re-keyed, and rekey_entry resolves a
+                # collision by *deleting* the duplicate rows -- taking the
+                # original entry's entity_ids, history and automations with
+                # them. Matched on the legacy key together with the host, so
+                # issue #381's two units (same serial, different addresses)
+                # stay separable.
+                legacy_unique_id = f"localthings_{info['serial']}"
+                if any(
+                    other.unique_id == legacy_unique_id
+                    and other.data.get(CONF_HOST) == self._host
+                    and CONF_DEVICE_KEY not in other.data
+                    for other in existing
+                ):
+                    return self.async_abort(reason="already_configured")
                 # Keyed on the OCF device UUID rather than the serialNum
                 # (issue #381): two units of a model that ship the same
                 # well-formed serial are indistinguishable here otherwise,

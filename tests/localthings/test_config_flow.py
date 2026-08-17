@@ -1115,6 +1115,72 @@ async def test_same_serial_on_two_units_is_not_a_duplicate(hass: HomeAssistant, 
     assert result["data"][CONF_SERIAL] == first.data[CONF_SERIAL]
 
 
+async def test_re_adding_during_the_migration_window_is_still_a_duplicate(
+    hass: HomeAssistant, mock_probe
+) -> None:
+    """An entry created before v4 keeps its serial-keyed unique_id until its
+    first *live* poll adopts the UUID, which can be a long while for an
+    appliance that is off (it loads from its snapshot meanwhile, issue
+    #295). The UUID check can't see such an entry, so without a second
+    check on the legacy key, re-adding this very appliance in that window
+    would be waved through -- and the two entries would collide the moment
+    the older one re-keyed, with rekey_entry resolving the collision by
+    deleting the duplicate rows and taking the original's entity_ids,
+    history and automations with them.
+    """
+    existing = MockConfigEntry(
+        domain=DOMAIN,
+        data={k: v for k, v in ENTRY_DATA.items() if k != CONF_DEVICE_KEY},
+        unique_id=f"localthings_{MOCK_SERIAL}",
+        version=3,
+    )
+    existing.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_HOST: ENTRY_DATA[CONF_HOST]}
+    )
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+
+
+async def test_the_migration_window_check_still_separates_two_same_serial_units(
+    hass: HomeAssistant, mock_probe
+) -> None:
+    """The legacy-key check above matches on the host as well as the serial,
+    so it cannot undo the fix: issue #381's two units share a serial but sit
+    at different addresses, and the second must still be addable while the
+    first is mid-migration."""
+    existing = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            **{k: v for k, v in ENTRY_DATA.items() if k != CONF_DEVICE_KEY},
+            CONF_HOST: "192.168.0.3",
+        },
+        unique_id=f"localthings_{MOCK_SERIAL}",
+        version=3,
+    )
+    existing.add_to_hass(hass)
+
+    second_probe = {
+        **_probe_result(recognized=True),
+        "device_key": "3771f8bf-c184-3a2d-d885-e4c9818736d2",
+        "serial": MOCK_SERIAL,
+    }
+    with patch(
+        "custom_components.localthings.config_flow._probe_and_validate",
+        return_value=second_probe,
+    ):
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: "192.168.0.14"}
+        )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_DEVICE_KEY] == "3771f8bf-c184-3a2d-d885-e4c9818736d2"
+
+
 def test_probe_reads_the_device_key_from_oic_d_without_an_extra_round_trip(monkeypatch):
     """`_read_device` already fetches /oic/p and /oic/d for the device-type
     signal, so keying on the OCF UUID costs no additional GET -- it reads

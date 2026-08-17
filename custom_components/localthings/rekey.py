@@ -64,9 +64,9 @@ def rekey_entry(hass: HomeAssistant, entry: ConfigEntry, old_key: str, new_key: 
     if old_key == new_key:
         return
 
-    new_unique_id = f"{DOMAIN}_{new_key}"
-    if entry.unique_id != new_unique_id:
-        hass.config_entries.async_update_entry(entry, unique_id=new_unique_id)
+    new_entry_unique_id = f"{DOMAIN}_{new_key}"
+    if entry.unique_id != new_entry_unique_id:
+        hass.config_entries.async_update_entry(entry, unique_id=new_entry_unique_id)
 
     ent_reg = er.async_get(hass)
     stale_prefix = f"{DOMAIN}_{old_key}_"
