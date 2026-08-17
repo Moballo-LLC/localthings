@@ -30,13 +30,24 @@ _SENSITIVE_SUBSTRINGS = (
     "secret",
 )
 
-# Matched whole, not as substrings: OCF's /oic/d and /oic/p identify the
-# unit with bare one/two-letter keys too short for the substring rules above
-# ('di' is a substring of 'condition', 'display', ...). 'di'/'pi' are the
-# device/platform UUIDs; 'n' is /oic/d's free-text device name, which may
-# carry a person's name -- the device-type signal we actually want from
-# that resource is `rt`, which is not redacted.
-_SENSITIVE_EXACT = frozenset({"di", "pi", "n"})
+# Matched whole, not as substrings: these are bare one/two-letter keys too
+# short for the substring rules above ('n' is a substring of very nearly
+# everything). 'n' is /oic/d's free-text device name, which the owner sets
+# from the SmartThings app and can carry a person's name -- the device-type
+# signal we actually want from that resource is `rt`, which is not redacted.
+#
+# OCF's /oic/d `di` and /oic/p `pi` used to be redacted here too. They are
+# not account data: they're randomly-assigned per-unit UUIDs, carrying no
+# more about their owner than the appliance-internal subdeviceIdList
+# diagnostics already reports for the same reason (see diagnostics.py).
+# Redacting them cost more than it bought -- issue #381 was two units
+# colliding on a duplicated serialNum, and the first diagnostics download
+# asking whether their `di`/`pi` differed came back with both values
+# blanked, so the question could only be answered by walking the reporter
+# through a manual read_resource call. They are now also what
+# resolve_device_key mints registry keys from, so a report that hides them
+# hides the identity every entity in it is named after.
+_SENSITIVE_EXACT = frozenset({"n"})
 
 
 def _is_sensitive_key(key: str) -> bool:

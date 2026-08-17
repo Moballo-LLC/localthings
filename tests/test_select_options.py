@@ -18,7 +18,7 @@ from custom_components.localthings.select import LocalThingsSelect
 
 
 class _FakeCoordinator:
-    device_serial = "TEST-SERIAL"
+    device_key = "TEST-SERIAL"
 
     def __init__(self, last_resources):
         self.last_resources = last_resources

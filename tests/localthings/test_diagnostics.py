@@ -76,8 +76,11 @@ async def test_diagnostics_include_ocf_identity(
     # fields identify a device type, so nothing is dropped up front beyond
     # what redaction takes out.
     assert identity["resources"]["/oic/p"]["mnmn"] == "Samsung Electronics"
-    assert identity["resources"]["/oic/d"]["di"] == REDACTED
-    assert identity["resources"]["/oic/p"]["pi"] == REDACTED
+    # The OCF UUIDs are reported rather than redacted: they are what this
+    # entry is keyed on (issue #381), and blanking them is what made the
+    # first duplicate-serial report unanswerable.
+    assert identity["resources"]["/oic/d"]["di"] == "ab-cd-ef"
+    assert identity["resources"]["/oic/p"]["pi"] == "12-34-56"
     # The owner-settable device name is redacted; `rt` -- the reason this
     # block exists -- is not.
     assert identity["resources"]["/oic/d"]["n"] == REDACTED
@@ -125,9 +128,9 @@ async def test_diagnostics_include_oic_res_links(
 
     links = diag["identity"]["resources"]["/oic/res"]
     assert len(links) == 2
-    assert links[0]["di"] == REDACTED
+    assert links[0]["di"] == "aaaa-1111"
     assert links[0]["href"] == "/device/0"
-    assert links[1]["di"] == REDACTED
+    assert links[1]["di"] == "bbbb-2222"
     assert links[1]["href"] == "/device/1"
     assert links[1]["rt"] == ["x.com.samsung.devcol", "oic.wk.col"]
 

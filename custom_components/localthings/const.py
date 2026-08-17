@@ -30,6 +30,16 @@ CONF_LEAF_KEY_PEM = "leaf_key_pem"
 # output, the host itself for a placeholder-serial board -- issues
 # #83/#189), so it matches what _run_discovery computes on the first poll.
 CONF_SERIAL = "serial"
+# The identity this entry's devices and entities are actually keyed on --
+# registry.identity.resolve_device_key's output, normally the OCF device
+# UUID (issue #381). Distinct from CONF_SERIAL, which stays as (a) the key
+# a pre-v4 entry was minted with, so the one-time re-key knows what to
+# rewrite from, and (b) the corroborating identity that tells a device
+# whose `di` rotated across a factory reset apart from a different
+# appliance that moved onto this address. Absent on an entry that has not
+# polled since upgrading: the OCF resources are only readable from the
+# device, so the coordinator adopts this on the first live poll.
+CONF_DEVICE_KEY = "device_key"
 CONF_MODEL = "model"
 CONF_MANUFACTURER = "manufacturer"
 CONF_DEVICE_TYPE = "device_type"

@@ -16,11 +16,13 @@ from custom_components.localthings.const import (
     CONF_CA_CERT_PEM,
     CONF_CA_KEY_PEM,
     CONF_CLOUD_COURSES_ENABLED,
+    CONF_DEVICE_KEY,
     CONF_HOST,
     CONF_LEAF_CERT_PEM,
     CONF_LEARN_MODES,
     CONF_LEARNED_MODES,
     CONF_PORT,
+    CONF_SERIAL,
     DOMAIN,
 )
 
@@ -28,11 +30,13 @@ from .conftest import (
     ENTRY_DATA,
     MOCK_CA_CERT_PEM,
     MOCK_CA_KEY_PEM,
+    MOCK_DEVICE_KEY,
     MOCK_HOST,
     MOCK_LEAF_CERT_PEM,
     MOCK_MODEL,
     MOCK_PORT,
     MOCK_SERIAL,
+    _probe_result,
 )
 
 
@@ -1047,7 +1051,11 @@ async def test_unknown_type_step_description_makes_no_version_claim(
 
 
 async def test_duplicate_device_aborted(hass: HomeAssistant, mock_probe) -> None:
-    """Second add of same serial: flow aborts.
+    """Second add of the same *device key*: flow aborts.
+
+    Keyed on the OCF device UUID rather than the serialNum (issue #381), so
+    this is now the check that two genuinely distinct units can no longer
+    trip -- see test_same_serial_on_two_units_is_not_a_duplicate.
 
     When a device already exists the form only asks for host (CA creds are
     reused), so we only submit CONF_HOST in the second configure call.
@@ -1055,7 +1063,7 @@ async def test_duplicate_device_aborted(hass: HomeAssistant, mock_probe) -> None
     existing = MockConfigEntry(
         domain=DOMAIN,
         data=ENTRY_DATA,
-        unique_id=f"localthings_{MOCK_SERIAL}",
+        unique_id=f"localthings_{MOCK_DEVICE_KEY}",
     )
     existing.add_to_hass(hass)
 
@@ -1067,6 +1075,88 @@ async def test_duplicate_device_aborted(hass: HomeAssistant, mock_probe) -> None
     )
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "already_configured"
+
+
+async def test_same_serial_on_two_units_is_not_a_duplicate(hass: HomeAssistant, mock_probe) -> None:
+    """Issue #381: two Samsung air purifiers of one model ship the identical,
+    well-formed serialNum, so keying the entry on it turned the second one
+    away as already configured. The OCF device UUID differs between them,
+    and it is what the entry is keyed on now, so both can be added.
+
+    Deliberately holds the serial *constant* across the two probes and varies
+    only the device key -- the exact shape of the bug report.
+    """
+    first = MockConfigEntry(
+        domain=DOMAIN,
+        data={**ENTRY_DATA, CONF_HOST: "192.168.0.3"},
+        unique_id=f"localthings_{MOCK_DEVICE_KEY}",
+    )
+    first.add_to_hass(hass)
+
+    second_probe = {
+        **_probe_result(recognized=True),
+        "device_key": "3771f8bf-c184-3a2d-d885-e4c9818736d2",
+        "serial": MOCK_SERIAL,
+    }
+    with patch(
+        "custom_components.localthings.config_flow._probe_and_validate",
+        return_value=second_probe,
+    ):
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: "192.168.0.14"}
+        )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_DEVICE_KEY] == "3771f8bf-c184-3a2d-d885-e4c9818736d2"
+    # Both entries exist, and the shared serial is still recorded on each --
+    # it is what corroborates a later change of key.
+    assert len(hass.config_entries.async_entries(DOMAIN)) == 2
+    assert result["data"][CONF_SERIAL] == first.data[CONF_SERIAL]
+
+
+def test_probe_reads_the_device_key_from_oic_d_without_an_extra_round_trip(monkeypatch):
+    """`_read_device` already fetches /oic/p and /oic/d for the device-type
+    signal, so keying on the OCF UUID costs no additional GET -- it reads
+    the identity that call already returned."""
+    from custom_components.localthings.config_flow import _read_device
+
+    device0 = [
+        {"rt": ["x.com.samsung.devcol"]},
+        {
+            "href": "/information/vs/0",
+            "rep": {
+                "x.com.samsung.da.modelNum": "AVT-WW-TP1-23-AXX500|10251941",
+                "x.com.samsung.da.serialNum": "BS7SP9AW400114A",
+            },
+        },
+    ]
+
+    class _Session:
+        def __init__(self):
+            self.paths = []
+
+        def get(self, path, timeout=10.0):
+            self.paths.append(tuple(path))
+            table = {
+                ("oic", "p"): {"mnmn": "Samsung Electronics", "pi": "PLATFORM-UUID"},
+                ("oic", "d"): {"di": "CCFD73B3-AEB4-792A-1100-68F06F5D603B"},
+                ("device", "0"): device0,
+            }
+            body = table.get(tuple(path))
+            if body is None:
+                return 0x84, b""
+            import cbor2
+
+            return 0x45, cbor2.dumps(body)
+
+    sess = _Session()
+    info = _read_device(sess, "192.168.0.3", MOCK_PORT)
+
+    assert info["device_key"] == "ccfd73b3-aeb4-792a-1100-68f06f5d603b"
+    assert info["serial"] == "BS7SP9AW400114A"
+    # Exactly the three reads the probe already made before this change.
+    assert sess.paths == [("oic", "p"), ("oic", "d"), ("oic", "res"), ("device", "0")]
 
 
 def test_probe_marks_washer_as_recognized(monkeypatch):

@@ -23,7 +23,7 @@ class _FakeCoordinator:
     """Just enough surface for LocalThingsEntity/LocalThingsSensor."""
 
     def __init__(self, threshold_minutes):
-        self.device_serial = "TEST-SERIAL"
+        self.device_key = "TEST-SERIAL"
         self.config_entry = _FakeConfigEntry(
             {
                 CONF_FINISH_TIME_HYSTERESIS_MINUTES: threshold_minutes,

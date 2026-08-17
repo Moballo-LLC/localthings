@@ -44,7 +44,7 @@ MODEL = "ARTIK051_KRAC_18K|10193441|60010119001111010100000000000000"
 
 
 class _FakeCoordinator:
-    device_serial = "TEST-KRAC-SERIAL"
+    device_key = "TEST-KRAC-SERIAL"
     device_info: ClassVar[dict] = {}
     data: ClassVar[dict] = {}
 

@@ -28,7 +28,7 @@ FIXTURE = "airconditioner_tp1x_rac_01001"
 
 
 class _FakeCoordinator:
-    device_serial = "TEST-RAC-01001-SERIAL"
+    device_key = "TEST-RAC-01001-SERIAL"
     device_info: ClassVar[dict] = {}
     data: ClassVar[dict] = {}
 

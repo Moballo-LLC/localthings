@@ -187,7 +187,7 @@ class LocalThingsConnectionModeSensor(CoordinatorEntity[LocalThingsCoordinator],
 
     def __init__(self, coordinator: LocalThingsCoordinator) -> None:
         super().__init__(coordinator)
-        self._attr_unique_id = f"{DOMAIN}_{coordinator.device_serial}_connection_mode"
+        self._attr_unique_id = f"{DOMAIN}_{coordinator.device_key}_connection_mode"
 
     @property
     def device_info(self) -> DeviceInfo:

@@ -50,7 +50,7 @@ class _FakeCoordinator:
     """
 
     def __init__(self):
-        self.device_serial = "TEST-SERIAL"
+        self.device_key = "TEST-SERIAL"
         self.config_entry = _FakeConfigEntry()
         self.resources: dict[str, dict] = {}
 

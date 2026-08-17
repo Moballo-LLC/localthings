@@ -31,6 +31,7 @@ from .const import (
     CONF_BYPASS_REMOTE_CONTROL,
     CONF_CLOUD_COURSES,
     CONF_CLOUD_COURSES_ENABLED,
+    CONF_DEVICE_KEY,
     CONF_DEVICE_TYPE,
     CONF_HOST,
     CONF_LEAF_CERT_PEM,
@@ -66,6 +67,7 @@ from .registry.entities import ClimateDesc
 from .registry.identity import (
     DeviceIdentity,
     device_display_name,
+    ocf_device_key,
     read_identity,
     resolve_model,
     resolve_serial,
@@ -78,6 +80,7 @@ from .registry.subdevices import (
     enumerate_subdevices,
     normalize_seed_batch,
 )
+from .rekey import rekey_entry
 
 # Sentinel for apply_cloud_courses: "leave this field as it is",
 # distinct from None which means "clear it".
@@ -205,7 +208,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     bound: list[BoundEntity]
     device_info: DeviceInfo
-    device_serial: str
+    device_key: str
 
     # Class-level so tests can shrink these via patch.object() without
     # touching the production defaults.
@@ -310,15 +313,22 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._push_pending = False
         self._push_pending_lock = threading.Lock()
         # Identity is resolved once by the config flow's probe (issue #236).
-        # device_serial mints permanent registry keys, so it must be correct
+        # device_key mints permanent registry keys, so it must be correct
         # before the first entity registers -- a placeholder corrected once
         # the first poll lands orphans the first device/entity pair instead.
-        # The host fallback covers a pre-migration entry and matches what
-        # resolve_serial itself returns for a placeholder-serial board
-        # (issues #83/#189).
-        self.device_serial = entry.data.get(CONF_SERIAL) or entry.data[CONF_HOST]
+        #
+        # CONF_DEVICE_KEY is what a v4 entry stores (the OCF device UUID,
+        # issue #381); CONF_SERIAL is both the pre-v4 key and the fallback
+        # for a board that answers no OCF identity resource; and the host
+        # covers a pre-migration entry, matching what resolve_serial itself
+        # returns for a placeholder-serial board (issues #83/#189). The
+        # chain is ordered so an entry that has not polled since upgrading
+        # keeps loading under the key its registry entries already carry.
+        self.device_key = (
+            entry.data.get(CONF_DEVICE_KEY) or entry.data.get(CONF_SERIAL) or entry.data[CONF_HOST]
+        )
         self.device_info = DeviceInfo(
-            identifiers={(DOMAIN, self.device_serial)},
+            identifiers={(DOMAIN, self.device_key)},
             name=device_display_name(
                 entry.data.get(CONF_DEVICE_TYPE), entry.data.get(CONF_MODEL) or ""
             ),
@@ -768,8 +778,8 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 else "Secondary Subdevice"
             )
         return DeviceInfo(
-            identifiers={(DOMAIN, f"{self.device_serial}_{subdevice.key}")},
-            via_device=(DOMAIN, self.device_serial),
+            identifiers={(DOMAIN, f"{self.device_key}_{subdevice.key}")},
+            via_device=(DOMAIN, self.device_key),
             name=f"{base_name} {label}",
             manufacturer=self.device_info.get("manufacturer") or "Samsung",
             model=model or None,
@@ -1093,8 +1103,120 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._skipped_subdevice_resources = skipped
         return kept
 
+    def _resolve_identity(self, polled_serial: str, *, from_snapshot: bool) -> tuple[str, str]:
+        """The (key, serial) this entry should be registered under, re-keying
+        the registries if the key has moved.
+
+        Returns both together because they have to agree: the serial is what
+        corroborates a later change of key, so writing this poll's serial
+        while *defending* the stored key against a different appliance would
+        quietly hand that appliance the corroboration it needs to win the
+        next poll. The serial is therefore only adopted alongside a key we
+        accepted -- never on a poll whose identity we just rejected.
+
+        The stored key wins by default: re-keying an entry that already has
+        registry entries orphans them unless the rewrite goes with it
+        (issue #236), so nothing here changes a key without calling
+        `rekey_entry` in the same breath.
+
+        Four things can happen:
+
+        * A snapshot replay (issue #295) never re-keys. That path did not
+          reach the device, so its "reported" identity is only whatever the
+          snapshot happened to preserve.
+        * Nothing stored (a pre-v4 entry, or a legacy migration that could
+          not recover an identity) -- adopt what the device reports and
+          rewrite the registries off the legacy key onto it. This is the
+          one-time move onto the OCF device UUID (issue #381), deferred to
+          here because the UUID is only readable from the device itself.
+        * A key is stored and this poll produced no UUID -- keep it. The
+          device saying nothing is not the device saying something
+          different, and demoting a UUID-keyed entry back onto its serial
+          because one reconnect couldn't read /oic/d would re-key every
+          entity the user has for the duration of an outage.
+        * A key is stored and the UUID differs. Either this appliance's
+          `di` rotated (an OCF hard reset is allowed to regenerate it) or a
+          *different* appliance now answers on this address. The serialNum
+          tells them apart: a usable one that still matches what this entry
+          was registered with means same unit, new UUID, so follow it.
+          Anything else keeps the registered identity and warns -- re-adding
+          is the user's call, not something a poll gets to decide.
+        """
+        host = self._entry.data[CONF_HOST]
+        stored_serial = self._entry.data.get(CONF_SERIAL)
+        if from_snapshot:
+            return self.device_key, stored_serial or polled_serial
+
+        polled_ocf = ocf_device_key(self._identity)
+        stored_key = self._entry.data.get(CONF_DEVICE_KEY)
+
+        if stored_key is None:
+            # `polled_serial` is already resolve_serial's output, so this is
+            # exactly resolve_device_key's chain: the UUID where the device
+            # reports one, today's serial/host answer where it doesn't.
+            polled_key = polled_ocf or polled_serial
+            legacy_key = stored_serial or host
+            if legacy_key != polled_key:
+                self._log.info(
+                    "moving this device's registry entries from %r onto %r",
+                    legacy_key,
+                    polled_key,
+                )
+                rekey_entry(self.hass, self._entry, legacy_key, polled_key)
+            return polled_key, polled_serial
+
+        if polled_ocf == stored_key:
+            # Confirmed the registered appliance, so this poll's serial is
+            # authoritative -- firmware is allowed to correct it.
+            return stored_key, polled_serial
+        if polled_ocf is None:
+            # Nothing to compare against: this may or may not be the
+            # registered appliance, so neither half is updated.
+            return stored_key, stored_serial or polled_serial
+        polled_key = polled_ocf
+
+        # Excluding the host answer is what keeps this from firing on two
+        # *different* placeholder-serial units: `polled_serial` is already
+        # resolved, so anything that fell back to the address is not an
+        # identity and can't corroborate anything.
+        same_unit = polled_serial == stored_serial and polled_serial != host
+        # An entry keyed on the host never made an identity claim to defend
+        # -- it is registered against "whatever answers at this address"
+        # (issues #83/#189). Any real UUID is a strict improvement on that,
+        # so it is adopted without needing the serial to corroborate it;
+        # requiring corroboration would strand exactly the placeholder-serial
+        # boards this whole change is meant to rescue, since their serial
+        # resolves to the host and can never match.
+        if not (stored_key == host or same_unit):
+            self._log.warning(
+                "device at %s identifies as %r but this entry is registered as %r "
+                "(serial %r, registered %r); keeping the registered identity",
+                host,
+                polled_key,
+                stored_key,
+                polled_serial,
+                stored_serial,
+            )
+            return stored_key, stored_serial or polled_serial
+
+        # Corroborated: same unit with a new UUID (a factory reset is
+        # allowed to regenerate `di`), or an address-keyed entry finally
+        # learning a real identity. Following it keeps the user's
+        # entity_ids, history and automations rather than stranding them on
+        # a key the device will never report again.
+        self._log.info(
+            "device %s (serial %r) changed key from %r to %r; following it",
+            host,
+            polled_serial,
+            stored_key,
+            polled_key,
+        )
+        rekey_entry(self.hass, self._entry, stored_key, polled_key)
+        return polled_key, polled_serial
+
     def _persist_identity(
         self,
+        device_key: str | None,
         serial: str,
         model: str,
         manufacturer: str,
@@ -1108,9 +1230,16 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         means the next restart names the device fully instead of renaming it
         again once a poll lands.
 
+        `device_key` is what the registries are keyed on; `serial` is stored
+        alongside it rather than replaced by it, because it is what
+        `_resolve_key` corroborates a changed UUID against on a later poll.
+        None leaves whatever key is already stored untouched -- see the
+        caller for why a snapshot replay must not write one.
+
         Runs on the event loop, which async_update_entry requires.
         """
         identity = {
+            **({CONF_DEVICE_KEY: device_key} if device_key is not None else {}),
             CONF_SERIAL: serial,
             CONF_MODEL: model,
             CONF_MANUFACTURER: manufacturer,
@@ -1195,6 +1324,11 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     model=ident.get("model") or "",
                     name=ident.get("name") or "",
                     serial=ident.get("serial"),
+                    # Absent from a snapshot written before these fields
+                    # existed; _resolve_key never re-keys from a replay, so
+                    # a missing UUID here costs nothing beyond diagnostics.
+                    device_id=ident.get("device_id"),
+                    platform_id=ident.get("platform_id"),
                     device_types=tuple(ident.get("device_types") or ()),
                     raw=ident.get("raw") or {},
                 )
@@ -1346,26 +1480,11 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._unbound_hrefs = unbound
         self._refresh_learnable_hrefs()
 
-        # The entry's stored identity wins; this poll's answer is only
-        # adopted when nothing is stored (a legacy migration couldn't
-        # recover it), then written back. Re-keying an entry with existing
-        # registry entries orphans them (issue #236).
         polled_serial = resolve_serial(
             info.get("x.com.samsung.da.serialNum"), self._entry.data[CONF_HOST]
         )
-        serial = self._entry.data.get(CONF_SERIAL) or polled_serial
-        if serial != polled_serial:
-            # Same IP, different appliance (or firmware that changed what it
-            # reports) -- keep the registered identity; re-adding is the
-            # user's call.
-            self._log.warning(
-                "device at %s reports serial %r but this entry is registered "
-                "as %r; keeping the registered identity",
-                self._entry.data[CONF_HOST],
-                polled_serial,
-                serial,
-            )
-        self.device_serial = serial
+        key, serial = self._resolve_identity(polled_serial, from_snapshot=from_snapshot)
+        self.device_key = key
 
         ident = self._identity
         model = resolve_model(model_num, ident)
@@ -1373,12 +1492,19 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         mfr = (ident.manufacturer if ident else "") or "Samsung"
 
         self.device_info = DeviceInfo(
-            identifiers={(DOMAIN, serial)},
+            identifiers={(DOMAIN, key)},
             name=name,
             manufacturer=mfr,
             model=model,
         )
-        self._persist_identity(serial, model, mfr, device_type_name)
+        # A snapshot replay passes None: it never reached the device, so it
+        # has no standing to write a device key. Persisting `self.device_key`
+        # there would freeze a pre-v4 entry's legacy key into CONF_DEVICE_KEY
+        # as if a poll had confirmed it, and _resolve_key would then treat
+        # the real UUID -- when a live poll finally produced one -- as a
+        # changed identity to defend against rather than the one-time
+        # adoption it is.
+        self._persist_identity(None if from_snapshot else key, serial, model, mfr, device_type_name)
         if not from_snapshot:
             # A coverage gap is a claim about what the device reports, so only
             # a live poll gets to make it. Replaying a snapshot would restate
@@ -1392,9 +1518,9 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         self._discovered = True
         self._log.info(
-            "discovered %d entities (serial=%s) hot=%s warm=%s subdevices=%s",
+            "discovered %d entities (key=%s) hot=%s warm=%s subdevices=%s",
             len(bound),
-            serial,
+            key,
             self._hot_hrefs,
             self._warm_hrefs,
             [su.key for su in self.subdevices],

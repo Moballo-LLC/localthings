@@ -463,7 +463,7 @@ class TestKimchiZone:
         )
 
         class _FakeCoordinator:
-            device_serial = "TEST-SERIAL"
+            device_key = "TEST-SERIAL"
 
             def __init__(self, resources, data):
                 self.last_resources = resources

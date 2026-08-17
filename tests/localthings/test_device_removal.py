@@ -39,7 +39,7 @@ async def test_stale_device_can_be_removed(
     stale = _device(
         hass,
         mock_entry,
-        {(DOMAIN, f"{coordinator.device_serial}_1")},
+        {(DOMAIN, f"{coordinator.device_key}_1")},
     )
 
     assert await async_remove_config_entry_device(hass, mock_entry, stale) is True

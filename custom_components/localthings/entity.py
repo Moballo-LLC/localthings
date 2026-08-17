@@ -88,7 +88,7 @@ class LocalThingsEntity(CoordinatorEntity[LocalThingsCoordinator]):
         super().__init__(coordinator)
         self._bound = bound
         self._state_key = _key(bound)
-        self._attr_unique_id = f"{DOMAIN}_{coordinator.device_serial}_{self._state_key}"
+        self._attr_unique_id = f"{DOMAIN}_{coordinator.device_key}_{self._state_key}"
         if bound.desc.translation_placeholders is not None:
             self._attr_translation_placeholders = dict(bound.desc.translation_placeholders)
         elif bound.desc.use_instance_name:
