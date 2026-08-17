@@ -122,6 +122,25 @@ def _reporting_serial(resources: dict, serial: str) -> dict:
     return {**resources, "/information/vs/0": info}
 
 
+def _device_identifiers(hass: HomeAssistant, device_id: str) -> set[tuple[str, str]]:
+    """This device row's identifiers, asserting the row still exists.
+
+    `dev_reg.async_get` returns `DeviceEntry | None`, so reading through it
+    directly would crash with an AttributeError on a row the re-key
+    wrongly removed instead of failing the assertion that says so.
+    """
+    row = dr.async_get(hass).async_get(device_id)
+    assert row is not None
+    return row.identifiers
+
+
+def _entity_unique_id(hass: HomeAssistant, entity_id: str) -> str:
+    """This entity row's unique_id, asserting the row still exists."""
+    row = er.async_get(hass).async_get(entity_id)
+    assert row is not None
+    return row.unique_id
+
+
 def _seed_registry(hass: HomeAssistant, entry: MockConfigEntry, key: str, **entity_kwargs):
     """A device and one entity keyed on `key`, as a running install has."""
     dev_reg = dr.async_get(hass)
@@ -205,7 +224,7 @@ async def test_the_oldest_install_walks_all_the_way_from_v1(
     assert kept is not None
     assert kept.entity_id == "sensor.old_install_connection"
     assert kept.unique_id == f"{DOMAIN}_{UUID_A}_connection_mode"
-    assert dr.async_get(hass).async_get(device.id).identifiers == {(DOMAIN, UUID_A)}
+    assert _device_identifiers(hass, device.id) == {(DOMAIN, UUID_A)}
 
 
 async def test_a_host_keyed_entry_adopts_a_real_identity(
@@ -225,7 +244,7 @@ async def test_a_host_keyed_entry_adopts_a_real_identity(
         await hass.async_block_till_done()
 
     assert entry.data[CONF_DEVICE_KEY] == UUID_B
-    assert dr.async_get(hass).async_get(device.id).identifiers == {(DOMAIN, UUID_B)}
+    assert _device_identifiers(hass, device.id) == {(DOMAIN, UUID_B)}
 
 
 async def test_the_two_units_from_the_issue_migrate_to_separate_identities(
@@ -263,11 +282,8 @@ async def test_the_two_units_from_the_issue_migrate_to_separate_identities(
     assert second.data[CONF_DEVICE_KEY] == UUID_B
     assert first.unique_id != second.unique_id
 
-    ent_reg = er.async_get(hass)
-    assert ent_reg.async_get(first_entity.entity_id).unique_id == (
-        f"{DOMAIN}_{UUID_A}_connection_mode"
-    )
-    assert ent_reg.async_get(second_entity.entity_id).unique_id == (
+    assert _entity_unique_id(hass, first_entity.entity_id) == (f"{DOMAIN}_{UUID_A}_connection_mode")
+    assert _entity_unique_id(hass, second_entity.entity_id) == (
         f"{DOMAIN}_{UUID_B}_connection_mode"
     )
 
@@ -311,7 +327,9 @@ async def test_every_user_customization_on_the_row_survives(
     assert kept.icon == "mdi:air-filter"
     assert kept.area_id == "kitchen"
     assert kept.hidden_by is er.RegistryEntryHider.USER
-    assert dr.async_get(hass).async_get(device.id).area_id == "kitchen"
+    rekeyed_device = dr.async_get(hass).async_get(device.id)
+    assert rekeyed_device is not None
+    assert rekeyed_device.area_id == "kitchen"
 
 
 async def test_a_composite_appliance_keeps_its_subdevice_links(
@@ -336,8 +354,9 @@ async def test_a_composite_appliance_keeps_its_subdevice_links(
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
-    assert dev_reg.async_get(master.id).identifiers == {(DOMAIN, UUID_A)}
+    assert _device_identifiers(hass, master.id) == {(DOMAIN, UUID_A)}
     rekeyed_sub = dev_reg.async_get(sub.id)
+    assert rekeyed_sub is not None
     assert rekeyed_sub.identifiers == {(DOMAIN, f"{UUID_A}_subdevice_1")}
     # Still the same parent row, so the device tree the user sees is intact.
     assert rekeyed_sub.via_device_id == master.id
@@ -375,9 +394,9 @@ async def test_a_re_key_never_touches_another_entrys_rows(hass: HomeAssistant) -
 
     rekey_entry(hass, migrating, SHARED_SERIAL, UUID_A)
 
-    assert ent_reg.async_get(moved.entity_id).unique_id == f"{DOMAIN}_{UUID_A}_connection_mode"
+    assert _entity_unique_id(hass, moved.entity_id) == f"{DOMAIN}_{UUID_A}_connection_mode"
     # The other appliance is still on the shared serial, waiting its turn.
-    assert ent_reg.async_get(stays.entity_id).unique_id == f"{DOMAIN}_{SHARED_SERIAL}_power"
+    assert _entity_unique_id(hass, stays.entity_id) == f"{DOMAIN}_{SHARED_SERIAL}_power"
     assert bystander.unique_id == f"{DOMAIN}_{SHARED_SERIAL}"
 
 
@@ -404,9 +423,9 @@ async def test_a_re_key_stops_at_the_key_boundary(hass: HomeAssistant) -> None:
 
     rekey_entry(hass, entry, "TEST-SERIAL", UUID_A)
 
-    assert dev_reg.async_get(target.id).identifiers == {(DOMAIN, UUID_A)}
-    assert dev_reg.async_get(neighbour.id).identifiers == {(DOMAIN, "TEST-SERIAL-0000")}
-    assert ent_reg.async_get(neighbour_entity.entity_id).unique_id == (
+    assert _device_identifiers(hass, target.id) == {(DOMAIN, UUID_A)}
+    assert _device_identifiers(hass, neighbour.id) == {(DOMAIN, "TEST-SERIAL-0000")}
+    assert _entity_unique_id(hass, neighbour_entity.entity_id) == (
         f"{DOMAIN}_TEST-SERIAL-0000_connection_mode"
     )
 
@@ -453,7 +472,7 @@ async def test_upgrading_while_the_appliance_is_off_changes_nothing(
     # No key claimed, and the registry is exactly as it was.
     assert CONF_DEVICE_KEY not in entry.data
     assert entry.unique_id == f"{DOMAIN}_{MOCK_SERIAL}"
-    assert er.async_get(hass).async_get(existing.entity_id).unique_id == (
+    assert _entity_unique_id(hass, existing.entity_id) == (
         f"{DOMAIN}_{MOCK_SERIAL}_connection_mode"
     )
 
@@ -502,10 +521,8 @@ async def test_an_offline_load_never_rewrites_the_registry(
     assert coordinator.device_key == MOCK_HOST
     assert CONF_DEVICE_KEY not in entry.data
     assert entry.unique_id == f"{DOMAIN}_{MOCK_HOST}"
-    assert dr.async_get(hass).async_get(device.id).identifiers == {(DOMAIN, MOCK_HOST)}
-    assert er.async_get(hass).async_get(existing.entity_id).unique_id == (
-        f"{DOMAIN}_{MOCK_HOST}_connection_mode"
-    )
+    assert _device_identifiers(hass, device.id) == {(DOMAIN, MOCK_HOST)}
+    assert _entity_unique_id(hass, existing.entity_id) == (f"{DOMAIN}_{MOCK_HOST}_connection_mode")
 
     # And the deferred adoption still works once the appliance answers --
     # the offline load left nothing frozen behind it.
@@ -515,9 +532,7 @@ async def test_an_offline_load_never_rewrites_the_registry(
 
     assert coordinator.device_key == UUID_A
     assert entry.data[CONF_DEVICE_KEY] == UUID_A
-    assert er.async_get(hass).async_get(existing.entity_id).unique_id == (
-        f"{DOMAIN}_{UUID_A}_connection_mode"
-    )
+    assert _entity_unique_id(hass, existing.entity_id) == (f"{DOMAIN}_{UUID_A}_connection_mode")
 
 
 async def test_the_appliance_coming_back_completes_the_upgrade(
@@ -543,9 +558,7 @@ async def test_the_appliance_coming_back_completes_the_upgrade(
     assert coordinator.device_key == UUID_A
     assert entry.data[CONF_DEVICE_KEY] == UUID_A
     assert entry.unique_id == f"{DOMAIN}_{UUID_A}"
-    assert er.async_get(hass).async_get(existing.entity_id).unique_id == (
-        f"{DOMAIN}_{UUID_A}_connection_mode"
-    )
+    assert _entity_unique_id(hass, existing.entity_id) == (f"{DOMAIN}_{UUID_A}_connection_mode")
 
 
 async def test_restarting_after_the_upgrade_is_a_no_op(
@@ -591,10 +604,8 @@ async def test_an_already_migrated_entry_is_left_alone(
 
     assert entry.version == 4
     assert entry.data[CONF_DEVICE_KEY] == UUID_A
-    assert dr.async_get(hass).async_get(device.id).identifiers == {(DOMAIN, UUID_A)}
-    assert er.async_get(hass).async_get(existing.entity_id).unique_id == (
-        f"{DOMAIN}_{UUID_A}_connection_mode"
-    )
+    assert _device_identifiers(hass, device.id) == {(DOMAIN, UUID_A)}
+    assert _entity_unique_id(hass, existing.entity_id) == (f"{DOMAIN}_{UUID_A}_connection_mode")
 
 
 # ---------------------------------------------------------------------------
@@ -637,10 +648,8 @@ async def test_a_rotated_uuid_on_the_same_serial_is_followed(
         await hass.async_block_till_done()
 
     assert entry.data[CONF_DEVICE_KEY] == UUID_B
-    assert dr.async_get(hass).async_get(device.id).identifiers == {(DOMAIN, UUID_B)}
-    assert er.async_get(hass).async_get(existing.entity_id).unique_id == (
-        f"{DOMAIN}_{UUID_B}_connection_mode"
-    )
+    assert _device_identifiers(hass, device.id) == {(DOMAIN, UUID_B)}
+    assert _entity_unique_id(hass, existing.entity_id) == (f"{DOMAIN}_{UUID_B}_connection_mode")
 
 
 async def test_a_different_appliance_on_the_same_address_keeps_the_registered_identity(
@@ -659,7 +668,7 @@ async def test_a_different_appliance_on_the_same_address_keeps_the_registered_id
         await hass.async_block_till_done()
 
         assert entry.data[CONF_DEVICE_KEY] == UUID_A
-        assert dr.async_get(hass).async_get(device.id).identifiers == {(DOMAIN, UUID_A)}
+        assert _device_identifiers(hass, device.id) == {(DOMAIN, UUID_A)}
         # The rejected appliance's serial is not written either. The serial
         # is what corroborates a later change of key, so adopting it here
         # would hand the intruder exactly the corroboration it needs to win
@@ -702,8 +711,8 @@ async def test_a_pre_v4_entry_defends_itself_against_a_different_appliance(
     assert entry.data[CONF_DEVICE_KEY] == MOCK_SERIAL
     assert entry.data[CONF_SERIAL] == MOCK_SERIAL
     assert entry.unique_id == f"{DOMAIN}_{MOCK_SERIAL}"
-    assert dr.async_get(hass).async_get(device.id).identifiers == {(DOMAIN, MOCK_SERIAL)}
-    assert er.async_get(hass).async_get(existing.entity_id).unique_id == (
+    assert _device_identifiers(hass, device.id) == {(DOMAIN, MOCK_SERIAL)}
+    assert _entity_unique_id(hass, existing.entity_id) == (
         f"{DOMAIN}_{MOCK_SERIAL}_connection_mode"
     )
 
@@ -768,7 +777,5 @@ async def test_rekey_to_the_same_key_does_nothing(hass: HomeAssistant) -> None:
 
     rekey_entry(hass, entry, UUID_A, UUID_A)
 
-    assert er.async_get(hass).async_get(existing.entity_id).unique_id == (
-        f"{DOMAIN}_{UUID_A}_connection_mode"
-    )
+    assert _entity_unique_id(hass, existing.entity_id) == (f"{DOMAIN}_{UUID_A}_connection_mode")
     assert entry.unique_id == f"{DOMAIN}_{UUID_A}"

@@ -137,9 +137,21 @@ def test_read_identity_tolerates_malformed_oic_res():
 # ---------------------------------------------------------------------------
 
 
-def _identity(**kwargs) -> DeviceIdentity:
-    base = {"manufacturer": "Samsung", "model": "M", "name": "N", "serial": None}
-    return DeviceIdentity(**{**base, **kwargs})
+def _identity(
+    *,
+    serial: str | None = None,
+    device_id: str | None = None,
+    platform_id: str | None = None,
+) -> DeviceIdentity:
+    """A DeviceIdentity carrying only the fields the key chain reads."""
+    return DeviceIdentity(
+        manufacturer="Samsung",
+        model="M",
+        name="N",
+        serial=serial,
+        device_id=device_id,
+        platform_id=platform_id,
+    )
 
 
 def test_read_identity_captures_the_ocf_uuids_as_named_fields():
