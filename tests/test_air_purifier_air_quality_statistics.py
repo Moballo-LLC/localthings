@@ -110,9 +110,9 @@ def test_co2_matches_air_monitor_mapping():
     assert desc.unit == "ppm"
     assert desc.state_class == "measurement"
     assert desc.exists_fn is not None
-    assert desc.value_fn(
-        [{"x.com.samsung.da.type": "CO2", "x.com.samsung.da.value": ["498"]}]
-    ) == 498
+    assert (
+        desc.value_fn([{"x.com.samsung.da.type": "CO2", "x.com.samsung.da.value": ["498"]}]) == 498
+    )
 
 
 def test_every_air_quality_sensor_still_reads_a_plain_int():
