@@ -30,6 +30,11 @@ CONF_LEAF_KEY_PEM = "leaf_key_pem"
 # output, the host itself for a placeholder-serial board -- issues
 # #83/#189), so it matches what _run_discovery computes on the first poll.
 CONF_SERIAL = "serial"
+# What this entry's devices and entities are keyed on -- normally the OCF
+# device UUID (issue #381). CONF_SERIAL stays alongside it as the pre-v4
+# key to re-key from, and as what corroborates a later change of UUID.
+# Absent until the first live poll, since only the device can report it.
+CONF_DEVICE_KEY = "device_key"
 CONF_MODEL = "model"
 CONF_MANUFACTURER = "manufacturer"
 CONF_DEVICE_TYPE = "device_type"

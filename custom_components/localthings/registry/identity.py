@@ -13,6 +13,12 @@ class DeviceIdentity:
     model: str
     name: str
     serial: str | None
+    # /oic/d's `di` and /oic/p's `pi` -- OCF's own device and platform
+    # UUIDs. Promoted out of `raw` into named fields because
+    # resolve_device_key mints permanent registry keys from them; see its
+    # docstring for why `di` leads.
+    device_id: str | None = None
+    platform_id: str | None = None
     device_types: tuple[str, ...] = ()
     raw: dict[str, dict | list] = field(default_factory=dict)
 
@@ -55,6 +61,63 @@ def resolve_serial(raw_serial: str | None, host: str) -> str:
     if not s or is_placeholder_serial(s):
         return host
     return s
+
+
+def is_usable_device_id(value: str | None) -> bool:
+    """True for an OCF `di`/`pi` that actually identifies one unit.
+
+    Rejects OCF's nil UUID, which firmware that never had one assigned
+    reports on every unit of the family -- the #189 failure mode on a new
+    field, and one `is_placeholder_serial`'s repeated-digit rule misses
+    because the dashes make more than one distinct character. Past that the
+    same known-junk rules apply: a board flashed with 'Nothing(SVC)' in one
+    identity field is not one to trust in another.
+    """
+    s = (value or "").strip()
+    if not s:
+        return False
+    if not set(s) - {"0", "-"}:
+        return False
+    return not is_placeholder_serial(s)
+
+
+def ocf_device_key(identity: DeviceIdentity | None) -> str | None:
+    """The OCF-derived half of resolve_device_key's chain, or None when the
+    device reported no usable UUID.
+
+    Split out because "no UUID" and "this UUID" are different answers to a
+    caller holding an existing key: the coordinator must never demote an
+    entry off its UUID just because one poll couldn't read /oic/d.
+    Normalized so firmware that changes case between reads doesn't look
+    like a different appliance.
+    """
+    if identity is None:
+        return None
+    for candidate in (identity.device_id, identity.platform_id):
+        if candidate is not None and is_usable_device_id(candidate):
+            return candidate.strip().lower()
+    return None
+
+
+def resolve_device_key(identity: DeviceIdentity | None, raw_serial: str | None, host: str) -> str:
+    """The identity to mint this device's permanent registry keys from.
+
+    Tried in order: /oic/d's `di`, /oic/p's `pi`, the serialNum, the host.
+
+    `di` leads because it is what the protocol already uses to address this
+    endpoint: if it were wrong or shared, OCF discovery and the DTLS
+    association would not work at all. serialNum is a vendor-populated
+    string nothing depends on, which is why three firmware families have
+    shipped it unusable -- 'Nothing(SVC)' (#83), a flash-unset sentinel
+    (#189), and a well-formed serial duplicated across every unit (#381).
+
+    `pi` is only the fallback despite the spec calling it immutable: it is
+    *platform*-scoped, so a board hosting several logical OCF devices
+    shares one across all of them. `di` is device-scoped, the granularity
+    of a config entry. The serial and host stay below both so a board
+    answering neither resource lands where it always did.
+    """
+    return ocf_device_key(identity) or resolve_serial(raw_serial, host)
 
 
 def resolve_model(model_num: str, identity: DeviceIdentity | None) -> str:
@@ -143,6 +206,8 @@ def read_identity(sess, serial: str | None) -> DeviceIdentity:
         model=p.get("mnmo") or "",
         name=d.get("n") or "",
         serial=serial,
+        device_id=d.get("di") if isinstance(d.get("di"), str) else None,
+        platform_id=p.get("pi") if isinstance(p.get("pi"), str) else None,
         device_types=_device_types(d),
         # Kept whole rather than field-by-field: outside the /device/0 dump
         # diagnostics already captures, and we don't yet know which fields

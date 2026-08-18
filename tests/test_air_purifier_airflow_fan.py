@@ -12,7 +12,7 @@ from tests.conftest import _load_device
 
 
 class _FakeCoordinator:
-    device_serial = "TEST-AIRFLOW-SERIAL"
+    device_key = "TEST-AIRFLOW-SERIAL"
     device_info: ClassVar[dict] = {}
     data: ClassVar[dict] = {}
 

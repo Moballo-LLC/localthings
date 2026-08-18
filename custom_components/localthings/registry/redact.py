@@ -30,13 +30,18 @@ _SENSITIVE_SUBSTRINGS = (
     "secret",
 )
 
-# Matched whole, not as substrings: OCF's /oic/d and /oic/p identify the
-# unit with bare one/two-letter keys too short for the substring rules above
-# ('di' is a substring of 'condition', 'display', ...). 'di'/'pi' are the
-# device/platform UUIDs; 'n' is /oic/d's free-text device name, which may
-# carry a person's name -- the device-type signal we actually want from
-# that resource is `rt`, which is not redacted.
-_SENSITIVE_EXACT = frozenset({"di", "pi", "n"})
+# Matched whole, not as substrings: these are bare one/two-letter keys too
+# short for the substring rules above ('n' is a substring of very nearly
+# everything). 'n' is /oic/d's free-text device name, which the owner sets
+# from the SmartThings app and can carry a person's name -- the device-type
+# signal we actually want from that resource is `rt`, which is not redacted.
+#
+# /oic/d's `di` and /oic/p's `pi` are deliberately not redacted: they're
+# randomly-assigned per-unit UUIDs rather than account data, and they are
+# what registry keys are minted from (issue #381), so blanking them hides
+# the identity every entity in a report is named after -- which is exactly
+# what made #381's first diagnostics download unable to answer it.
+_SENSITIVE_EXACT = frozenset({"n"})
 
 
 def _is_sensitive_key(key: str) -> bool:

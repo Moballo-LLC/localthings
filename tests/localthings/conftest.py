@@ -14,6 +14,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.localthings.const import (
     CONF_CA_CERT_PEM,
     CONF_CA_KEY_PEM,
+    CONF_DEVICE_KEY,
     CONF_DEVICE_TYPE,
     CONF_HOST,
     CONF_LEAF_CERT_PEM,
@@ -82,6 +83,10 @@ MOCK_PORT = 49154
 # what mock_coordinator_session polls -- so an entry built from ENTRY_DATA and
 # the device it "reaches" agree on who they are, the same as in production.
 MOCK_SERIAL = "TEST-SERIAL-0000"
+# The OCF device UUID (/oic/d's `di`) the probe resolves the entry's key from
+# (issue #381). Distinct from MOCK_SERIAL so a test that confuses the two
+# fails rather than passing by coincidence.
+MOCK_DEVICE_KEY = "7b1f0c9e-2a44-4d6b-9f10-4c8e2b5a0d31"
 MOCK_MODEL = "TEST-MODEL"
 MOCK_DEVICE_TYPE = "refrigerator"
 MOCK_CA_CERT_PEM = "-----BEGIN CERTIFICATE-----\nTEST-CA\n-----END CERTIFICATE-----"
@@ -98,6 +103,7 @@ ENTRY_DATA = {
     CONF_LEAF_KEY_PEM: MOCK_LEAF_KEY_PEM,
     # Identity the config flow's probe resolved (issue #236) -- what the
     # coordinator keys its devices and entities on from construction.
+    CONF_DEVICE_KEY: MOCK_DEVICE_KEY,
     CONF_SERIAL: MOCK_SERIAL,
     CONF_MODEL: MOCK_MODEL,
     CONF_MANUFACTURER: "Samsung",
@@ -131,6 +137,7 @@ def fridge_resources():
 def _probe_result(*, recognized: bool) -> dict:
     return {
         "port": MOCK_PORT,
+        "device_key": MOCK_DEVICE_KEY,
         "serial": MOCK_SERIAL,
         "model": MOCK_MODEL,
         "manufacturer": "Samsung",
@@ -244,8 +251,8 @@ def mock_entry(hass):
     entry = MockConfigEntry(
         domain=DOMAIN,
         data=ENTRY_DATA,
-        unique_id=f"localthings_{MOCK_SERIAL}",
-        version=2,
+        unique_id=f"localthings_{MOCK_DEVICE_KEY}",
+        version=4,
     )
     entry.add_to_hass(hass)
     return entry

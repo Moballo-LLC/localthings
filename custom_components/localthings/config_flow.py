@@ -43,6 +43,7 @@ from .const import (
     CONF_CA_CERT_PEM,
     CONF_CA_KEY_PEM,
     CONF_CLOUD_COURSES_ENABLED,
+    CONF_DEVICE_KEY,
     CONF_DEVICE_TYPE,
     CONF_FINISH_TIME_HYSTERESIS_MINUTES,
     CONF_HOST,
@@ -662,7 +663,12 @@ def _read_device(sess, host: str, port: int) -> dict:
 
     from .registry.batch import parse_device0_batch
     from .registry.by_type import resolve as resolve_registry
-    from .registry.identity import read_identity, resolve_model, resolve_serial
+    from .registry.identity import (
+        read_identity,
+        resolve_device_key,
+        resolve_model,
+        resolve_serial,
+    )
 
     identity = read_identity(sess, None)
 
@@ -680,12 +686,19 @@ def _read_device(sess, host: str, port: int) -> dict:
 
     info = resources.get("/information/vs/0", {})
     registry = resolve_registry(resources, device_types=identity.device_types)
+    raw_serial = info.get("x.com.samsung.da.serialNum")
     return {
         "port": port,
         # Resolved through the same helpers _run_discovery uses, so the device
         # the coordinator registers up front is the one discovery would have
         # produced -- no rename, and no re-key, once the first poll lands.
-        "serial": resolve_serial(info.get("x.com.samsung.da.serialNum"), host),
+        #
+        # `device_key` is what the entry is actually keyed on; the serial is
+        # kept alongside it because the coordinator corroborates a later
+        # change of key against it (issue #381). read_identity has already
+        # fetched /oic/p and /oic/d above, so this costs no extra round trip.
+        "device_key": resolve_device_key(identity, raw_serial, host),
+        "serial": resolve_serial(raw_serial, host),
         "model": resolve_model(info.get("x.com.samsung.da.modelNum", ""), identity),
         "manufacturer": identity.manufacturer or "Samsung",
         "device_type_name": registry.name if registry is not None else None,
@@ -798,7 +811,10 @@ class LocalThingsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     # v3 relabels the particulate sensors' recorded statistics; a freshly
     # created entry has none to relabel, so it starts at the migrated
     # version rather than walking through v2 (see async_migrate_entry).
-    VERSION = 3
+    # v4 keys the entry on the OCF device UUID (issue #381), which the probe
+    # below resolves up front -- so a new entry is already on the v4 shape
+    # and has nothing to re-key either.
+    VERSION = 4
 
     def __init__(self) -> None:
         self._host: str = ""
@@ -817,7 +833,7 @@ class LocalThingsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Persist everything the probe resolved, identity included.
 
         The identity fields aren't decoration: the coordinator seeds
-        `device_serial` and its DeviceInfo from them at construction time,
+        `device_key` and its DeviceInfo from them at construction time,
         so entity unique_ids are correct from the first entity that
         registers, even if the first poll is slow or fails (issue #236).
         """
@@ -832,6 +848,7 @@ class LocalThingsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_CA_KEY_PEM: self._ca_key_pem,
                 CONF_LEAF_CERT_PEM: info["leaf_cert_pem"],
                 CONF_LEAF_KEY_PEM: info["leaf_key_pem"],
+                CONF_DEVICE_KEY: info["device_key"],
                 CONF_SERIAL: info["serial"],
                 CONF_MODEL: info["model"],
                 CONF_MANUFACTURER: info["manufacturer"],
@@ -878,7 +895,33 @@ class LocalThingsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected error during device probe")
                 errors["base"] = "unknown"
             else:
-                await self.async_set_unique_id(f"localthings_{info['serial']}")
+                # An entry created before v4 still carries the serial-keyed
+                # unique_id until its first *live* poll adopts the UUID
+                # (coordinator._resolve_identity) -- which can be a long
+                # while for an appliance that is off, since an entry loads
+                # from its snapshot in the meantime (issue #295). The UUID
+                # check below can't see such an entry, so re-adding this
+                # very appliance during that window would be waved through
+                # as a second entry; the two would then collide the moment
+                # the older one re-keyed, and rekey_entry resolves a
+                # collision by *deleting* the duplicate rows -- taking the
+                # original entry's entity_ids, history and automations with
+                # them. Matched on the legacy key together with the host, so
+                # issue #381's two units (same serial, different addresses)
+                # stay separable.
+                legacy_unique_id = f"localthings_{info['serial']}"
+                if any(
+                    other.unique_id == legacy_unique_id
+                    and other.data.get(CONF_HOST) == self._host
+                    and CONF_DEVICE_KEY not in other.data
+                    for other in existing
+                ):
+                    return self.async_abort(reason="already_configured")
+                # Keyed on the OCF device UUID rather than the serialNum
+                # (issue #381): two units of a model that ship the same
+                # well-formed serial are indistinguishable here otherwise,
+                # and the second one is turned away as already configured.
+                await self.async_set_unique_id(f"localthings_{info['device_key']}")
                 self._abort_if_unique_id_configured()
                 if info["device_type_recognized"]:
                     return self._create_entry(info)

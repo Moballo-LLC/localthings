@@ -85,7 +85,7 @@ This repo doesn't include the needed CA bundle. For an example of how to obtain 
 5. The flow sends a DTLS `ClientHello` to every port in the `49152-49160` range at once and keeps the one that answers -- a real DTLS server identifies itself in about one round trip, and the probe stops there, so nothing is left behind on the appliance. Only that port is then given a real certificate handshake: it fetches the current UUID from Samsung's cloud gateway, mints a leaf cert signed by your CA, and reads the device's identity and `/device/0`. On success it creates the config entry, already knowing the appliance's serial, model, and type.
 6. Every subsequent device only asks for the host IP. The stored CA credentials are reused, and so is the leaf cert itself -- every appliance accepts the same one -- so adding a second appliance doesn't depend on Samsung's cloud being reachable at all. If a device rejects the reused cert (the UUID behind it does rotate), the flow mints a fresh one and retries by itself.
 
-Entities appear under one HA device per appliance, named for the appliance's type and model. Rename freely: the device is keyed on its serial, not its name.
+Entities appear under one HA device per appliance, named for the appliance's type and model. Rename freely: the device is keyed on the appliance's own OCF device ID, not its name. (Some Samsung models ship the same serial number on every unit of a model, so the serial can't tell two of them apart -- the OCF device ID can.)
 
 ---
 
@@ -237,7 +237,8 @@ docker-compose.yml / ha_config/   Local HA dev environment
 If your appliance's type isn't recognized, or it exposes resources this integration doesn't model yet, a Repairs
 issue appears under Settings > System > Repairs pointing you at Settings > Devices & Services > this device >
 the menu > Download diagnostics. That download is already redacted of account/network identifiers (Bixby login
-email, access tokens, device IDs, MAC addresses, serial numbers) before it's generated, so it's safe to attach
+email, access tokens, hashed device IDs, MAC addresses, serial numbers, and the owner-set device name) before it's
+generated, so it's safe to attach
 directly to a new issue using the linked device-support template. This is the fastest way to help add or expand
 support for hardware the maintainers don't have.
 

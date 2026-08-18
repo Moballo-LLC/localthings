@@ -147,7 +147,7 @@ async def test_pattern_a_sub1_device_info_links_via_device_to_master(hass: HomeA
     sub1 = next(su for su in coordinator.subdevices if su.key == "1")
     info = coordinator.device_info_for(sub1)
 
-    master_serial = coordinator.device_serial
+    master_serial = coordinator.device_key
     assert info["identifiers"] == {(DOMAIN, f"{master_serial}_1")}
     assert info["via_device"] == (DOMAIN, master_serial)
     # The subdevice's own /information/vs/1 (real, ARTIK051_DONGLE_FAC_RAC_18K)
@@ -245,7 +245,7 @@ async def test_fac_bora_2in1_subdevice_device_info(hass: HomeAssistant):
     subdevice = coordinator.subdevices[0]
     info = coordinator.device_info_for(subdevice)
 
-    master_serial = coordinator.device_serial
+    master_serial = coordinator.device_key
     assert info["identifiers"] == {(DOMAIN, f"{master_serial}_{_SUB_UUID}")}
     assert info["via_device"] == (DOMAIN, master_serial)
     # Confirmed live by the reporter (DESIGN-177.md section 1): the wall
@@ -266,7 +266,7 @@ async def test_fac_bora_2in1_unique_ids_include_subdevice_prefix(hass: HomeAssis
     entity = LocalThingsEntity(coordinator, sub_climate)
     expected_slug = _SUB_UUID.replace("-", "")
     assert entity._attr_unique_id == (
-        f"{DOMAIN}_{coordinator.device_serial}_subdevice_{expected_slug}_climate"
+        f"{DOMAIN}_{coordinator.device_key}_subdevice_{expected_slug}_climate"
     )
 
 

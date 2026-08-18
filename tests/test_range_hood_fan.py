@@ -11,7 +11,7 @@ from tests.conftest import _load_device
 
 
 class _FakeCoordinator:
-    device_serial = "TEST-HOOD-SERIAL"
+    device_key = "TEST-HOOD-SERIAL"
     device_info: ClassVar[dict] = {}
     data: ClassVar[dict] = {}
 

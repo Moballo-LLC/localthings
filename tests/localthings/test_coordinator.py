@@ -33,7 +33,13 @@ from custom_components.localthings.registry.capabilities.common import (
     remote_control_required_for_write,
 )
 
-from .conftest import ENTRY_DATA, MOCK_MODEL, MOCK_SERIAL, FakeObserveSession
+from .conftest import (
+    ENTRY_DATA,
+    MOCK_DEVICE_KEY,
+    MOCK_MODEL,
+    MOCK_SERIAL,
+    FakeObserveSession,
+)
 from .conftest import _load_fridge_resources as _load_fridge
 
 
@@ -150,7 +156,7 @@ def test_run_discovery_falls_back_to_host_for_placeholder_serial(
 ) -> None:
     """Issue #83: the ARTIK051_DONGLE_REF firmware family reports the
     literal string 'Nothing(SVC)' as serialNum on every unit. Left as-is,
-    two such units get the same device_serial (which feeds both the HA
+    two such units get the same device_key (which feeds both the HA
     device-registry identifier and every entity's unique_id), so the
     second one's entities silently collide and get dropped. It must be
     treated the same as an empty serial and fall back to the host."""
@@ -164,7 +170,7 @@ def test_run_discovery_falls_back_to_host_for_placeholder_serial(
     }
     coordinator = LocalThingsCoordinator(hass, legacy_entry)
     coordinator._run_discovery(resources)
-    assert coordinator.device_serial == legacy_entry.data[CONF_HOST]
+    assert coordinator.device_key == legacy_entry.data[CONF_HOST]
 
 
 def test_run_discovery_falls_back_to_host_for_all_f_placeholder_serial(
@@ -175,7 +181,7 @@ def test_run_discovery_falls_back_to_host_for_all_f_placeholder_serial(
     character the same repeated hex digit. A washer and a dryer, two
     different physical units, both reported the literal serialNum
     'FFFFFFFFFFFFFFF', so without this fallback they'd collide on
-    device_serial exactly like the #83 case above."""
+    device_key exactly like the #83 case above."""
     resources = {
         "/information/vs/0": {
             "x.com.samsung.da.modelNum": "DA_WM_A51_20_COMMON|20221341|30010102001211000103000000000000",  # noqa: E501
@@ -186,7 +192,7 @@ def test_run_discovery_falls_back_to_host_for_all_f_placeholder_serial(
     }
     coordinator = LocalThingsCoordinator(hass, legacy_entry)
     coordinator._run_discovery(resources)
-    assert coordinator.device_serial == legacy_entry.data[CONF_HOST]
+    assert coordinator.device_key == legacy_entry.data[CONF_HOST]
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +204,7 @@ def test_identity_is_resolved_before_any_poll(hass: HomeAssistant, mock_entry) -
     """The coordinator mints registry keys from the entry's stored identity at
     construction time.
 
-    `device_serial` is what entity unique_ids and device identifiers are built
+    `device_key` is what entity unique_ids and device identifiers are built
     from, and those are permanent. Seeding it with the host meant anything that
     registered before the first poll returned -- the connection-mode sensor
     especially, added unconditionally rather than from `bound` -- was written
@@ -207,8 +213,8 @@ def test_identity_is_resolved_before_any_poll(hass: HomeAssistant, mock_entry) -
     """
     coordinator = LocalThingsCoordinator(hass, mock_entry)
 
-    assert coordinator.device_serial == MOCK_SERIAL
-    assert coordinator.device_info["identifiers"] == {(DOMAIN, MOCK_SERIAL)}
+    assert coordinator.device_key == MOCK_DEVICE_KEY
+    assert coordinator.device_info["identifiers"] == {(DOMAIN, MOCK_DEVICE_KEY)}
     assert coordinator.device_info["model"] == MOCK_MODEL
     assert coordinator.device_info["name"] == f"Samsung Refrigerator ({MOCK_MODEL})"
     assert mock_entry.data[CONF_HOST] not in str(coordinator.device_info["identifiers"])
@@ -239,7 +245,7 @@ def test_discovery_keeps_the_registered_identity(hass: HomeAssistant, mock_entry
     coordinator = LocalThingsCoordinator(hass, mock_entry)
     coordinator._run_discovery(resources)
 
-    assert coordinator.device_serial == MOCK_SERIAL
+    assert coordinator.device_key == MOCK_DEVICE_KEY
 
 
 def test_discovery_backfills_a_legacy_entry_identity(hass: HomeAssistant, legacy_entry) -> None:

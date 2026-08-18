@@ -10,7 +10,7 @@ from custom_components.localthings.registry.entities import BinarySensorDesc
 
 
 class _FakeCoordinator:
-    device_serial = "TEST-SERIAL"
+    device_key = "TEST-SERIAL"
 
     def __init__(self, last_resources=None):
         self.last_resources = last_resources or {}

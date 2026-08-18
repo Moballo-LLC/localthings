@@ -19,6 +19,7 @@ from homeassistant.helpers.typing import ConfigType
 from .const import CONF_DEVICE_TYPE, CONF_HOST, CONF_PORT, CONF_SERIAL, DOMAIN, PLATFORMS
 from .coordinator import LocalThingsCoordinator, snapshot_store
 from .registry.identity import resolve_serial
+from .rekey import rekey_entry
 from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
@@ -82,67 +83,20 @@ def _repair_placeholder_keys(hass: HomeAssistant, entry: ConfigEntry, serial: st
     """Re-key registry entries this entry minted from the placeholder identity.
 
     Before the identity moved onto the config entry, the coordinator seeded
-    `device_serial` with the host and only replaced it after the first poll.
+    its device key with the host and only replaced it after the first poll.
     Anything that registered in between -- the connection-mode sensor
     especially, added unconditionally rather than from `bound` -- was
     written into the registry keyed on the IP permanently, orphaned the
     moment the serial-keyed identity appeared (issue #236). Deleting the
     orphans by hand didn't help: the next restart that lost the same race
     recreated them.
-
-    Rewriting beats deleting where possible -- an entity keeps its
-    entity_id, name, area and automations. Only possible when the
-    serial-keyed key is still free; where both exist the placeholder-keyed
-    one is the dead duplicate (unavailable since the restart that created
-    it), so it goes.
     """
     host = entry.data[CONF_HOST]
     if serial == host:
         # A board with no usable serial resolves to the host, so its keys
         # were never placeholders.
         return
-
-    ent_reg = er.async_get(hass)
-    stale_prefix = f"{DOMAIN}_{host}_"
-    for entity in list(er.async_entries_for_config_entry(ent_reg, entry.entry_id)):
-        if not entity.unique_id.startswith(stale_prefix):
-            continue
-        new_unique_id = f"{DOMAIN}_{serial}_{entity.unique_id[len(stale_prefix) :]}"
-        if ent_reg.async_get_entity_id(entity.domain, DOMAIN, new_unique_id):
-            _LOGGER.debug("removing orphaned entity %s", entity.entity_id)
-            ent_reg.async_remove(entity.entity_id)
-        else:
-            _LOGGER.debug("re-keying entity %s to %s", entity.entity_id, new_unique_id)
-            ent_reg.async_update_entity(entity.entity_id, new_unique_id=new_unique_id)
-
-    dev_reg = dr.async_get(hass)
-    for device in list(dr.async_entries_for_config_entry(dev_reg, entry.entry_id)):
-        # `host` for the master, `host_<key>` for a subdevice (device_info_for).
-        stale = {
-            ident
-            for ident in device.identifiers
-            if ident[0] == DOMAIN and (ident[1] == host or ident[1].startswith(f"{host}_"))
-        }
-        if not stale:
-            continue
-        fresh = {(DOMAIN, f"{serial}{ident[1][len(host) :]}") for ident in stale}
-        existing = dev_reg.async_get_device(identifiers=fresh)
-        if existing is not None and existing.id != device.id:
-            # Removing a device takes its entities with it. Anything still
-            # attached here was re-keyed rather than removed above -- the
-            # surviving copy, not a duplicate -- so move it onto the device
-            # it now belongs to before the removal destroys it too.
-            for entity in er.async_entries_for_device(
-                ent_reg, device.id, include_disabled_entities=True
-            ):
-                ent_reg.async_update_entity(entity.entity_id, device_id=existing.id)
-            _LOGGER.debug("removing orphaned device %s", device.id)
-            dev_reg.async_remove_device(device.id)
-        else:
-            _LOGGER.debug("re-keying device %s to %s", device.id, fresh)
-            dev_reg.async_update_device(
-                device.id, new_identifiers=(device.identifiers - stale) | fresh
-            )
+    rekey_entry(hass, entry, host, serial)
 
 
 # Registries whose Dust/FineDust/SuperFineDust sensors gained pm10/pm25/pm1
@@ -249,8 +203,22 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     v2 -> v3 relabels the recorded statistics for the particulate sensors,
     which gained a device_class/unit in the same release (issue #325).
+
+    v3 -> v4 moves the entry off the serialNum as its identity and onto the
+    OCF device UUID (issue #381). Deliberately almost a no-op here: the
+    UUID lives on the device, and this runs before any I/O -- and before
+    the device is even known to be reachable, since an entry can load
+    entirely from its snapshot while the appliance is off (issue #295).
+    So the migration only guarantees CONF_SERIAL is populated, which is
+    what the coordinator rewrites *from* once a live poll finally hands it
+    a UUID to rewrite *to*.
+
+    The version is still bumped now rather than at that point, because the
+    bump's real job is the `entry.version > 4` downgrade guard below: an
+    entry re-keyed onto a UUID and then loaded by a release that reads
+    CONF_SERIAL as the key would silently orphan every entity it has.
     """
-    if entry.version > 3:
+    if entry.version > 4:
         return False  # downgrade: this release doesn't know the newer shape
 
     if entry.version == 1:
@@ -267,6 +235,28 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if entry.version == 2 and _relabel_particulate_statistics(hass, entry):
         hass.config_entries.async_update_entry(entry, version=3)
         _LOGGER.debug("migrated entry %s to version 3", entry.entry_id)
+
+    if entry.version == 3:
+        # `or host` mirrors what the coordinator has always fallen back to,
+        # so the recorded legacy key is the one this entry's registry
+        # entries were actually minted under even if CONF_SERIAL never got
+        # written (a v1 entry whose migration predates it). Both being
+        # absent shouldn't happen for an entry the config flow created, but
+        # an exception raised here fails the whole entry -- so it bumps the
+        # version and leaves the data alone rather than taking that risk
+        # for a value the coordinator re-derives on its next poll anyway.
+        legacy_key = entry.data.get(CONF_SERIAL) or entry.data.get(CONF_HOST)
+        hass.config_entries.async_update_entry(
+            entry,
+            data={**entry.data, CONF_SERIAL: legacy_key} if legacy_key else entry.data,
+            version=4,
+        )
+        _LOGGER.debug(
+            "migrated entry %s to version 4 (legacy key=%s, awaiting a poll to adopt "
+            "the OCF device id)",
+            entry.entry_id,
+            legacy_key,
+        )
 
     return True
 

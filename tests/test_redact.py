@@ -75,9 +75,18 @@ def test_redact_resources_does_not_mutate_input():
     assert resources["/information/vs/0"]["x.com.samsung.da.serialNum"] == original_serial
 
 
-def test_redacts_bare_ocf_identity_keys():
-    """/oic/d and /oic/p identify the unit with two-letter keys ('di', 'pi')
-    that the substring rules can't see."""
+def test_keeps_ocf_identity_uuids_but_redacts_the_owner_set_name():
+    """/oic/d's `di` and /oic/p's `pi` survive redaction.
+
+    They are randomly-assigned per-unit UUIDs, not account data, and they
+    are what the entry's registry keys are minted from (issue #381) -- a
+    report that blanks them hides the identity every entity in it is named
+    after, and can't answer the one question a duplicate-serial report
+    exists to ask: whether two units differ here at all.
+
+    `n` is the opposite case and stays redacted: free text the owner sets
+    from the SmartThings app, so it can carry a person's name.
+    """
     redacted = redact_resources(
         {
             "/oic/d": {
@@ -89,12 +98,10 @@ def test_redacts_bare_ocf_identity_keys():
         }
     )
 
-    assert redacted["/oic/d"]["di"] == REDACTED
-    assert redacted["/oic/p"]["pi"] == REDACTED
-    # 'n' is free text the owner sets from the SmartThings app, so it can
-    # carry a person's name -- redacted too. `rt`, the device-type signal
-    # we actually want out of /oic/d, is not.
+    assert redacted["/oic/d"]["di"] == "ab-cd-ef"
+    assert redacted["/oic/p"]["pi"] == "12-34-56"
     assert redacted["/oic/d"]["n"] == REDACTED
+    # `rt`, the device-type signal we actually want out of /oic/d, is kept.
     assert redacted["/oic/d"]["rt"] == ["oic.wk.d", "oic.d.refrigerator"]
     assert redacted["/oic/p"]["mnmo"] == "RF9000B"
 

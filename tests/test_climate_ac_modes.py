@@ -104,7 +104,7 @@ def test_fac_bora_wind_strength_codes_fit_the_standard_scale():
     from tests.conftest import _load_device
 
     class _FakeCoordinator:
-        device_serial = "TEST-FAC-BORA-SERIAL"
+        device_key = "TEST-FAC-BORA-SERIAL"
         device_info: ClassVar[dict] = {}
         data: ClassVar[dict] = {}
 
