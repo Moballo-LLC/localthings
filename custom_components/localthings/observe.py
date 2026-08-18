@@ -97,6 +97,11 @@ class ObserveManager:
         # Wakes try_enter_observe_mode's grace wait early once enough hrefs
         # have notified. Guards only `_notified` mutations + the `wait_for`.
         self._notify_cond = threading.Condition()
+        # Idle while polling, except after downgrade_to_poll (every href
+        # that was subscribed). While in observe mode this is the set of
+        # hrefs that were subscribed but never notified during the grace
+        # period (issue #92) -- they stay on the hot/warm sub-poll cadence
+        # instead of waiting for the 30s /device/0 sweep.
         self.fallback_hrefs: set[str] = set()
         self._on_applied: Callable[[str, dict, str], None] | None = None
         self._refresh_task: ObserveRefreshTask | None = None
@@ -270,6 +275,12 @@ class ObserveManager:
         #294) -- committing against a session a reconnect already replaced
         would claim observe mode with nothing left to notice it's dead."""
         self.subscribed_hrefs = set(subscribed)
+        with self._notify_cond:
+            notified = set(self._notified)
+        # Issue #92: subscribed-but-silent hrefs are counted as covered by
+        # push if we drop this, but they never emit a notify. Keep them on
+        # the poll cadence via fallback_hrefs (otherwise idle in observe).
+        self.fallback_hrefs = set(subscribed) - notified
         self._set_mode(MODE_OBSERVE)
         self.start_refresh_task(session)
 
