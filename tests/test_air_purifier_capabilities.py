@@ -90,6 +90,7 @@ def test_co2_reads_when_the_items_list_includes_the_type():
     assert flatten(bound, resources)["co2"] == 612
 
     desc = next(e for e in air_purifier.AIR_QUALITY.entities if e.key == "co2")
+    assert desc.exists_fn is not None
     assert desc.exists_fn({"x.com.samsung.da.items": []}, {}) is False
     assert (
         desc.exists_fn({"x.com.samsung.da.items": [{"x.com.samsung.da.type": "CO2"}]}, {}) is True
