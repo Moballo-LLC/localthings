@@ -69,6 +69,34 @@ def test_air_quality_sensor_values():
     assert state["super_fine_dust"] == 5
     assert state["odor"] == 0
     assert state["clean_level"] == 0
+    assert "co2" not in state
+
+
+def test_co2_reads_when_the_items_list_includes_the_type():
+    """Issue #387 -- same {type, value} shape air_monitor.SENSORS already
+    models. Gated so boards that don't list CO2 don't grow an empty entity."""
+    reg, resources = _purifier()
+    resources = {
+        **resources,
+        "/sensors/vs/0": {
+            **resources["/sensors/vs/0"],
+            "x.com.samsung.da.items": [
+                *resources["/sensors/vs/0"]["x.com.samsung.da.items"],
+                {"x.com.samsung.da.type": "CO2", "x.com.samsung.da.value": ["612"]},
+            ],
+        },
+    }
+    bound = discover(resources, reg.capabilities, reg.pattern_capabilities)
+    assert flatten(bound, resources)["co2"] == 612
+
+    desc = next(e for e in air_purifier.AIR_QUALITY.entities if e.key == "co2")
+    assert desc.exists_fn({"x.com.samsung.da.items": []}, {}) is False
+    assert (
+        desc.exists_fn(
+            {"x.com.samsung.da.items": [{"x.com.samsung.da.type": "CO2"}]}, {}
+        )
+        is True
+    )
 
 
 def test_filter_progress_reads_named_consumable_item():

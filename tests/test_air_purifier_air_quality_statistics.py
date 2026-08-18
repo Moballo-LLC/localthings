@@ -96,6 +96,25 @@ def test_air_monitor_takes_the_pm_labels_but_not_the_state_class():
         assert (desc.device_class, desc.unit) == (None, None), key
 
 
+def test_co2_is_not_in_the_shared_tuple():
+    """air_monitor already has its own CO2 SensorDesc. Putting CO2 in
+    _AIR_QUALITY_SENSORS would create a second entity with the same key."""
+    assert all(row[0] != "co2" for row in air_purifier._AIR_QUALITY_SENSORS)
+
+
+def test_co2_matches_air_monitor_mapping():
+    """ppm / carbon_dioxide is the same contract air_monitor.SENSORS already
+    ships for this field (issue #387), not a unit guess."""
+    desc = _desc("co2")
+    assert desc.device_class == "carbon_dioxide"
+    assert desc.unit == "ppm"
+    assert desc.state_class == "measurement"
+    assert desc.exists_fn is not None
+    assert desc.value_fn(
+        [{"x.com.samsung.da.type": "CO2", "x.com.samsung.da.value": ["498"]}]
+    ) == 498
+
+
 def test_every_air_quality_sensor_still_reads_a_plain_int():
     """A state_class is only honoured for a numeric state, so the value
     contract this depends on is asserted here too."""

@@ -51,6 +51,18 @@ def _has_top_level_modes(rep, resources):
     return isinstance(rep.get("x.com.samsung.da.supportedModes"), (list, tuple))
 
 
+def _has_sensor_type(type_):
+    """True when /sensors/vs/0's items[] lists an item of this type."""
+
+    def fn(rep, resources):
+        return any(
+            isinstance(i, dict) and i.get("x.com.samsung.da.type") == type_
+            for i in (rep.get("x.com.samsung.da.items") or [])
+        )
+
+    return fn
+
+
 # Columns: key, icon, device item type, state_class, device_class, unit.
 # state_class is what makes Home Assistant keep long-term statistics --
 # without one, a reading is only in the short-term recorder history and
@@ -106,17 +118,33 @@ _AIR_QUALITY_SENSORS = (
 AIR_QUALITY = Capability(
     href="/sensors/vs/0",
     poll_tier="warm",
-    entities=tuple(
+    entities=(
+        *(
+            SensorDesc(
+                key=key,
+                field="x.com.samsung.da.items",
+                icon=icon,
+                state_class=state_class,
+                device_class=device_class,
+                unit=unit,
+                value_fn=lambda items, t=sensor_type: sensor_item_value(items, t),
+            )
+            for key, icon, sensor_type, state_class, device_class, unit in _AIR_QUALITY_SENSORS
+        ),
+        # CO2 (issue #387) -- same field/shape air_monitor.SENSORS already
+        # models with device_class='carbon_dioxide'/unit='ppm'. Gated on the
+        # type being listed so boards that don't report it (every current
+        # fixture) don't grow an empty entity.
         SensorDesc(
-            key=key,
+            key="co2",
             field="x.com.samsung.da.items",
-            icon=icon,
-            state_class=state_class,
-            device_class=device_class,
-            unit=unit,
-            value_fn=lambda items, t=sensor_type: sensor_item_value(items, t),
-        )
-        for key, icon, sensor_type, state_class, device_class, unit in _AIR_QUALITY_SENSORS
+            icon="mdi:molecule-co2",
+            device_class="carbon_dioxide",
+            state_class="measurement",
+            unit="ppm",
+            exists_fn=_has_sensor_type("CO2"),
+            value_fn=lambda items: sensor_item_value(items, "CO2"),
+        ),
     ),
 )
 
