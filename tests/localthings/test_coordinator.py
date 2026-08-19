@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import time
 from datetime import timedelta
 from unittest.mock import AsyncMock, patch
@@ -1050,6 +1052,19 @@ async def test_sweep_mismatch_forces_subpolls_on_a_live_observe_session(
     mock_subpolls.assert_called_once_with(force=True)
 
 
+async def _cancel_background_subpolls(coordinator: LocalThingsCoordinator) -> None:
+    """Setup starts `_run_subpolls` as a background task. Tests that drive
+    it directly have to cancel that one first, or a patched
+    `_poll_hrefs_blocking` also captures its batches."""
+    task = coordinator._subpoll_task
+    if task is None:
+        return
+    task.cancel()
+    coordinator._subpoll_task = None
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+
+
 async def test_observe_mode_subpolls_only_silent_hrefs(
     hass: HomeAssistant, mock_entry, mock_coordinator_observe_session
 ) -> None:
@@ -1058,6 +1073,7 @@ async def test_observe_mode_subpolls_only_silent_hrefs(
     await hass.config_entries.async_setup(mock_entry.entry_id)
     await hass.async_block_till_done()
     coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
+    await _cancel_background_subpolls(coordinator)
     assert coordinator._hot_hrefs
     silent = coordinator._hot_hrefs[0]
     coordinator._observe.mode = MODE_OBSERVE
@@ -1090,6 +1106,7 @@ async def test_observe_mode_skips_subpolls_when_nothing_is_silent(
     await hass.config_entries.async_setup(mock_entry.entry_id)
     await hass.async_block_till_done()
     coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
+    await _cancel_background_subpolls(coordinator)
     coordinator._observe.mode = MODE_OBSERVE
     coordinator._observe.fallback_hrefs = set()
 
@@ -1114,6 +1131,7 @@ async def test_observe_mode_skips_empty_subpoll_slots(
     await hass.config_entries.async_setup(mock_entry.entry_id)
     await hass.async_block_till_done()
     coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
+    await _cancel_background_subpolls(coordinator)
     coordinator._observe.mode = MODE_OBSERVE
     coordinator._hot_hrefs = []
     coordinator._warm_hrefs = ["/warm/vs/0"]
