@@ -986,12 +986,23 @@ def test_air_quality_disabled_by_default():
     SuperFineDust readings with no such scalar, so requiring it would
     silently drop real readings on hardware this repo hasn't seen yet on an
     AC. These stay bound whenever the item type is listed (see
-    _has_sensor_type) and disabled by default instead, same precedent as
+    has_sensor_type) and disabled by default instead, same precedent as
     fridge.rack_count / cooktop.paired_hood_model / tropical_night_mode --
     units that do have the sensor can enable it themselves."""
     for key in ("clean_level", "odor", "dust", "fine_dust", "super_fine_dust"):
         desc = next(e for e in airconditioner.AIR_QUALITY.entities if e.key == key)
         assert desc.enabled_default is False, key
+
+
+def test_air_quality_included_on_stub_rep():
+    """exists_fn would otherwise drop every gated sensor when /device/0
+    returns a not-yet-fetched stub, while field-gated siblings still
+    register (issue #127)."""
+    stub = {"href": "/sensors/vs/0"}
+    for key in ("clean_level", "odor", "dust", "fine_dust", "super_fine_dust", "co2"):
+        desc = next(e for e in airconditioner.AIR_QUALITY.entities if e.key == key)
+        assert desc.exists_fn is not None
+        assert desc.exists_fn(stub, {}) is True, key
 
 
 def test_air_quality_absent_when_no_sensor_items():

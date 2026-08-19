@@ -34,7 +34,13 @@ from ..entities import (
     SwitchDesc,
     TimeDesc,
 )
-from .common import epoch_to_utc, filter_usage_percent, int_or_none, sensor_item_value
+from .common import (
+    epoch_to_utc,
+    filter_usage_percent,
+    has_sensor_type,
+    int_or_none,
+    sensor_item_value,
+)
 from .laundry import bool_option_exists, bool_option_value, option_value, option_write
 
 # Newer TP1X_DA-AC-AIR-class boards (issue #130) report fan modes directly
@@ -49,18 +55,6 @@ HREF_WIND_STRENGTH = "/wind/strength/vs/0"
 
 def _has_top_level_modes(rep, resources):
     return isinstance(rep.get("x.com.samsung.da.supportedModes"), (list, tuple))
-
-
-def _has_sensor_type(type_):
-    """True when /sensors/vs/0's items[] lists an item of this type."""
-
-    def fn(rep, resources):
-        return any(
-            isinstance(i, dict) and i.get("x.com.samsung.da.type") == type_
-            for i in (rep.get("x.com.samsung.da.items") or [])
-        )
-
-    return fn
 
 
 # Columns: key, icon, device item type, state_class, device_class, unit.
@@ -134,7 +128,8 @@ AIR_QUALITY = Capability(
         # CO2 (issue #387) -- same field/shape air_monitor.SENSORS already
         # models with device_class='carbon_dioxide'/unit='ppm'. Gated on the
         # type being listed so boards that don't report it (every current
-        # fixture) don't grow an empty entity.
+        # fixture) don't grow an empty entity. Disabled by default for the
+        # same reason as airconditioner.AIR_QUALITY (issue #166).
         SensorDesc(
             key="co2",
             field="x.com.samsung.da.items",
@@ -142,7 +137,8 @@ AIR_QUALITY = Capability(
             device_class="carbon_dioxide",
             state_class="measurement",
             unit="ppm",
-            exists_fn=_has_sensor_type("CO2"),
+            exists_fn=has_sensor_type("CO2"),
+            enabled_default=False,
             value_fn=lambda items: sensor_item_value(items, "CO2"),
         ),
     ),

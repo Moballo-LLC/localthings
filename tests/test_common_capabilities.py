@@ -418,6 +418,31 @@ class TestEnergyMeter:
 
 
 # ---------------------------------------------------------------------------
+# has_sensor_type. Presence gate for /sensors/vs/0 items[] types, shared by
+# airconditioner.AIR_QUALITY and air_purifier.AIR_QUALITY. The stub carve-out
+# is the same contract ENERGY_METER documents for issue #127.
+# ---------------------------------------------------------------------------
+
+
+class TestHasSensorType:
+    def test_true_when_type_is_listed(self):
+        fn = common.has_sensor_type("CO2")
+        assert fn({"x.com.samsung.da.items": [{"x.com.samsung.da.type": "CO2"}]}, {}) is True
+
+    def test_false_when_type_is_absent(self):
+        fn = common.has_sensor_type("CO2")
+        assert fn({"x.com.samsung.da.items": [{"x.com.samsung.da.type": "Dust"}]}, {}) is False
+        assert fn({"x.com.samsung.da.items": []}, {}) is False
+        assert fn({}, {}) is False
+
+    def test_true_on_stub_rep(self):
+        """A true stub -- /device/0's {"href": "..."} "not fetched yet"
+        marker -- must keep the entity so sub-polls can populate it."""
+        fn = common.has_sensor_type("CO2")
+        assert fn({"href": "/sensors/vs/0"}, {}) is True
+
+
+# ---------------------------------------------------------------------------
 # AI energy-saving level. '0' is off; supportedAiLevel lists the additional
 # level(s) on offer. A single-entry list (issue #21 fridge, issue #40 washer)
 # is really a binary toggle, so it's exposed as a switch instead of a

@@ -91,10 +91,14 @@ def test_co2_reads_when_the_items_list_includes_the_type():
 
     desc = next(e for e in air_purifier.AIR_QUALITY.entities if e.key == "co2")
     assert desc.exists_fn is not None
+    assert desc.enabled_default is False
     assert desc.exists_fn({"x.com.samsung.da.items": []}, {}) is False
     assert (
         desc.exists_fn({"x.com.samsung.da.items": [{"x.com.samsung.da.type": "CO2"}]}, {}) is True
     )
+    # /device/0 stub must not drop co2 while its field-gated siblings still
+    # register -- platforms enumerate bound once (issue #127).
+    assert desc.exists_fn({"href": "/sensors/vs/0"}, {}) is True
 
 
 def test_filter_progress_reads_named_consumable_item():
