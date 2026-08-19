@@ -337,6 +337,13 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.device_type_name: str | None = None
         self.one_ui_version: str = ""
         self._consecutive_poll_timeouts = 0
+        # Set by _poll_once when the failure was the DTLS handshake itself.
+        # A switched-off appliance fails there every cycle, and there is no
+        # session to tear down and re-establish -- see _async_update_data.
+        self._handshake_failed = False
+        # Consecutive cycles that ended with no data from the device, so an
+        # outage is reported once rather than once per poll (issue #269).
+        self._failed_cycles = 0
         self._unbound_hrefs: list[str] = []
         self._reconnect_times: list[float] = []
         # See _maybe_retry_observe_mode: last_mode_change_ts alone doesn't
@@ -861,9 +868,18 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         call's own timeout and surfacing as an ambiguous `TimeoutError`.
         See `_defer_reconnect_for` for what that changes about how soon a
         confirmed-dead session gets reconnected.
+
+        Sets `_handshake_failed` so `_async_update_data` can tell a broken
+        session from one that never opened -- a switched-off appliance fails
+        in `_connect_session` every cycle, with nothing to reconnect.
         """
         if self._session is None:
-            self._connect_session()
+            try:
+                self._connect_session()
+            except Exception:
+                self._handshake_failed = True
+                raise
+        self._handshake_failed = False
         sess = self._session
         assert sess is not None
         try:
@@ -1665,6 +1681,42 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._reconnect_times.append(now)
         return len(self._reconnect_times) >= self._RECONNECT_WARN_THRESHOLD
 
+    def _mark_device_answered(self) -> None:
+        """Clear the bookkeeping a poll getting through invalidates."""
+        self._consecutive_poll_timeouts = 0
+        if self._failed_cycles:
+            self._log.info("device answered again after %d failed cycles", self._failed_cycles)
+            self._failed_cycles = 0
+
+    def _device_unreachable(self, what: str, e: Exception) -> dict[str, Any]:
+        """End a cycle that got no data, either degraded or as a failure.
+
+        Reported once per outage rather than once per cycle: an appliance
+        that is switched off fails identically every 30s for as long as it
+        stays off (issue #269), and this integration is built to sit through
+        exactly that (issue #295). Home Assistant logs the transition into
+        and out of a failed update on its own.
+
+        Raises `UpdateFailed` unless there are bound entities and cached
+        state to carry the last-known values on -- same precondition as
+        `_defer_reconnect_for` (issue #254).
+        """
+        self._failed_cycles += 1
+        if self._failed_cycles == 1:
+            self._log.error("%s: %s", what, e)
+        else:
+            self._log.debug("%s (%d cycles): %s", what, self._failed_cycles, e)
+        # Without this, a fully unreachable device left the connection-mode
+        # sensor stuck on "Push" forever -- only a successful poll ever
+        # downgraded it (issue #287). No just_downgraded_from_observe here:
+        # there's no live session this cycle to resubscribe on.
+        if self._observe.mode == MODE_OBSERVE:
+            self._observe.downgrade_to_poll()
+        if self._discovered and self._cache.snapshot():
+            self._log.debug("Full error:", exc_info=e)
+            return flatten(self.bound, self.entity_resources())
+        raise UpdateFailed(f"{what}: {e}") from e
+
     # ------------------------------------------------------------------
     # DataUpdateCoordinator hook
     # ------------------------------------------------------------------
@@ -1678,7 +1730,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         async with self._session_lock:
             try:
                 resources = await self.hass.async_add_executor_job(self._poll_once)
-                self._consecutive_poll_timeouts = 0
+                self._mark_device_answered()
             except Exception as e:
                 if self._defer_reconnect_for(e):
                     self._log.debug(
@@ -1689,6 +1741,15 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     )
                     return flatten(self.bound, self.entity_resources())
                 self._consecutive_poll_timeouts = 0
+                if self._handshake_failed:
+                    # The handshake never completed, so there is no session
+                    # to close and no association for the device to clean
+                    # up: reconnecting would just repeat the same doomed
+                    # handshake five seconds later. That doubled what a
+                    # switched-off appliance costs -- two handshake timeouts
+                    # per cycle, and the same wait again on every setup
+                    # attempt while it stays dark (issue #269).
+                    return self._device_unreachable("device unreachable", e)
                 # A lone reconnect is routine (README's "Known device
                 # behavior"); only warn once they pile up. Pause first so
                 # the device can clean up its DTLS state before we knock
@@ -1702,23 +1763,9 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 try:
                     resources = await self.hass.async_add_executor_job(self._poll_once)
                 except Exception as e2:
-                    self._log.error("poll failed after reconnect: %s", e2)
-                    # Without this, a fully unreachable device left the
-                    # connection-mode sensor stuck on "Push" forever -- only
-                    # the success branch below ever downgraded it (issue
-                    # #287). No just_downgraded_from_observe here: there's no
-                    # live session this cycle to resubscribe on.
-                    if self._observe.mode == MODE_OBSERVE:
-                        self._observe.downgrade_to_poll()
-                    snapshot = self._cache.snapshot()
-                    # Same precondition as _defer_reconnect_for (issue #254):
-                    # degraded-but-successful data only makes sense once
-                    # there are bound entities to carry it.
-                    if self._discovered and snapshot:
-                        self._log.debug("Full error:", exc_info=e2)
-                        return flatten(self.bound, self.entity_resources())
-                    raise UpdateFailed(f"poll failed after reconnect: {e2}") from e2
+                    return self._device_unreachable("poll failed after reconnect", e2)
                 else:
+                    self._mark_device_answered()
                     # A fresh session has zero OBSERVE registrations; if we
                     # were in observe mode that state is now stale. Tear it
                     # down and resubscribe immediately below instead of

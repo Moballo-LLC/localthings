@@ -152,6 +152,32 @@ is keyed on `(domain, issue_id)`, `dataclasses.replace` in
 reloads non-persistent issues with their dismissal intact, so one row per
 entry survives restarts and an "Ignore" sticks.
 
+### What a cycle costs while the appliance stays dark (issue #269)
+
+An appliance switched off at the wall isn't a one-cycle blip: it fails the
+same way every 30s for hours, and both halves of that failure were being paid
+twice.
+
+`_poll_once` opens the session itself when there isn't one, so a switched-off
+appliance fails *in the handshake* — 12s (`DtlsCoapSession.HANDSHAKE_TIMEOUT_S`)
+with nothing to show for it. The poll path then treated that like any other
+poll failure and ran its reconnect: close the session, pause
+`_RECONNECT_PAUSE_S`, poll again. There is no session to close and no
+association for the device to clean up, so the "reconnect" was the identical
+handshake five seconds later — 29s of the 30s interval spent proving the
+appliance is off, twice over, and the same again on every `SETUP_RETRY`
+attempt for an entry with no snapshot to load from. `_handshake_failed` marks
+that case in `_poll_once` so the poll path can skip the retry; a session that
+opened and *then* broke still reconnects within the cycle.
+
+The log was the half the reporters actually saw: `poll failed after
+reconnect` at ERROR every cycle, plus a `reconnect_is_frequent` WARNING once
+three piled up, for a state this integration is specifically built to sit
+through. Issue #269's reporter read that repetition as the integration having
+failed. It's one ERROR per outage now, DEBUG for the cycles after it, and one
+INFO when the device answers again — HA's own coordinator already logs the
+transition into and out of a failed update.
+
 ## What this still won't do
 
 Entities will be present and `unavailable` — not showing their last values.
