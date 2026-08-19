@@ -1142,7 +1142,8 @@
           "dryingwithdooropen": "Větrání",
           "cooling": "Chlazení",
           "predrain": "Vypouštění",
-          "prewash": "Předpírka"
+          "prewash": "Předpírka",
+          "sanitizing": "Dezinfekce"
         }
       },
       "progress_percentage": {

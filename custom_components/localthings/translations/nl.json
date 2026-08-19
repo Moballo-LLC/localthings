@@ -1142,7 +1142,8 @@
           "dryingwithdooropen": "Ventileren",
           "cooling": "Koelen",
           "predrain": "Vooraf afpompen",
-          "prewash": "Voorwas"
+          "prewash": "Voorwas",
+          "sanitizing": "Ontsmetten"
         }
       },
       "progress_percentage": {

@@ -1142,7 +1142,8 @@
           "dryingwithdooropen": "환기",
           "cooling": "냉각",
           "predrain": "사전 배수",
-          "prewash": "애벌빨래"
+          "prewash": "애벌빨래",
+          "sanitizing": "살균"
         }
       },
       "progress_percentage": {
