@@ -1136,7 +1136,8 @@
           "dryingwithdooropen": "Lüften",
           "cooling": "Abkühlen",
           "predrain": "Abpumpen",
-          "prewash": "Vorwäsche"
+          "prewash": "Vorwäsche",
+          "sanitizing": "Hygienespülung"
         }
       },
       "progress_percentage": {

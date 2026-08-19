@@ -1142,7 +1142,8 @@
           "dryingwithdooropen": "Ventilazione",
           "cooling": "Raffreddamento",
           "predrain": "Scarico preliminare",
-          "prewash": "Prelavaggio"
+          "prewash": "Prelavaggio",
+          "sanitizing": "Igienizzazione"
         }
       },
       "progress_percentage": {

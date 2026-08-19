@@ -1142,7 +1142,8 @@
           "dryingwithdooropen": "Venting",
           "cooling": "Cooling",
           "predrain": "Pre-drain",
-          "prewash": "Pre-wash"
+          "prewash": "Pre-wash",
+          "sanitizing": "Sanitizing"
         }
       },
       "progress_percentage": {
