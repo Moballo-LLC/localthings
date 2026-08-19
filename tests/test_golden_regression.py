@@ -390,9 +390,12 @@ def test_registry_reproduces_golden_state_keys_for_washer_dryer_combo():
 
 
 def test_registry_reproduces_golden_state_keys_for_washer_ww6500():
-    """DA_WM_A51_20 front-loader, routed by /oic/d's oic.d.washer rather
-    than a board token. Reports the AddWash tokens and an empty
-    /wm/editcourse/vs/0, so its cycle list comes from supportedOptions."""
+    """DA_WM_A51_20 front-loader, typed solely by the WW consumer prefix in
+    its /information/vs/0 description: A51 is not a board token, so with the
+    description blanked this device resolves to nothing and drops to the
+    unknown-device fallback. That is the fragile route this test pins.
+    Reports the AddWash tokens and an empty /wm/editcourse/vs/0, so its cycle
+    list comes from supportedOptions."""
     from tests.conftest import _load_device
 
     resources = _load_device("washer_ww6500")

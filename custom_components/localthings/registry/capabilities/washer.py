@@ -310,7 +310,10 @@ def _add_wash_set_write(mask):
 
 
 def _add_wash_alarm_write(p, rep, href=None):
-    if p not in ("On", "Off") or not rep.get("x.com.samsung.da.options"):
+    # Gated on the mask being readable, like the per-moment writes: a device
+    # reporting a wider mask than these three bits would otherwise have it
+    # truncated to 7 here, silently dropping a moment it supports.
+    if p not in ("On", "Off") or _add_wash_mask(rep, "AddWashSet") is None:
         return None
     return _add_wash_set_write(0b111 if p == "On" else 0)
 
@@ -320,7 +323,10 @@ def _add_wash_bit_switch(key, icon, bit):
 
     The mask is the only state, so switching the last moment off lands on 0
     and takes the alarm with it, and switching one on from 0 turns the alarm
-    back on.
+    back on. The corollary is that switching the master off and on again
+    writes 7, resetting a rinse-only selection to all three moments -- the
+    appliance remembers no previous subset either, so there is nothing to
+    restore.
     """
 
     def read(rep):
@@ -445,6 +451,10 @@ WASHER_COURSE = Capability(
         _add_wash_bit_switch("add_wash_alarm_rinse", "mdi:water", 0),
         _add_wash_bit_switch("add_wash_alarm_final_rinse", "mdi:water-check", 1),
         _add_wash_bit_switch("add_wash_alarm_spin", "mdi:sync", 2),
+        # On at rest: an idle washer reports AddWashAvailable_7 and the mask
+        # only empties as the cycle consumes each moment. This says the cycle
+        # permits AddWash, not that laundry can go in now -- that is
+        # add_wash_indicator.
         BinarySensorDesc(
             key="add_wash_available",
             icon="mdi:tshirt-crew-outline",

@@ -86,6 +86,17 @@ class TestAlarmMasterSwitch:
         desc = _desc("add_wash_alarm", SwitchDesc)
         assert _write(desc, "On", {}) is None
 
+    @pytest.mark.parametrize("raw", ["15", "On", "-1"])
+    def test_refuses_to_write_over_a_mask_it_cannot_read(self, raw):
+        """A device reporting a wider mask must not have it truncated to 7.
+        The master is gated exactly like the per-moment writes, so an
+        unrecognized mask leaves every AddWash switch read-only."""
+        desc = _desc("add_wash_alarm", SwitchDesc)
+        rep = _rep(f"AddWashSet_{raw}")
+        assert desc.rep_fn(rep) is None
+        assert _write(desc, "On", rep) is None
+        assert _write(desc, "Off", rep) is None
+
 
 class TestAlarmMomentSwitches:
     @pytest.mark.parametrize("key,bit", BITS.items())
@@ -196,6 +207,17 @@ class TestCapabilityDetection:
 class TestAgainstTheWW6500Dump:
     """DA_WM_A51_20_COMMON_WW6500, captured with the alarm off, the course
     permitting all three moments and the lamp dark."""
+
+    def test_types_only_by_the_description_consumer_prefix(self):
+        """A51 is not a board token, so the WW prefix in the description is
+        the only thing routing this device -- see the golden test's docstring.
+        Pinned here so the claim can't quietly stop being true."""
+        from custom_components.localthings.registry.by_type import for_device_by_model
+
+        info = _load_device("washer_ww6500")["/information/vs/0"]
+        model = info["x.com.samsung.da.modelNum"]
+        assert for_device_by_model(model, info["x.com.samsung.da.description"]).name == "washer"
+        assert for_device_by_model(model, "") is None
 
     def test_no_unbound_hrefs(self):
         resources = _load_device("washer_ww6500")
