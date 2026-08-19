@@ -96,7 +96,8 @@ class ObserveManager:
         self._last_notify_ts: float | None = None
         # Wakes try_enter_observe_mode's grace wait early once enough hrefs
         # have notified. Guards `_notified` mutations, the `wait_for`, and
-        # fallback_hrefs discards from on_notification.
+        # fallback_hrefs (enter_observe_mode assignment, on_notification
+        # discard).
         self._notify_cond = threading.Condition()
         # Idle while polling, except after downgrade_to_poll (every href
         # that was subscribed). While in observe mode this is the set of
@@ -280,14 +281,13 @@ class ObserveManager:
         #294) -- committing against a session a reconnect already replaced
         would claim observe mode with nothing left to notice it's dead."""
         self.subscribed_hrefs = set(subscribed)
-        with self._notify_cond:
-            notified = set(self._notified)
         # Issue #92: subscribed-but-silent hrefs are counted as covered by
         # push if we drop this, but they never emit a notify. Keep them on
         # the poll cadence via fallback_hrefs (otherwise idle in observe).
-        # This is the 80% quorum snapshot; a later notify discards the
-        # href in on_notification.
-        self.fallback_hrefs = set(subscribed) - notified
+        # Same lock as on_notification's discard so a notify in this window
+        # cannot land on a set object that is about to be replaced.
+        with self._notify_cond:
+            self.fallback_hrefs = set(subscribed) - self._notified
         self._set_mode(MODE_OBSERVE)
         self.start_refresh_task(session)
 
