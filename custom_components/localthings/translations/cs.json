@@ -109,6 +109,12 @@
       "softener_low": {
         "name": "Málo aviváže"
       },
+      "add_wash_available": {
+        "name": "AddWash povoleno"
+      },
+      "add_wash_indicator": {
+        "name": "AddWash připraveno"
+      },
       "stick_ble_connected": {
         "name": "Tyč připojena přes BLE"
       }
@@ -1350,6 +1356,18 @@
       },
       "intensive": {
         "name": "Intenzivní"
+      },
+      "add_wash_alarm": {
+        "name": "Alarm AddWash"
+      },
+      "add_wash_alarm_rinse": {
+        "name": "AddWash při máchání"
+      },
+      "add_wash_alarm_final_rinse": {
+        "name": "AddWash při posledním máchání"
+      },
+      "add_wash_alarm_spin": {
+        "name": "AddWash při odstřeďování"
       },
       "lamp": {
         "name": "Lampa"

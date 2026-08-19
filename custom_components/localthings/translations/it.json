@@ -109,6 +109,12 @@
       "softener_low": {
         "name": "Aggiungi ammorbidente"
       },
+      "add_wash_available": {
+        "name": "AddWash consentito"
+      },
+      "add_wash_indicator": {
+        "name": "AddWash disponibile"
+      },
       "stick_ble_connected": {
         "name": "Scopa elettrica connessa via BLE"
       }
@@ -1350,6 +1356,18 @@
       },
       "intensive": {
         "name": "Intensivo"
+      },
+      "add_wash_alarm": {
+        "name": "Avviso AddWash"
+      },
+      "add_wash_alarm_rinse": {
+        "name": "AddWash al risciacquo"
+      },
+      "add_wash_alarm_final_rinse": {
+        "name": "AddWash all'ultimo risciacquo"
+      },
+      "add_wash_alarm_spin": {
+        "name": "AddWash alla centrifuga"
       },
       "lamp": {
         "name": "Lampada"

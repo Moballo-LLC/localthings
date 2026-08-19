@@ -303,6 +303,12 @@
       "softener_low": {
         "name": "Poco suavizante"
       },
+      "add_wash_available": {
+        "name": "AddWash permitido"
+      },
+      "add_wash_indicator": {
+        "name": "AddWash disponible"
+      },
       "auto_clean_running": {
         "name": "Limpieza automática en curso"
       },
@@ -1547,6 +1553,18 @@
       },
       "intensive": {
         "name": "Intensivo"
+      },
+      "add_wash_alarm": {
+        "name": "Aviso AddWash"
+      },
+      "add_wash_alarm_rinse": {
+        "name": "AddWash en aclarado"
+      },
+      "add_wash_alarm_final_rinse": {
+        "name": "AddWash en último aclarado"
+      },
+      "add_wash_alarm_spin": {
+        "name": "AddWash en centrifugado"
       },
       "lamp": {
         "name": "Lámpara"

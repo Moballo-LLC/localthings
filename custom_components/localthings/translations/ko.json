@@ -109,6 +109,12 @@
       "softener_low": {
         "name": "섬유유연제 부족"
       },
+      "add_wash_available": {
+        "name": "애드워시 허용"
+      },
+      "add_wash_indicator": {
+        "name": "애드워시 가능"
+      },
       "stick_ble_connected": {
         "name": "스틱 BLE 연결됨"
       }
@@ -1350,6 +1356,18 @@
       },
       "intensive": {
         "name": "강력"
+      },
+      "add_wash_alarm": {
+        "name": "애드워시 알림"
+      },
+      "add_wash_alarm_rinse": {
+        "name": "애드워시 헹굼"
+      },
+      "add_wash_alarm_final_rinse": {
+        "name": "애드워시 마지막 헹굼"
+      },
+      "add_wash_alarm_spin": {
+        "name": "애드워시 탈수"
       },
       "lamp": {
         "name": "램프"

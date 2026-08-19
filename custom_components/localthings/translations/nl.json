@@ -109,6 +109,12 @@
       "softener_low": {
         "name": "Wasverzachter bijna op"
       },
+      "add_wash_available": {
+        "name": "AddWash toegestaan"
+      },
+      "add_wash_indicator": {
+        "name": "AddWash beschikbaar"
+      },
       "stick_ble_connected": {
         "name": "Steel via BLE verbonden"
       }
@@ -1350,6 +1356,18 @@
       },
       "intensive": {
         "name": "Intensief"
+      },
+      "add_wash_alarm": {
+        "name": "AddWash-melding"
+      },
+      "add_wash_alarm_rinse": {
+        "name": "AddWash bij spoelen"
+      },
+      "add_wash_alarm_final_rinse": {
+        "name": "AddWash laatste spoeling"
+      },
+      "add_wash_alarm_spin": {
+        "name": "AddWash centrifugeren"
       },
       "lamp": {
         "name": "Lamp"
