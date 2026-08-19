@@ -2,15 +2,18 @@
 
 The device's entity set only exists as the output of a live poll, so coming
 up offline means replaying the last successful discovery from a stored
-snapshot. These tests pin the four things that makes load-bearing: the
+snapshot. These tests pin the five things that makes load-bearing: the
 snapshot gets written, it produces the same entity set offline, the
-coordinator keeps polling until the device answers, and a live discovery that
+coordinator keeps polling until the device answers, a live discovery that
 disagrees with the snapshot reloads the entry rather than silently keeping a
-stale set.
+stale set, and each of those retries costs one handshake and one log line
+rather than repeating both every cycle (issue #269).
 """
 
 from __future__ import annotations
 
+import logging
+import time
 from contextlib import contextmanager
 from datetime import timedelta
 from unittest.mock import patch
@@ -19,8 +22,10 @@ import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
+from smartthings_local.errors import SessionTimeoutError
 
 from custom_components.localthings.const import DOMAIN, SUMMARY_INTERVAL_S
 from custom_components.localthings.coordinator import LocalThingsCoordinator
@@ -29,6 +34,7 @@ from custom_components.localthings.registry.identity import DeviceIdentity
 from .conftest import _load_fridge_resources as _load_fridge
 
 _COORD = "custom_components.localthings.coordinator.LocalThingsCoordinator"
+_COORD_LOGGER = "custom_components.localthings.coordinator"
 
 
 @contextmanager
@@ -55,6 +61,20 @@ def _unreachable():
         patch(f"{_COORD}._poll_once", side_effect=OSError("device offline")),
         patch(f"{_COORD}._close_session"),
     ):
+        yield
+
+
+@contextmanager
+def _dark(handshakes: list[float]):
+    """A switched-off appliance: the DTLS handshake itself times out, which
+    is what `_poll_once` really hits -- `_unreachable` above stands in one
+    step later, after a session it never gets. Records every attempt."""
+
+    def _connect(self) -> None:
+        handshakes.append(time.monotonic())
+        raise SessionTimeoutError()
+
+    with patch(f"{_COORD}._connect_session", _connect), patch(f"{_COORD}._close_session"):
         yield
 
 
@@ -416,3 +436,86 @@ async def test_offline_load_survives_repeated_poll_failures(
 
     coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
     assert coordinator.last_update_success
+
+
+# ---------------------------------------------------------------------------
+# What a cycle against a dark appliance costs (issue #269)
+# ---------------------------------------------------------------------------
+
+
+async def test_dark_appliance_costs_one_handshake_per_cycle(
+    hass: HomeAssistant, mock_entry
+) -> None:
+    """A washer or dryer is switched off most of the day, so every one of
+    these cycles is paid for real: a handshake against a device that isn't
+    there runs to its full 12s timeout, and the reconnect retry used to add a
+    second one plus its pause to every cycle -- and to every setup attempt
+    while the appliance stayed dark. There is no session to reconnect when
+    the handshake is what failed, so the retry only repeated it."""
+    resources = _load_fridge()
+    await _setup_online_then_unload(hass, mock_entry, resources)
+
+    handshakes: list[float] = []
+    with _dark(handshakes):
+        await hass.config_entries.async_setup(mock_entry.entry_id)
+        await hass.async_block_till_done()
+        assert len(handshakes) == 1
+
+        for expected in (2, 3, 4):
+            await _tick(hass)
+            assert len(handshakes) == expected
+
+
+async def test_dark_appliance_reports_its_outage_once(
+    hass: HomeAssistant, mock_entry, caplog
+) -> None:
+    """Sitting through an outage is what this integration is built to do
+    (issue #295), so it must not log an error every 30s for as long as the
+    appliance is off -- the reporter on issue #269 read exactly that repeated
+    line as the integration having failed. One line per outage, and one when
+    the device comes back."""
+    resources = _load_fridge()
+    await _setup_online_then_unload(hass, mock_entry, resources)
+
+    caplog.clear()
+    caplog.set_level(logging.INFO)
+    with _dark([]):
+        await hass.config_entries.async_setup(mock_entry.entry_id)
+        await hass.async_block_till_done()
+        for _ in range(3):
+            await _tick(hass)
+
+    ours = [r for r in caplog.records if r.name.startswith(f"{_COORD_LOGGER}.")]
+    errors = [r for r in ours if r.levelno >= logging.ERROR]
+    assert len(errors) == 1
+    assert "device unreachable" in errors[0].getMessage()
+
+    with _reachable(resources):
+        await _tick(hass)
+
+    recovered = [r for r in caplog.records if "device answered again" in r.getMessage()]
+    assert len(recovered) == 1
+    assert recovered[0].levelno == logging.INFO
+
+
+async def test_broken_session_still_reconnects_within_the_cycle(
+    hass: HomeAssistant, mock_entry
+) -> None:
+    """The counterpart guard: skipping the reconnect is only right when the
+    handshake never completed. A session that opened and then failed mid-poll
+    still gets torn down and re-established without waiting a whole cycle."""
+    coordinator = LocalThingsCoordinator(hass, mock_entry)
+    coordinator._discovered = True
+
+    with (
+        patch.object(
+            LocalThingsCoordinator, "_poll_once", side_effect=RuntimeError("poll GET failed")
+        ) as poll,
+        patch.object(LocalThingsCoordinator, "_close_session") as close,
+        patch("custom_components.localthings.coordinator.asyncio.sleep"),
+        pytest.raises(UpdateFailed),
+    ):
+        await coordinator._async_update_data()
+
+    assert poll.call_count == 2
+    close.assert_called_once()
