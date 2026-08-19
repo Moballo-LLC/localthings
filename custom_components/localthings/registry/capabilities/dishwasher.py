@@ -14,7 +14,6 @@ from .laundry import (
     bool_option_switch,
     cycle_select,
     drum_clean_cycles_remaining,
-    drum_clean_last_cleaned,
 )
 
 # ---------------------------------------------------------------------------
@@ -62,9 +61,14 @@ DISHWASHER_SETTINGS = Capability(
 # #258) DrumCleanProposal_/WashingTimes_/DrumCleanLog_ tokens riding on this
 # same options[] array -- a live dump confirmed the dishwasher reports the
 # identical trio (WashingTimes_18/DrumCleanProposal_20, plus a '|'-joined
-# DrumCleanLog_ history matching the dryer's multi-entry shape), so the
-# shared laundry.drum_clean_cycles_remaining/drum_clean_last_cleaned readers
-# apply unchanged; see laundry.py for the field semantics.
+# DrumCleanLog_ history matching the dryer's multi-entry shape), so
+# laundry.drum_clean_cycles_remaining applies unchanged.
+#
+# laundry.drum_clean_last_cleaned (DrumCleanLog_'s own newest entry) is
+# deliberately NOT wired up here (issue #398): a live dishwasher dump
+# showed it moving every 30-90s on its own, including well after a cycle
+# had already finished -- unlike the washer/dryer reports this reader was
+# built from (issues #9, #258), it never settles on a value worth showing.
 
 CYCLE_OPTIONS = Capability(
     href="/course/vs/0",
@@ -81,14 +85,6 @@ CYCLE_OPTIONS = Capability(
             state_class="measurement",
             exists_fn=lambda rep, resources: drum_clean_cycles_remaining(rep) is not None,
             rep_fn=drum_clean_cycles_remaining,
-        ),
-        SensorDesc(
-            key="drum_clean_last_cleaned",
-            device_class="timestamp",
-            icon="mdi:calendar-clock",
-            entity_category="diagnostic",
-            exists_fn=lambda rep, resources: drum_clean_last_cleaned(rep) is not None,
-            rep_fn=drum_clean_last_cleaned,
         ),
     ),
 )
