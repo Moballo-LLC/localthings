@@ -1106,6 +1106,38 @@ async def test_observe_mode_skips_subpolls_when_nothing_is_silent(
     mock_sleep.assert_not_called()
 
 
+async def test_observe_mode_skips_empty_subpoll_slots(
+    hass: HomeAssistant, mock_entry, mock_coordinator_observe_session
+) -> None:
+    """Once hot is empty, odd slots would otherwise take the session lock
+    and dispatch a no-op executor job. Skip those."""
+    await hass.config_entries.async_setup(mock_entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
+    coordinator._observe.mode = MODE_OBSERVE
+    coordinator._hot_hrefs = []
+    coordinator._warm_hrefs = ["/warm/vs/0"]
+    coordinator._observe.fallback_hrefs = {"/warm/vs/0"}
+
+    polled: list[list[str]] = []
+
+    def _capture(hrefs):
+        polled.append(list(hrefs))
+
+    with (
+        patch.object(coordinator, "_poll_hrefs_blocking", side_effect=_capture),
+        patch(
+            "custom_components.localthings.coordinator.asyncio.sleep",
+            new_callable=AsyncMock,
+        ),
+    ):
+        await coordinator._run_subpolls()
+
+    assert polled
+    for batch in polled:
+        assert batch == ["/warm/vs/0"]
+
+
 async def test_write_marks_href_pending_before_post(
     hass: HomeAssistant, mock_entry, mock_coordinator_observe_session
 ) -> None:

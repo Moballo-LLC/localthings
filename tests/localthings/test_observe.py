@@ -236,6 +236,24 @@ def test_enter_observe_mode_keeps_silent_hrefs_on_fallback():
         mgr.close()
 
 
+def test_on_notification_drops_href_from_fallback():
+    """A late first notify (after the 80% snapshot) self-corrects
+    fallback_hrefs so a slow-but-pushing href is not polled for the rest
+    of the session -- multi-block resources being the reliable victim."""
+    mgr = _manager()
+    session = _FakeSession()
+    subscribed = {"/a/vs/0", "/b/vs/0", "/c/vs/0"}
+    mgr.on_notification("/a/vs/0", cbor2.dumps({"x": 1}))
+    mgr.on_notification("/b/vs/0", cbor2.dumps({"x": 1}))
+    try:
+        mgr.enter_observe_mode(session, subscribed)
+        assert mgr.fallback_hrefs == {"/c/vs/0"}
+        mgr.on_notification("/c/vs/0", cbor2.dumps({"x": 1}))
+        assert mgr.fallback_hrefs == set()
+    finally:
+        mgr.close()
+
+
 def test_try_enter_observe_mode_meets_success_fraction_with_partial_notifies():
     mgr = _manager()
     session = _FakeSession()

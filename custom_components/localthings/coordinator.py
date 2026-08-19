@@ -998,6 +998,8 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         for i in range(1, 10):  # slots 1..9  (T+3 s … T+27 s)
             await asyncio.sleep(step)
             hrefs = list(hot) + (list(warm) if i % 2 == 0 else [])
+            if not hrefs:
+                continue
             async with self._session_lock:
                 try:
                     await self.hass.async_add_executor_job(self._poll_hrefs_blocking, hrefs)
