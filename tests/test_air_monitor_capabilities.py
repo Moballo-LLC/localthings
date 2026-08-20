@@ -54,8 +54,8 @@ def test_no_unbound_hrefs():
 
 def test_air_quality_sensors_read_from_shared_items_decode():
     """Same /sensors/vs/0 {type, value} shape and common.sensor_item_value
-    decode air_purifier.AIR_QUALITY already uses -- this board adds CO2,
-    which neither air_purifier nor range_hood report."""
+    decode air_purifier.AIR_QUALITY already uses -- this board lists CO2
+    unconditionally, unlike the exists_fn-gated purifier descriptor."""
     state = _state()
     assert state["dust"] == 31
     assert state["fine_dust"] == 23

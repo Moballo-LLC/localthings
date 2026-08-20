@@ -299,6 +299,30 @@ def sensor_item_value(items, sensor_type, index=0):
     return None
 
 
+def has_sensor_type(type_):
+    """True when /sensors/vs/0's items[] lists an item of this type.
+
+    This only proves the type is *listed*, not that the reading is real:
+    issue #166 (ARTIK051_PRAC_20K) lists all five types with permanent-zero
+    values on units the reporter confirmed don't have the hardware. So
+    entities gated on this stay disabled by default rather than
+    existence-gated further, to avoid silently dropping real readings on
+    hardware not yet seen.
+
+    is_stub_rep(rep) keeps the stub carve-out (see entity._is_included /
+    ENERGY_METER, issue #127): an explicit exists_fn otherwise bypasses it
+    and would drop the entity when /device/0 returns a not-yet-fetched stub.
+    """
+
+    def fn(rep, resources):
+        return is_stub_rep(rep) or any(
+            isinstance(i, dict) and i.get("x.com.samsung.da.type") == type_
+            for i in (rep.get("x.com.samsung.da.items") or [])
+        )
+
+    return fn
+
+
 # OCF-native / vendor '-vs' fallback pairs for power, kids-lock, remote
 # control: each exists as both a standard OCF resource (/power/0,
 # oic.r.switch.binary, plain boolean 'value') and a Samsung vendor

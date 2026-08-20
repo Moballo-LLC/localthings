@@ -23,7 +23,7 @@ from ..entities import (
     SwitchDesc,
 )
 from . import common
-from .common import filter_usage_hours, filter_usage_percent, normalize_temp_unit
+from .common import filter_usage_hours, filter_usage_percent, has_sensor_type, normalize_temp_unit
 from .laundry import option_write
 
 
@@ -117,26 +117,6 @@ def _sensor_item_value(items, type_):
                 return str(v[0])
             return None
     return None
-
-
-def _has_sensor_type(type_):
-    """True when /sensors/vs/0's items[] lists an item of this type.
-
-    This only proves the type is *listed*, not that the reading is real:
-    issue #166 (ARTIK051_PRAC_20K) lists all five types with permanent-zero
-    values on units the reporter confirmed don't have the hardware. So
-    entities gated on this stay disabled by default (see AIR_QUALITY) rather
-    than existence-gated further, to avoid silently dropping real readings
-    on hardware not yet seen.
-    """
-
-    def fn(rep, resources):
-        return any(
-            isinstance(i, dict) and i.get("x.com.samsung.da.type") == type_
-            for i in (rep.get("x.com.samsung.da.items") or [])
-        )
-
-    return fn
 
 
 # Canonical AC resource hrefs. climate.py binds HREF_MODE and reads the
@@ -1570,7 +1550,7 @@ WINDSLEEP = Capability(
 # /sensors/vs/0 items[] carry live air-quality readings. CleanLevel is
 # corroborated as numeric by a top-level x.com.samsung.da.cleanLevel scalar,
 # so it's a measurement; the others stay string diagnostics (see
-# _sensor_item_value). All disabled by default: _has_sensor_type only proves
+# _sensor_item_value). All disabled by default: has_sensor_type only proves
 # the item type is listed, not that the sensor is real (see its docstring).
 AIR_QUALITY = Capability(
     href="/sensors/vs/0",
@@ -1582,7 +1562,7 @@ AIR_QUALITY = Capability(
             icon="mdi:broom",
             entity_category="diagnostic",
             state_class="measurement",
-            exists_fn=_has_sensor_type("CleanLevel"),
+            exists_fn=has_sensor_type("CleanLevel"),
             enabled_default=False,
             value_fn=lambda items: _int(_sensor_item_value(items, "CleanLevel")),
         ),
@@ -1592,7 +1572,7 @@ AIR_QUALITY = Capability(
                 field="x.com.samsung.da.items",
                 icon=icon,
                 entity_category="diagnostic",
-                exists_fn=_has_sensor_type(type_),
+                exists_fn=has_sensor_type(type_),
                 enabled_default=False,
                 value_fn=lambda items, t=type_: _sensor_item_value(items, t),
             )
@@ -1618,7 +1598,7 @@ AIR_QUALITY = Capability(
             device_class="carbon_dioxide",
             state_class="measurement",
             unit="ppm",
-            exists_fn=_has_sensor_type("CO2"),
+            exists_fn=has_sensor_type("CO2"),
             enabled_default=False,
             value_fn=lambda items: _int(_sensor_item_value(items, "CO2")),
         ),

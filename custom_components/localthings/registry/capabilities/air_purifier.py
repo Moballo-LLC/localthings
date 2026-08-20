@@ -34,7 +34,13 @@ from ..entities import (
     SwitchDesc,
     TimeDesc,
 )
-from .common import epoch_to_utc, filter_usage_percent, int_or_none, sensor_item_value
+from .common import (
+    epoch_to_utc,
+    filter_usage_percent,
+    has_sensor_type,
+    int_or_none,
+    sensor_item_value,
+)
 from .laundry import bool_option_exists, bool_option_value, option_value, option_write
 
 # Newer TP1X_DA-AC-AIR-class boards (issue #130) report fan modes directly
@@ -106,17 +112,35 @@ _AIR_QUALITY_SENSORS = (
 AIR_QUALITY = Capability(
     href="/sensors/vs/0",
     poll_tier="warm",
-    entities=tuple(
+    entities=(
+        *(
+            SensorDesc(
+                key=key,
+                field="x.com.samsung.da.items",
+                icon=icon,
+                state_class=state_class,
+                device_class=device_class,
+                unit=unit,
+                value_fn=lambda items, t=sensor_type: sensor_item_value(items, t),
+            )
+            for key, icon, sensor_type, state_class, device_class, unit in _AIR_QUALITY_SENSORS
+        ),
+        # CO2 (issue #387) -- same field/shape air_monitor.SENSORS already
+        # models with device_class='carbon_dioxide'/unit='ppm'. Gated on the
+        # type being listed so boards that don't report it (every current
+        # fixture) don't grow an empty entity. Disabled by default for the
+        # same reason as airconditioner.AIR_QUALITY (issue #166).
         SensorDesc(
-            key=key,
+            key="co2",
             field="x.com.samsung.da.items",
-            icon=icon,
-            state_class=state_class,
-            device_class=device_class,
-            unit=unit,
-            value_fn=lambda items, t=sensor_type: sensor_item_value(items, t),
-        )
-        for key, icon, sensor_type, state_class, device_class, unit in _AIR_QUALITY_SENSORS
+            icon="mdi:molecule-co2",
+            device_class="carbon_dioxide",
+            state_class="measurement",
+            unit="ppm",
+            exists_fn=has_sensor_type("CO2"),
+            enabled_default=False,
+            value_fn=lambda items: sensor_item_value(items, "CO2"),
+        ),
     ),
 )
 

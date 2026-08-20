@@ -7,8 +7,9 @@ only); this registry deliberately doesn't include common.POWER.
 air_purifier.AIR_QUALITY and range_hood.AIR_QUALITY already read via
 common.sensor_item_value -- reused here rather than re-decoded, including
 the same dust/fine_dust/super_fine_dust/odor/clean_level keys so this
-device shares those capabilities' catalog entries. This board additionally
-reports a CO2 reading the other two families don't.
+device shares those capabilities' catalog entries. This board reports a
+CO2 reading; air_purifier.AIR_QUALITY now models the same type when a
+purifier lists it (issue #387).
 
 A second `value` list element on the particulate-matter types (Dust's
 `['31', '2']`) is the device's own graded air-quality level for that
