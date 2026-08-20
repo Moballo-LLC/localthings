@@ -1,0 +1,244 @@
+{
+  "device0": [
+    {
+      "rt": [
+        "x.com.samsung.devcol",
+        "oic.wk.col"
+      ],
+      "if": [
+        "oic.if.baseline",
+        "oic.if.ll",
+        "oic.if.b"
+      ]
+    },
+    {
+      "href": "/alarms/vs/0",
+      "rep": {}
+    },
+    {
+      "href": "/configuration/vs/0",
+      "rep": {
+        "x.com.samsung.da.region": "0000000000",
+        "x.com.samsung.da.countryCode": "US\u0001"
+      }
+    },
+    {
+      "href": "/course/vs/0",
+      "rep": {
+        "x.com.samsung.da.supportedModes": [
+          "HOMECARE_WIZARD_V2"
+        ],
+        "x.com.samsung.da.options": [
+          "DeviceType_0165",
+          "UpdateAllow_NotAllowed",
+          "Course_9A",
+          "MixedLoadBell_Disable",
+          "MixedLoadBellNoti_Nothing",
+          "LaundryOutTime_0",
+          "SeamlessControl_Disable",
+          "KidsLockBypass_On",
+          "DetergentOnce_0",
+          "DetergentLeft_0",
+          "DetergentBase_0",
+          "DetergentAlarm_Off",
+          "DetergentType_0",
+          "DetergentTotal_0",
+          "SpecialFunction_4",
+          "AvailableDelayTime_188",
+          "LaundryPlannerUserSetTime_0",
+          "ProgressTimeSet_B22D00B4003C",
+          "WrinklePreventRunning_Off",
+          "EnergyLevelSet_050502050503020304010204030203",
+          "MostUsed_9AD20EE000",
+          "MixedLoadBellSet_02FFFF02FFFFFFFFFFFFFFFFFF02",
+          "UsagesDB_ok",
+          "EnergyKW_396",
+          "TimeSync_NotSupported"
+        ],
+        "x.com.samsung.da.supportedOptions": [
+          "29AD20EE000CAD10EE000DBD204E00099D20EE00093D102E000B5D102E000D7D204E000A5D204E00096D000E10E97D000E10E7FD000E33E98D000E000EBD204E000B6D20EE000"
+        ]
+      }
+    },
+    {
+      "href": "/cycleinterface/vs/0",
+      "rep": {}
+    },
+    {
+      "href": "/diagnosis/vs/0",
+      "rep": {
+        "x.com.samsung.da.diagnosisStart": "Ready"
+      }
+    },
+    {
+      "href": "/energy/consumption/0",
+      "rep": {}
+    },
+    {
+      "href": "/energy/consumption/vs/0",
+      "rep": {
+        "x.com.samsung.da.instantaneousPowerUnit": "W",
+        "x.com.samsung.da.instantaneousPower": "-500",
+        "x.com.samsung.da.cumulativePower": "692600",
+        "x.com.samsung.da.cumulativeUnit": "Wh",
+        "x.com.samsung.da.cumulativeDate": "1786964400",
+        "x.com.samsung.da.cumulativeDateUTC": "1786960800"
+      }
+    },
+    {
+      "href": "/file/information/vs/0",
+      "rep": {
+        "x.com.samsung.timeoffset": "+01:00"
+      }
+    },
+    {
+      "href": "/information/vs/0",
+      "rep": {
+        "x.com.samsung.da.modelNum": "DA_WM_A51_20_COMMON|20221341|30010102001211000103000000000000",
+        "x.com.samsung.da.description": "DA_WM_A51_20_COMMON_DV6800N/DC92-01967B_0404",
+        "x.com.samsung.da.serialNum": "**REDACTED**",
+        "x.com.samsung.da.otnDUID": "**REDACTED**",
+        "x.com.samsung.da.items": [
+          {
+            "x.com.samsung.da.id": "0",
+            "x.com.samsung.da.description": "DA_WM_A51_20_COMMON|20221341|30010102001211000103000000000000",
+            "x.com.samsung.da.type": "Software",
+            "x.com.samsung.da.number": "02198A230708(E257)",
+            "x.com.samsung.da.newVersionAvailable": "0"
+          },
+          {
+            "x.com.samsung.da.id": "1",
+            "x.com.samsung.da.description": "DA_WM_A51_20_COMMON",
+            "x.com.samsung.da.type": "Firmware",
+            "x.com.samsung.da.number": "17111305,17122616",
+            "x.com.samsung.da.newVersionAvailable": "0"
+          }
+        ]
+      }
+    },
+    {
+      "href": "/kidslock/0",
+      "rep": {
+        "value": false
+      }
+    },
+    {
+      "href": "/kidslock/vs/0",
+      "rep": {
+        "x.com.samsung.da.kidsLock": "Ready"
+      }
+    },
+    {
+      "href": "/operational/state/0",
+      "rep": {
+        "currentMachineState": "**REDACTED**",
+        "machineStates": "**REDACTED**",
+        "jobStates": [
+          "None",
+          "Drying",
+          "Cooling",
+          "Finish"
+        ],
+        "currentJobState": "None",
+        "remainingTime": "03:08:00",
+        "progressPercentage": "1"
+      }
+    },
+    {
+      "href": "/operational/state/vs/0",
+      "rep": {
+        "x.com.samsung.da.state": "Ready",
+        "x.com.samsung.da.remainingTime": "03:08:00",
+        "x.com.samsung.da.progressPercentage": "1",
+        "x.com.samsung.da.progress": "None",
+        "x.com.samsung.da.delayEndTime": "00:00:00",
+        "x.com.samsung.da.supportedProgress": [
+          "None",
+          "Drying",
+          "Cooling",
+          "Finish"
+        ]
+      }
+    },
+    {
+      "href": "/power/0",
+      "rep": {
+        "value": false
+      }
+    },
+    {
+      "href": "/power/vs/0",
+      "rep": {
+        "x.com.samsung.da.power": "Off"
+      }
+    },
+    {
+      "href": "/realtimenotiforclient/vs/0",
+      "rep": {
+        "x.com.samsung.da.timeforshortnoti": "0",
+        "x.com.samsung.da.periodicnotisubscription": "true"
+      }
+    },
+    {
+      "href": "/remotectrl/0",
+      "rep": {
+        "value": false
+      }
+    },
+    {
+      "href": "/remotectrl/vs/0",
+      "rep": {
+        "x.com.samsung.da.remoteControlEnabled": "false"
+      }
+    },
+    {
+      "href": "/setting/vs/0",
+      "rep": {}
+    },
+    {
+      "href": "/st/dryercourse/vs/0",
+      "rep": {
+        "x.com.samsung.da.st.dryerMode": "Table_00_Course_9A",
+        "x.com.samsung.da.st.courseTable": "Table_00"
+      }
+    },
+    {
+      "href": "/washer/vs/0",
+      "rep": {
+        "x.com.samsung.da.wrinklePrevent": "Off",
+        "x.com.samsung.da.dryLevel": "2",
+        "x.com.samsung.da.supportedDryLevel": [
+          "None",
+          "1",
+          "2",
+          "3"
+        ],
+        "x.com.samsung.da.dryTime": "00:00:00",
+        "x.com.samsung.da.supportedDryTime": [
+          "00:00:00",
+          "00:30:00",
+          "01:00:00",
+          "01:30:00",
+          "02:00:00",
+          "02:30:00"
+        ],
+        "x.com.samsung.da.dryerType": "Electricity"
+      }
+    },
+    {
+      "href": "/wm/editcourse/vs/0",
+      "rep": {}
+    },
+    {
+      "href": "/wm/jobbeginingstatus/vs/0",
+      "rep": {}
+    },
+    {
+      "href": "/wm/setinfo/vs/0",
+      "rep": {
+        "x.com.samsung.da.isModelSettingWithoutSC": "false",
+        "x.com.samsung.da.isModelSettingPowerOnOff": "false"
+      }
+    }
+  ]
+}

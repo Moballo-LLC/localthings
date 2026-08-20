@@ -344,7 +344,20 @@
           "a4": "Asciugatura a tempo",
           "a6": "Asciugatura rapida",
           "a3": "Abbigliamento sportivo",
-          "a2": "Delicati"
+          "a2": "Delicati",
+          "9a": "Cotone",
+          "ca": "Arieggiatura",
+          "db": "Super Speed",
+          "99": "Carico misto",
+          "93": "Pronto da stirare",
+          "b5": "Lana",
+          "d7": "Cura outdoor",
+          "96": "Aria fredda",
+          "97": "Aria calda",
+          "7f": "Asciugatura a tempo",
+          "98": "Asciugatura rapida 35",
+          "eb": "Delicati",
+          "b6": "Sintetici"
         }
       },
       "dryer_cycle_table_03": {

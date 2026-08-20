@@ -344,7 +344,20 @@
           "a4": "Zeittrocknen",
           "a6": "Schnelltrocknen",
           "a3": "Sportkleidung",
-          "a2": "Feinwäsche"
+          "a2": "Feinwäsche",
+          "9a": "Baumwolle",
+          "ca": "Frischluft",
+          "db": "Super Speed",
+          "99": "Mischwäsche",
+          "93": "Bügeltrocken",
+          "b5": "Wolle",
+          "d7": "Outdoor-Pflege",
+          "96": "Kaltluft",
+          "97": "Warmluft",
+          "7f": "Zeittrocknen",
+          "98": "Schnelltrocknen 35",
+          "eb": "Feinwäsche",
+          "b6": "Synthetik"
         }
       },
       "dryer_cycle_table_03": {

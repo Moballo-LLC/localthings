@@ -121,6 +121,25 @@ def test_registry_reproduces_golden_state_keys_for_dryer_dve50a8600():
     )
 
 
+def test_registry_reproduces_golden_state_keys_for_dryer_dv6800n():
+    """DA_WM_A51_20_COMMON/DV6800N (issue #394) resolves via /oic/d's
+    'oic.d.dryer' device type, not board-token guessing -- its modelNum's
+    board tokens ('DA', 'WM', 'COMMON') are all deliberately excluded from
+    _BOARD_TOKEN_TO_KEY (see registry/by_type's module docstring)."""
+    from tests.conftest import _load_device
+
+    resources = _load_device("dryer_dv6800n")
+    golden = json.loads((GOLDEN / "dryer_dv6800n.json").read_text())
+    state_keys = _new_state_keys(
+        "dryer_dv6800n", resources, device_types=("oic.wk.d", "oic.d.dryer")
+    )
+    assert set(state_keys) == set(golden["state_keys"]), (
+        f"state_keys mismatch:\n"
+        f"  extra:   {sorted(set(state_keys) - set(golden['state_keys']))}\n"
+        f"  missing: {sorted(set(golden['state_keys']) - set(state_keys))}"
+    )
+
+
 def test_registry_reproduces_golden_state_keys_for_airconditioner():
     from tests.conftest import _load_device
 
