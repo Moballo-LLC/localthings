@@ -53,9 +53,17 @@ def _options(result):
     return body["x.com.samsung.da.options"]
 
 
+def _exists(key, rep):
+    """Whether `key`'s descriptor gates itself in for `rep`."""
+    desc = next(e for e in washer.WASHER_COURSE.entities if e.key == key)
+    assert desc.exists_fn is not None
+    return desc.exists_fn(rep, {})
+
+
 def _flatten(fixture):
     resources = _load_device(fixture)
     reg = resolve(resources)
+    assert reg is not None
     return flatten(discover(resources, reg.capabilities, reg.pattern_capabilities), resources)
 
 
@@ -77,6 +85,20 @@ class TestAlarmMasterSwitch:
     def test_turning_off_clears_the_mask(self):
         desc = _desc("add_wash_alarm", SwitchDesc)
         assert _options(_write(desc, "Off", _rep("AddWashSet_5"))) == ["AddWashSet_0"]
+
+    @pytest.mark.parametrize("mask", range(1, 8))
+    def test_on_over_an_alarm_already_on_keeps_the_chosen_moments(self, mask):
+        """Home Assistant calls turn_on regardless of current state, so
+        re-asserting "on" over a rinse-only mask must not widen it to all
+        three -- this switch reads on either way, so no state change would
+        point at the loss. Reaching 7 from a subset still means off, then
+        on."""
+        desc = _desc("add_wash_alarm", SwitchDesc)
+        rep = _rep(f"AddWashSet_{mask}")
+        assert desc.rep_fn(rep) is True
+        assert _write(desc, "On", rep) is None
+        assert _options(_write(desc, "Off", rep)) == ["AddWashSet_0"]
+        assert _options(_write(desc, "On", _rep("AddWashSet_0"))) == ["AddWashSet_7"]
 
     def test_rejects_a_payload_that_is_not_on_or_off(self):
         desc = _desc("add_wash_alarm", SwitchDesc)
@@ -182,19 +204,17 @@ class TestCapabilityDetection:
 
     @pytest.mark.parametrize("key,token", ENTITY_TOKENS.items())
     def test_absent_on_a_washer_that_never_reports_the_token(self, key, token):
-        desc = next(e for e in washer.WASHER_COURSE.entities if e.key == key)
-        assert desc.exists_fn(_rep("Course_5C"), {}) is False
+        assert _exists(key, _rep("Course_5C")) is False
 
     @pytest.mark.parametrize("key,token", ENTITY_TOKENS.items())
     def test_present_once_the_token_appears(self, key, token):
-        desc = next(e for e in washer.WASHER_COURSE.entities if e.key == key)
-        assert desc.exists_fn(_rep(f"{token}_{SAMPLE[token]}"), {}) is True
+        assert _exists(key, _rep(f"{token}_{SAMPLE[token]}")) is True
 
     def test_a_washer_with_only_the_indicator_gets_only_that_entity(self):
         present = {
             e.key
             for e in washer.WASHER_COURSE.entities
-            if e.key in ENTITY_TOKENS and e.exists_fn(_rep("AddWashIndicator_On"), {})
+            if e.key in ENTITY_TOKENS and _exists(e.key, _rep("AddWashIndicator_On"))
         }
         assert present == {"add_wash_indicator"}
 
@@ -216,12 +236,14 @@ class TestAgainstTheWW6500Dump:
 
         info = _load_device("washer_ww6500")["/information/vs/0"]
         model = info["x.com.samsung.da.modelNum"]
-        assert for_device_by_model(model, info["x.com.samsung.da.description"]).name == "washer"
+        reg = for_device_by_model(model, info["x.com.samsung.da.description"])
+        assert reg is not None and reg.name == "washer"
         assert for_device_by_model(model, "") is None
 
     def test_no_unbound_hrefs(self):
         resources = _load_device("washer_ww6500")
         reg = resolve(resources)
+        assert reg is not None
         unbound = []
         discover(resources, reg.capabilities, reg.pattern_capabilities, log=unbound.append)
         assert unbound == []

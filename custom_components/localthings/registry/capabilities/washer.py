@@ -313,7 +313,16 @@ def _add_wash_alarm_write(p, rep, href=None):
     # Gated on the mask being readable, like the per-moment writes: a device
     # reporting a wider mask than these three bits would otherwise have it
     # truncated to 7 here, silently dropping a moment it supports.
-    if p not in ("On", "Off") or _add_wash_mask(rep, "AddWashSet") is None:
+    mask = _add_wash_mask(rep, "AddWashSet")
+    if p not in ("On", "Off") or mask is None:
+        return None
+    if p == "On" and mask:
+        # Already on, so "on" is a no-op rather than a rewrite to 7. Home
+        # Assistant calls turn_on regardless of current state, so an
+        # automation asserting the alarm on over a rinse-only mask would
+        # otherwise widen it to all three moments with no state change on
+        # this switch to point at. Distinct from the off-then-on case in
+        # _add_wash_bit_switch, where there is no subset left to keep.
         return None
     return _add_wash_set_write(0b111 if p == "On" else 0)
 
