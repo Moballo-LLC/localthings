@@ -95,8 +95,15 @@ class ObserveManager:
         self._notified: set[str] = set()
         self._last_notify_ts: float | None = None
         # Wakes try_enter_observe_mode's grace wait early once enough hrefs
-        # have notified. Guards only `_notified` mutations + the `wait_for`.
+        # have notified. Guards `_notified` mutations, the `wait_for`, and
+        # fallback_hrefs (enter_observe_mode assignment, on_notification
+        # discard).
         self._notify_cond = threading.Condition()
+        # Idle while polling, except after downgrade_to_poll (every href
+        # that was subscribed). While in observe mode this is the set of
+        # subscribed hrefs that have not yet notified (issue #92) -- they
+        # stay on the hot/warm sub-poll cadence. on_notification discards
+        # an href once it pushes, so a late first notify self-corrects.
         self.fallback_hrefs: set[str] = set()
         self._on_applied: Callable[[str, dict, str], None] | None = None
         self._refresh_task: ObserveRefreshTask | None = None
@@ -205,6 +212,10 @@ class ObserveManager:
             return
         with self._notify_cond:
             self._notified.add(href)
+            # Snapshot in enter_observe_mode is at the 80% quorum, not the
+            # full grace period -- a late first push (blockwise refetch)
+            # must drop the href so we don't keep GET-polling a live one.
+            self.fallback_hrefs.discard(href)
             self._last_notify_ts = time.monotonic()
             self._notify_cond.notify_all()
         self.log.debug("observe notify: %s", href)
@@ -270,6 +281,13 @@ class ObserveManager:
         #294) -- committing against a session a reconnect already replaced
         would claim observe mode with nothing left to notice it's dead."""
         self.subscribed_hrefs = set(subscribed)
+        # Issue #92: subscribed-but-silent hrefs are counted as covered by
+        # push if we drop this, but they never emit a notify. Keep them on
+        # the poll cadence via fallback_hrefs (otherwise idle in observe).
+        # Same lock as on_notification's discard so a notify in this window
+        # cannot land on a set object that is about to be replaced.
+        with self._notify_cond:
+            self.fallback_hrefs = set(subscribed) - self._notified
         self._set_mode(MODE_OBSERVE)
         self.start_refresh_task(session)
 

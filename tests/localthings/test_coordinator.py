@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import time
 from datetime import timedelta
 from unittest.mock import AsyncMock, patch
@@ -1048,6 +1050,110 @@ async def test_sweep_mismatch_forces_subpolls_on_a_live_observe_session(
         await hass.async_block_till_done()
 
     mock_subpolls.assert_called_once_with(force=True)
+
+
+async def _cancel_background_subpolls(coordinator: LocalThingsCoordinator) -> None:
+    """Setup starts `_run_subpolls` as a background task. Tests that drive
+    it directly have to cancel that one first, or a patched
+    `_poll_hrefs_blocking` also captures its batches."""
+    task = coordinator._subpoll_task
+    if task is None:
+        return
+    task.cancel()
+    coordinator._subpoll_task = None
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+
+
+async def test_observe_mode_subpolls_only_silent_hrefs(
+    hass: HomeAssistant, mock_entry, mock_coordinator_observe_session
+) -> None:
+    """Issue #92: subscribed-but-silent hrefs keep the hot/warm cadence
+    instead of waiting for the 30s sweep."""
+    await hass.config_entries.async_setup(mock_entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
+    await _cancel_background_subpolls(coordinator)
+    assert coordinator._hot_hrefs
+    silent = coordinator._hot_hrefs[0]
+    coordinator._observe.mode = MODE_OBSERVE
+    coordinator._observe.fallback_hrefs = {silent}
+
+    polled: list[list[str]] = []
+
+    def _capture(hrefs):
+        polled.append(list(hrefs))
+
+    with (
+        patch.object(coordinator, "_poll_hrefs_blocking", side_effect=_capture),
+        patch(
+            "custom_components.localthings.coordinator.asyncio.sleep",
+            new_callable=AsyncMock,
+        ),
+    ):
+        await coordinator._run_subpolls()
+
+    assert polled
+    for batch in polled:
+        assert set(batch) == {silent}
+
+
+async def test_observe_mode_skips_subpolls_when_nothing_is_silent(
+    hass: HomeAssistant, mock_entry, mock_coordinator_observe_session
+) -> None:
+    """The observe-mode no-op stays in place when every subscribed href
+    actually notified -- issue #92 only keeps the silent ones on poll."""
+    await hass.config_entries.async_setup(mock_entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
+    await _cancel_background_subpolls(coordinator)
+    coordinator._observe.mode = MODE_OBSERVE
+    coordinator._observe.fallback_hrefs = set()
+
+    with (
+        patch.object(coordinator, "_poll_hrefs_blocking") as mock_poll,
+        patch(
+            "custom_components.localthings.coordinator.asyncio.sleep",
+            new_callable=AsyncMock,
+        ) as mock_sleep,
+    ):
+        await coordinator._run_subpolls()
+
+    mock_poll.assert_not_called()
+    mock_sleep.assert_not_called()
+
+
+async def test_observe_mode_skips_empty_subpoll_slots(
+    hass: HomeAssistant, mock_entry, mock_coordinator_observe_session
+) -> None:
+    """Once hot is empty, odd slots would otherwise take the session lock
+    and dispatch a no-op executor job. Skip those."""
+    await hass.config_entries.async_setup(mock_entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
+    await _cancel_background_subpolls(coordinator)
+    coordinator._observe.mode = MODE_OBSERVE
+    coordinator._hot_hrefs = []
+    coordinator._warm_hrefs = ["/warm/vs/0"]
+    coordinator._observe.fallback_hrefs = {"/warm/vs/0"}
+
+    polled: list[list[str]] = []
+
+    def _capture(hrefs):
+        polled.append(list(hrefs))
+
+    with (
+        patch.object(coordinator, "_poll_hrefs_blocking", side_effect=_capture),
+        patch(
+            "custom_components.localthings.coordinator.asyncio.sleep",
+            new_callable=AsyncMock,
+        ),
+    ):
+        await coordinator._run_subpolls()
+
+    assert polled
+    for batch in polled:
+        assert batch == ["/warm/vs/0"]
 
 
 async def test_write_marks_href_pending_before_post(

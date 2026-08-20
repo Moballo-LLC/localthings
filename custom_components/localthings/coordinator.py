@@ -991,22 +991,31 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     # ------------------------------------------------------------------
 
     async def _run_subpolls(self, force: bool = False) -> None:
-        """Poll hot/warm hrefs in the gaps between summary polls. No-op in
-        observe-primary mode (those hrefs are already covered by push)
-        unless `force` is set -- set when this cycle's sweep found the
-        cache disagreeing with a still-live observe session (see
-        log_sweep_discrepancies): a bounded fallback for a channel gone
-        silent without a reconnect."""
+        """Poll hot/warm hrefs in the gaps between summary polls.
+
+        In observe-primary mode this is a no-op for hrefs the device is
+        actually pushing, unless `force` is set (sweep disagreed with the
+        cache -- see log_sweep_discrepancies). Hrefs that were subscribed
+        but stayed silent through the grace period (issue #92) stay on
+        the hot/warm cadence via `fallback_hrefs`.
+        """
         if self._observe.mode == MODE_OBSERVE and not force:
-            return
-        hot = self._hot_hrefs
-        warm = self._warm_hrefs
+            silent = self._observe.fallback_hrefs
+            if not silent:
+                return
+            hot = [h for h in self._hot_hrefs if h in silent]
+            warm = [h for h in self._warm_hrefs if h in silent]
+        else:
+            hot = self._hot_hrefs
+            warm = self._warm_hrefs
         if not hot and not warm:
             return
         step = self._SUBPOLL_STEP_S
         for i in range(1, 10):  # slots 1..9  (T+3 s … T+27 s)
             await asyncio.sleep(step)
             hrefs = list(hot) + (list(warm) if i % 2 == 0 else [])
+            if not hrefs:
+                continue
             async with self._session_lock:
                 try:
                     await self.hass.async_add_executor_job(self._poll_hrefs_blocking, hrefs)
