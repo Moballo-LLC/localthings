@@ -344,7 +344,20 @@
           "a4": "Time Dry",
           "a6": "Quick Dry",
           "a3": "Active Wear",
-          "a2": "Delicates"
+          "a2": "Delicates",
+          "9a": "Cotton",
+          "ca": "Air Wash",
+          "db": "Super Speed",
+          "99": "Mixed Load",
+          "93": "Iron Dry",
+          "b5": "Wool",
+          "d7": "Outdoor Care",
+          "96": "Cool Air",
+          "97": "Warm Air",
+          "7f": "Time Dry",
+          "98": "Quick Dry 35",
+          "eb": "Delicates",
+          "b6": "Synthetics"
         }
       },
       "dryer_cycle_table_03": {

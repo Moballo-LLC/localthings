@@ -63,6 +63,12 @@ DRYER_SETTINGS = Capability(
 # code. It shares no codes with Table_03 above -- 'a5' Bedding here and
 # '01' Normal are both table-scoped, so a Table_03 dryer never picks up a
 # Table_00 label or vice versa (see laundry.cycle_select's table_href).
+# A DV6800N -- same DA_WM_A51_20_COMMON board, also Table_00 -- confirmed
+# 14 more courses the same way (issue #394); its /course/vs/0 supportedOptions
+# only advertises a different subset of this same table (each model exposes
+# whichever courses its hardware supports), not a conflicting code family --
+# the one code both reporters confirmed, 'a5', means Bedding on both. Folded
+# into the same catalog entry below rather than a new one.
 #
 # Drum Clean+ maintenance tracking (issue #258) reuses washer.py's
 # DrumCleanProposal_/WashingTimes_/DrumCleanLog_ tokens on this same

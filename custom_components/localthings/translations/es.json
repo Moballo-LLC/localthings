@@ -541,7 +541,20 @@
           "a4": "Secado por tiempo",
           "a6": "Secado rápido",
           "a3": "Ropa deportiva",
-          "a2": "Delicados"
+          "a2": "Delicados",
+          "9a": "Algodón",
+          "ca": "Aireación",
+          "db": "Súper velocidad",
+          "99": "Carga mixta",
+          "93": "Planchado fácil",
+          "b5": "Lana",
+          "d7": "Cuidado para exterior",
+          "96": "Aire frío",
+          "97": "Aire caliente",
+          "7f": "Secado por tiempo",
+          "98": "Secado rápido 35",
+          "eb": "Delicados",
+          "b6": "Sintéticos"
         }
       },
       "dryer_cycle_table_03": {
