@@ -16,7 +16,7 @@ array.
 """
 
 from ..capability import Capability
-from ..entities import BinarySensorDesc, SelectDesc, SensorDesc
+from ..entities import BinarySensorDesc, SelectDesc, SensorDesc, SwitchDesc
 from .laundry import (
     bool_option_exists,
     bool_option_switch,
@@ -264,6 +264,105 @@ def _bool_option_switch(key, icon, prefix, availability_field):
     )
 
 
+# AddWash -- the little door for adding a forgotten sock mid-cycle -- rides
+# three independent tokens on the same options[] array:
+#
+#   AddWashSet_<0-7>         the alarm setting, and the only writable one:
+#                            a 3-bit mask over the moments it fires, bit 0
+#                            rinse, bit 1 final rinse, bit 2 spin.
+#   AddWashAvailable_<0-7>   the same three bits, but what the running
+#                            course still permits.
+#   AddWashIndicator_On/Off  the panel lamp: laundry may go in right now.
+#
+# Bit order confirmed by watching a WW6500 run a cycle: AddWashAvailable
+# shed one bit as each moment passed (7 through Rinse, then 6, 4, and 0 as
+# Spin began) and reset to 7 at the end, while the lamp tracked the phase
+# with the alarm switched off throughout.
+
+
+def _add_wash_mask(rep, prefix):
+    """One of the 3-bit AddWash masks, or None when its token is absent,
+    malformed, or outside 0-7. Never 0 for a missing token: 0 is a real
+    value, and a mask this model can't represent is a wrong model rather
+    than something to write back."""
+    raw = option_value(rep.get("x.com.samsung.da.options"), prefix)
+    try:
+        mask = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return mask if 0 <= mask <= 0b111 else None
+
+
+def _add_wash_any(prefix):
+    """Whether any of the three moments is set in `prefix`'s mask."""
+
+    def read(rep):
+        mask = _add_wash_mask(rep, prefix)
+        return None if mask is None else mask != 0
+
+    return read
+
+
+def _add_wash_set_write(mask):
+    return ["course", "vs", "0"], {
+        "x.com.samsung.da.options": option_write("AddWashSet", str(mask)),
+    }
+
+
+def _add_wash_alarm_write(p, rep, href=None):
+    # Gated on the mask being readable, like the per-moment writes: a device
+    # reporting a wider mask than these three bits would otherwise have it
+    # truncated to 7 here, silently dropping a moment it supports.
+    mask = _add_wash_mask(rep, "AddWashSet")
+    if p not in ("On", "Off") or mask is None:
+        return None
+    if p == "On" and mask:
+        # Already on, so "on" is a no-op rather than a rewrite to 7. Home
+        # Assistant calls turn_on regardless of current state, so an
+        # automation asserting the alarm on over a rinse-only mask would
+        # otherwise widen it to all three moments with no state change on
+        # this switch to point at. Distinct from the off-then-on case in
+        # _add_wash_bit_switch, where there is no subset left to keep.
+        return None
+    return _add_wash_set_write(0b111 if p == "On" else 0)
+
+
+def _add_wash_bit_switch(key, icon, bit):
+    """One moment the alarm fires at, as its own bit of the mask.
+
+    The mask is the only state, so switching the last moment off lands on 0
+    and takes the alarm with it, and switching one on from 0 turns the alarm
+    back on. The corollary is that switching the master off and on again
+    writes 7, resetting a rinse-only selection to all three moments -- the
+    appliance remembers no previous subset either, so there is nothing to
+    restore.
+    """
+
+    def read(rep):
+        mask = _add_wash_mask(rep, "AddWashSet")
+        return None if mask is None else bool(mask >> bit & 1)
+
+    def write(p, rep, href=None):
+        mask = _add_wash_mask(rep, "AddWashSet")
+        if p not in ("On", "Off") or mask is None:
+            return None
+        return _add_wash_set_write(mask | 1 << bit if p == "On" else mask & ~(1 << bit))
+
+    return SwitchDesc(
+        key=key,
+        icon=icon,
+        entity_category="config",
+        exists_fn=bool_option_exists("AddWashSet"),
+        rep_fn=read,
+        write_fn=write,
+    )
+
+
+def _add_wash_indicator(rep):
+    raw = option_value(rep.get("x.com.samsung.da.options"), "AddWashIndicator")
+    return raw.lower() == "on" if isinstance(raw, str) else None
+
+
 WASHER_COURSE = Capability(
     href="/course/vs/0",
     entities=(
@@ -349,6 +448,34 @@ WASHER_COURSE = Capability(
         ),
         _bool_option_switch(
             "intensive", "mdi:washing-machine", "IntensiveSetting", "IntensiveAvailableSet"
+        ),
+        SwitchDesc(
+            key="add_wash_alarm",
+            icon="mdi:bell-ring",
+            entity_category="config",
+            exists_fn=bool_option_exists("AddWashSet"),
+            rep_fn=_add_wash_any("AddWashSet"),
+            write_fn=_add_wash_alarm_write,
+        ),
+        _add_wash_bit_switch("add_wash_alarm_rinse", "mdi:water", 0),
+        _add_wash_bit_switch("add_wash_alarm_final_rinse", "mdi:water-check", 1),
+        _add_wash_bit_switch("add_wash_alarm_spin", "mdi:sync", 2),
+        # On at rest: an idle washer reports AddWashAvailable_7 and the mask
+        # only empties as the cycle consumes each moment. This says the cycle
+        # permits AddWash, not that laundry can go in now -- that is
+        # add_wash_indicator.
+        BinarySensorDesc(
+            key="add_wash_available",
+            icon="mdi:tshirt-crew-outline",
+            entity_category="diagnostic",
+            exists_fn=bool_option_exists("AddWashAvailable"),
+            rep_fn=_add_wash_any("AddWashAvailable"),
+        ),
+        BinarySensorDesc(
+            key="add_wash_indicator",
+            icon="mdi:door-open",
+            exists_fn=bool_option_exists("AddWashIndicator"),
+            rep_fn=_add_wash_indicator,
         ),
     ),
 )

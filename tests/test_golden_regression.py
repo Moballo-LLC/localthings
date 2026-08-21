@@ -408,6 +408,25 @@ def test_registry_reproduces_golden_state_keys_for_washer_dryer_combo():
     )
 
 
+def test_registry_reproduces_golden_state_keys_for_washer_ww6500():
+    """DA_WM_A51_20 front-loader, typed solely by the WW consumer prefix in
+    its /information/vs/0 description: A51 is not a board token, so with the
+    description blanked this device resolves to nothing and drops to the
+    unknown-device fallback. That is the fragile route this test pins.
+    Reports the AddWash tokens and an empty /wm/editcourse/vs/0, so its cycle
+    list comes from supportedOptions."""
+    from tests.conftest import _load_device
+
+    resources = _load_device("washer_ww6500")
+    golden = json.loads((GOLDEN / "washer_ww6500.json").read_text())
+    state_keys = _new_state_keys("washer_ww6500", resources)
+    assert set(state_keys) == set(golden["state_keys"]), (
+        f"state_keys mismatch:\n"
+        f"  extra:   {sorted(set(state_keys) - set(golden['state_keys']))}\n"
+        f"  missing: {sorted(set(golden['state_keys']) - set(state_keys))}"
+    )
+
+
 def test_registry_reproduces_golden_state_keys_for_artik051_ref_17k():
     """ARTIK051_REF_17K's Cool Select Zone pantry compartment
     (/status/pantry/one/vs/0) -- issue #20."""

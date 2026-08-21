@@ -109,6 +109,12 @@
       "softener_low": {
         "name": "Softener low"
       },
+      "add_wash_available": {
+        "name": "AddWash allowed"
+      },
+      "add_wash_indicator": {
+        "name": "AddWash ready"
+      },
       "stick_ble_connected": {
         "name": "Stick BLE connected"
       }
@@ -1363,6 +1369,18 @@
       },
       "intensive": {
         "name": "Intensive"
+      },
+      "add_wash_alarm": {
+        "name": "AddWash alarm"
+      },
+      "add_wash_alarm_rinse": {
+        "name": "AddWash rinse"
+      },
+      "add_wash_alarm_final_rinse": {
+        "name": "AddWash final rinse"
+      },
+      "add_wash_alarm_spin": {
+        "name": "AddWash spin"
       },
       "lamp": {
         "name": "Lamp"

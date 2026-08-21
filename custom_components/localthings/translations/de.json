@@ -103,6 +103,12 @@
       "softener_low": {
         "name": "Weichspüler niedrig"
       },
+      "add_wash_available": {
+        "name": "AddWash erlaubt"
+      },
+      "add_wash_indicator": {
+        "name": "AddWash bereit"
+      },
       "pouring": {
         "name": "Ausgabe läuft"
       },
@@ -1357,6 +1363,18 @@
       },
       "intensive": {
         "name": "Intensiv"
+      },
+      "add_wash_alarm": {
+        "name": "AddWash-Hinweis"
+      },
+      "add_wash_alarm_rinse": {
+        "name": "AddWash Spülen"
+      },
+      "add_wash_alarm_final_rinse": {
+        "name": "AddWash letztes Spülen"
+      },
+      "add_wash_alarm_spin": {
+        "name": "AddWash Schleudern"
       },
       "lamp": {
         "name": "Lampe"
