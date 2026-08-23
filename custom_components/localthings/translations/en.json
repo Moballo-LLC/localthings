@@ -677,7 +677,21 @@
           "73": "Rinse + Spin",
           "74": "Active Wear",
           "75": "Delicates",
-          "78": "Quick Wash"
+          "78": "Quick Wash",
+          "5b": "Cotton",
+          "5c": "Extra Speed",
+          "5d": "Super Eco Wash",
+          "5e": "Delicates",
+          "5f": "Baby Care",
+          "60": "Outdoor",
+          "61": "Dark Garment",
+          "63": "Drum Clean",
+          "64": "Rinse + Spin",
+          "65": "Wool",
+          "66": "Bedding",
+          "67": "Synthetics",
+          "68": "E Cotton",
+          "6b": "Spin Only"
         }
       },
       "washer_cycle_table_02": {

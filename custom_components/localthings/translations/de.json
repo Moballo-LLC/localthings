@@ -640,7 +640,21 @@
           "73": "Spülen + Schleudern",
           "74": "Sportkleidung",
           "75": "Feinwäsche",
-          "78": "Schnellwäsche"
+          "78": "Schnellwäsche",
+          "5b": "Baumwolle",
+          "5c": "Extra Schnell",
+          "5d": "Super Eco",
+          "5e": "Feinwäsche",
+          "5f": "Babypflege",
+          "60": "Outdoor",
+          "61": "Dunkle Wäsche",
+          "63": "Trommelreinigung",
+          "64": "Spülen + Schleudern",
+          "65": "Wolle",
+          "66": "Bettwäsche",
+          "67": "Pflegeleicht",
+          "68": "Eco Baumwolle",
+          "6b": "Nur Schleudern"
         }
       },
       "washer_cycle_table_02": {

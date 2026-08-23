@@ -376,6 +376,53 @@ def test_confirmed_dryer_table_03_dv19t8745bv_course_names():
         assert d_states["3d"] == w_states["66"], language  # Denim
 
 
+def test_confirmed_ww6500_table_00_course_names():
+    """A WW6500 owner (DA_WM_A51_20_COMMON) read all fourteen of their
+    Table_00 courses out of the SmartThings app, none of which had a label
+    before -- the codes sit in the 5B-6B range, disjoint from the 01/55-78
+    codes another Table_00 device already contributed.
+
+    Eleven reuse a string this catalog already carries for the same cycle,
+    checked in every locale rather than English alone: a locale that
+    translated one of these differently from the code it shares a meaning
+    with would still pass the key-topology test, the gap issue #343 fell
+    through. Only 5C and 61 are new wording -- the app calls 5C "Extra
+    rychlý" rather than the "Super rychlé" it uses for Table_02's 1D, so
+    the two deliberately do NOT share a label.
+    """
+    shared = {
+        "5b": "1b",  # Cotton
+        "5e": "26",  # Delicates
+        "5f": "0c",  # Baby Care
+        "60": "07",  # Outdoor
+        "63": "09",  # Drum Clean
+        "64": "78",  # Rinse + Spin
+        "65": "22",  # Wool
+        "66": "06",  # Bedding
+        "67": "25",  # Synthetics
+        "68": "35",  # E Cotton
+        "6b": "0d",  # Spin Only
+        "5d": "03",  # Super Eco Wash
+    }
+    for language in _languages():
+        select = _load(language)["entity"]["select"]
+        t00 = select["washer_cycle_table_00"]["state"]
+        t02 = select["washer_cycle_table_02"]["state"]
+        for code, twin in shared.items():
+            assert t00[code] == t02[twin], (language, code, twin)
+        # Distinct cycle, distinct wording -- not the Table_02 Super Speed.
+        assert t00["5c"] != t02["1d"], language
+
+    english = _load("en")["entity"]["select"]["washer_cycle_table_00"]["state"]
+    assert {code: english[code] for code in ("5c", "61")} == {
+        "5c": "Extra Speed",
+        "61": "Dark Garment",
+    }
+    assert _load("cs")["entity"]["select"]["washer_cycle_table_00"]["state"]["5c"] == (
+        "Extra rychlý"
+    )
+
+
 def test_reported_washer_standard_courses_all_have_table_02_labels():
     """Every non-personal code in the reported washer's live course list
     must resolve through the Table_02 catalog instead of appearing as raw
