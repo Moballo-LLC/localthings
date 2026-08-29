@@ -21,7 +21,6 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.core import callback
-from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
@@ -65,6 +64,7 @@ from .const import (
     PROBE_PORT_RANGE,
     SERVICE_WRITE_RESOURCE,
 )
+from .devices import find_entry_device
 from .learned import persist as learned_persist
 from .learned import stored as learned_stored
 from .registry.capabilities.laundry import cycle_options, personal_course_labels
@@ -1545,8 +1545,8 @@ class LocalThingsOptionsFlow(config_entries.OptionsFlow):
             # panel's href dropdown already lists actual hrefs off
             # coord.last_resources, and MAIN.to_actual is identity, so
             # this preserves the panel's existing behavior byte for byte.
-            dev = dr.async_get(self.hass).async_get_device(
-                identifiers=coord.device_info["identifiers"]
+            dev = find_entry_device(
+                self.hass, self.config_entry.entry_id, coord.device_info["identifiers"]
             )
             if dev is None:
                 return self.async_abort(reason="not_loaded")

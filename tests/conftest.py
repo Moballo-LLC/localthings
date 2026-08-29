@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -38,6 +39,25 @@ def _load_device_full(name: str):
     resources = _resources_from_dump(data)
     seeds = {**data.get("seeds", {}), **data.get("probes", {})}
     return resources, data.get("oic_res", []), seeds
+
+
+def linked_parent(hass, info) -> tuple[str, str] | None:
+    """The identifier of the device `info` links under, or None if unlinked.
+
+    device_info_for names the parent by identifier or by registry id
+    depending on the core (see custom_components/localthings/devices.py);
+    reading it back through the registry keeps a test asserting the link
+    itself rather than which spelling the installed HA wanted.
+    """
+    from homeassistant.helpers import device_registry as dr
+
+    raw = cast("dict[str, Any]", info)
+    if (parent := raw.get("via_device")) is not None:
+        return parent
+    if (device_id := raw.get("via_device_id")) is None:
+        return None
+    row = dr.async_get(hass).async_get(device_id)
+    return next(iter(row.identifiers)) if row is not None else None
 
 
 class FakeCoapSession:

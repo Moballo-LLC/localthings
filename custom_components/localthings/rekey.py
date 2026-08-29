@@ -20,6 +20,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 
 from .const import DOMAIN
+from .devices import find_entry_device
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -71,7 +72,7 @@ def rekey_entry(hass: HomeAssistant, entry: ConfigEntry, old_key: str, new_key: 
         if not stale:
             continue
         fresh = {(DOMAIN, f"{new_key}{ident[1][len(old_key) :]}") for ident in stale}
-        existing = dev_reg.async_get_device(identifiers=fresh)
+        existing = find_entry_device(hass, entry.entry_id, fresh)
         if existing is not None and existing.id != device.id:
             # Removing a device takes its entities with it. Anything still
             # attached here was re-keyed rather than removed above -- the
