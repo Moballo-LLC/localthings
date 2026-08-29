@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+from inspect import signature
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
 import cbor2
 import pytest
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.localthings.const import (
@@ -120,6 +123,33 @@ LEGACY_ENTRY_DATA = {
     CONF_LEAF_CERT_PEM: MOCK_LEAF_CERT_PEM,
     CONF_LEAF_KEY_PEM: MOCK_LEAF_KEY_PEM,
 }
+
+
+def entry_has_identifier(
+    hass: HomeAssistant, entry: MockConfigEntry, identifier: tuple[str, str]
+) -> bool:
+    """True if any device row belonging to `entry` carries `identifier`.
+
+    Not `dev_reg.async_get_device`, which HA 2026.9 deprecates (removed in
+    2027.8) because identifiers are no longer unique across config entries --
+    and one entry's own rows are what these assertions mean anyway.
+    """
+    return any(
+        identifier in row.identifiers
+        for row in dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
+    )
+
+
+def link_to_parent(parent: dr.DeviceEntry) -> dict[str, Any]:
+    """`async_get_or_create` kwargs linking a new row under `parent`.
+
+    HA 2026.9 replaced `via_device` (an identifier) with `via_device_id` (a
+    device id) and errors on the old one; cores back to this integration's
+    2025.1 floor accept only `via_device`. Both store the same link.
+    """
+    if "via_device_id" in signature(dr.DeviceRegistry.async_get_or_create).parameters:
+        return {"via_device_id": parent.id}
+    return {"via_device": next(iter(parent.identifiers))}
 
 
 def _load_fridge_resources() -> dict:

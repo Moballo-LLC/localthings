@@ -18,7 +18,13 @@ from custom_components.localthings.const import (
     DOMAIN,
 )
 
-from .conftest import LEGACY_ENTRY_DATA, MOCK_HOST, MOCK_PORT, MOCK_SERIAL
+from .conftest import (
+    LEGACY_ENTRY_DATA,
+    MOCK_HOST,
+    MOCK_PORT,
+    MOCK_SERIAL,
+    entry_has_identifier,
+)
 
 
 def _legacy_entry(hass: HomeAssistant, unique_id: str) -> MockConfigEntry:
@@ -187,7 +193,7 @@ async def test_migration_rekeys_an_ip_keyed_device_and_entity(
     assert rekeyed is not None
     assert rekeyed.unique_id == f"{DOMAIN}_{MOCK_SERIAL}_connection_mode"
     # And nothing is left keyed on the IP.
-    assert dev_reg.async_get_device(identifiers={(DOMAIN, MOCK_HOST)}) is None
+    assert not entry_has_identifier(hass, entry, (DOMAIN, MOCK_HOST))
 
 
 async def test_migration_removes_an_orphan_that_is_already_duplicated(

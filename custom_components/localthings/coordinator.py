@@ -779,14 +779,21 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if subdevice.kind == "indexed"
                 else "Secondary Subdevice"
             )
-        return DeviceInfo(
+        info = DeviceInfo(
             identifiers={(DOMAIN, f"{self.device_key}_{subdevice.key}")},
-            via_device=(DOMAIN, self.device_key),
             name=f"{base_name} {label}",
             manufacturer=self.device_info.get("manufacturer") or "Samsung",
             model=model or None,
             serial_number=serial,
         )
+        # Set through a plain mapping because HA 2026.9 dropped `via_device`
+        # from the DeviceInfo TypedDict for `via_device_id` (still accepted
+        # until 2027.8), while cores back to this integration's 2025.1 floor
+        # take only `via_device`. The identifier is also the safer half: HA
+        # drops an entity whose `via_device_id` names no registered device,
+        # where an unresolved `via_device` just leaves the row unlinked.
+        cast("dict[str, Any]", info)["via_device"] = (DOMAIN, self.device_key)
+        return info
 
     @property
     def observe_mode(self) -> str:

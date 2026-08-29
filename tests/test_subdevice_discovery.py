@@ -149,7 +149,7 @@ async def test_pattern_a_sub1_device_info_links_via_device_to_master(hass: HomeA
 
     master_serial = coordinator.device_key
     assert info["identifiers"] == {(DOMAIN, f"{master_serial}_1")}
-    assert info["via_device"] == (DOMAIN, master_serial)
+    assert cast("dict[str, Any]", info)["via_device"] == (DOMAIN, master_serial)
     # The subdevice's own /information/vs/1 (real, ARTIK051_DONGLE_FAC_RAC_18K)
     # is what names/models this device, not the master's.
     assert info["model"] == "ARTIK051_DONGLE_FAC_RAC_18K"
@@ -247,7 +247,7 @@ async def test_fac_bora_2in1_subdevice_device_info(hass: HomeAssistant):
 
     master_serial = coordinator.device_key
     assert info["identifiers"] == {(DOMAIN, f"{master_serial}_{_SUB_UUID}")}
-    assert info["via_device"] == (DOMAIN, master_serial)
+    assert cast("dict[str, Any]", info)["via_device"] == (DOMAIN, master_serial)
     # Confirmed live by the reporter (DESIGN-177.md section 1): the wall
     # subdevice's own identity, distinct from the master's TP2X_FAC_BORA_21K.
     assert info["model"] == "TP2X_FAC_BORA_RAC_21K"

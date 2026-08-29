@@ -31,7 +31,13 @@ from custom_components.localthings.const import (
 )
 from custom_components.localthings.registry.identity import DeviceIdentity
 
-from .conftest import LEGACY_ENTRY_DATA, MOCK_HOST, MOCK_SERIAL
+from .conftest import (
+    LEGACY_ENTRY_DATA,
+    MOCK_HOST,
+    MOCK_SERIAL,
+    entry_has_identifier,
+    link_to_parent,
+)
 
 _COORD = "custom_components.localthings.coordinator.LocalThingsCoordinator"
 
@@ -187,7 +193,7 @@ async def test_v3_entry_moves_onto_the_device_uuid_keeping_its_entity_ids(
     assert kept.entity_id == "sensor.kitchen_purifier_connection"
     assert kept.unique_id == f"{DOMAIN}_{UUID_A}_connection_mode"
     # Nothing left behind on the old key.
-    assert dr.async_get(hass).async_get_device(identifiers={(DOMAIN, MOCK_SERIAL)}) is None
+    assert not entry_has_identifier(hass, entry, (DOMAIN, MOCK_SERIAL))
 
 
 async def test_the_oldest_install_walks_all_the_way_from_v1(
@@ -338,7 +344,7 @@ async def test_a_composite_appliance_keeps_its_subdevice_links(
     sub = dev_reg.async_get_or_create(
         config_entry_id=entry.entry_id,
         identifiers={(DOMAIN, f"{MOCK_SERIAL}_subdevice_1")},
-        via_device=(DOMAIN, MOCK_SERIAL),
+        **link_to_parent(master),
     )
     assert sub.via_device_id == master.id
 
@@ -348,7 +354,9 @@ async def test_a_composite_appliance_keeps_its_subdevice_links(
 
     assert _device_identifiers(hass, master.id) == {(DOMAIN, UUID_A)}
     rekeyed_sub = dev_reg.async_get(sub.id)
-    assert rekeyed_sub is not None
+    # isinstance, not `is not None`: HA 2026.9's async_get can also return a
+    # ChildDeviceEntry, which carries no via_device_id.
+    assert isinstance(rekeyed_sub, dr.DeviceEntry)
     assert rekeyed_sub.identifiers == {(DOMAIN, f"{UUID_A}_subdevice_1")}
     # Still the same parent row, so the device tree the user sees is intact.
     assert rekeyed_sub.via_device_id == master.id
