@@ -240,10 +240,13 @@ class ObserveManager:
         Blocking — run in an executor.
 
         Split from the grace wait below (issue #294) so the coordinator can
-        hold its session lock for just these sends -- each is a fire-and-
-        forget UDP datagram (DtlsCoapSession.subscribe doesn't wait for the
-        device's ack), unlike the wait, which can block for the whole grace
-        period and must not hold a lock a command write is also waiting on.
+        hold its session lock for just these sends -- each is fire-and-forget
+        (DtlsCoapSession.subscribe doesn't wait for the device's ack), but
+        since smartthings-local 0.1.9 it goes through the session's rate
+        limiter, so the hold is now about one limiter interval per href
+        (~200ms at the 5 req/s default). Still bounded, unlike the wait,
+        which can block for the whole grace period and must not hold a lock
+        a command write is also waiting on.
         """
         with self._notify_cond:
             self._notified.clear()

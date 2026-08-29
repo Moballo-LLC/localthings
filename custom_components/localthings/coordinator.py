@@ -49,6 +49,7 @@ from .const import (
     DTLS_LOCAL_PORT_BASE,
     SUMMARY_INTERVAL_S,
 )
+from .devices import set_via_device
 from .learned import LEARNABLE, LearnedModes, persist
 from .observe import GRACE_PERIOD_S, MODE_OBSERVE, MODE_POLL, ObserveManager
 from .registry import CAPABILITIES
@@ -779,14 +780,15 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if subdevice.kind == "indexed"
                 else "Secondary Subdevice"
             )
-        return DeviceInfo(
+        info = DeviceInfo(
             identifiers={(DOMAIN, f"{self.device_key}_{subdevice.key}")},
-            via_device=(DOMAIN, self.device_key),
             name=f"{base_name} {label}",
             manufacturer=self.device_info.get("manufacturer") or "Samsung",
             model=model or None,
             serial_number=serial,
         )
+        set_via_device(self.hass, self._entry.entry_id, info, (DOMAIN, self.device_key))
+        return info
 
     @property
     def observe_mode(self) -> str:

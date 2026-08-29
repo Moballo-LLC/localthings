@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from smartthings_local.protocol.dtls_session import DtlsCoapSession
 
@@ -24,7 +25,7 @@ from custom_components.localthings.const import (
 from custom_components.localthings.coordinator import LocalThingsCoordinator
 from custom_components.localthings.registry.entities import ClimateDesc
 from custom_components.localthings.registry.identity import DeviceIdentity
-from tests.conftest import FakeCoapSession, _load_device_full
+from tests.conftest import FakeCoapSession, _load_device_full, linked_parent
 
 ENTRY_DATA = {
     CONF_HOST: "10.0.0.177",
@@ -42,6 +43,17 @@ def _coordinator(hass: HomeAssistant) -> LocalThingsCoordinator:
     )
     entry.add_to_hass(hass)
     return LocalThingsCoordinator(hass, entry)
+
+
+def _register_master(hass: HomeAssistant, coordinator: LocalThingsCoordinator) -> None:
+    """The master's own device row, which a running install always has by the
+    time a subdevice entity is added -- its own entities create it. Needed
+    explicitly here because these tests drive the coordinator directly,
+    without the entity platform that would otherwise register it."""
+    dr.async_get(hass).async_get_or_create(
+        config_entry_id=coordinator._entry.entry_id,
+        identifiers={(DOMAIN, coordinator.device_key)},
+    )
 
 
 async def _discover_with(
@@ -145,11 +157,12 @@ async def test_pattern_a_sub1_device_info_links_via_device_to_master(hass: HomeA
     await _discover(coordinator, "airconditioner_artik051_dongle_fac_18k")
 
     sub1 = next(su for su in coordinator.subdevices if su.key == "1")
+    master_serial = coordinator.device_key
+    _register_master(hass, coordinator)
     info = coordinator.device_info_for(sub1)
 
-    master_serial = coordinator.device_key
     assert info["identifiers"] == {(DOMAIN, f"{master_serial}_1")}
-    assert info["via_device"] == (DOMAIN, master_serial)
+    assert linked_parent(hass, info) == (DOMAIN, master_serial)
     # The subdevice's own /information/vs/1 (real, ARTIK051_DONGLE_FAC_RAC_18K)
     # is what names/models this device, not the master's.
     assert info["model"] == "ARTIK051_DONGLE_FAC_RAC_18K"
@@ -243,11 +256,12 @@ async def test_fac_bora_2in1_subdevice_device_info(hass: HomeAssistant):
     await _discover(coordinator, "airconditioner_fac_bora_2in1")
 
     subdevice = coordinator.subdevices[0]
+    master_serial = coordinator.device_key
+    _register_master(hass, coordinator)
     info = coordinator.device_info_for(subdevice)
 
-    master_serial = coordinator.device_key
     assert info["identifiers"] == {(DOMAIN, f"{master_serial}_{_SUB_UUID}")}
-    assert info["via_device"] == (DOMAIN, master_serial)
+    assert linked_parent(hass, info) == (DOMAIN, master_serial)
     # Confirmed live by the reporter (DESIGN-177.md section 1): the wall
     # subdevice's own identity, distinct from the master's TP2X_FAC_BORA_21K.
     assert info["model"] == "TP2X_FAC_BORA_RAC_21K"
