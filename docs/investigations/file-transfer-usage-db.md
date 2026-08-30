@@ -34,6 +34,56 @@ field differs per head — the file carries both the thing that is
 legitimately shared and the thing that is legitimately per-unit, side by
 side.
 
+## `/file/list/vs/0` answers, and it changes what the probe has to do
+
+Read live off a dishwasher (2.05, `oic.if.s`, no write and no selection
+first):
+
+```yaml
+rep:
+  x.com.samsung.items:
+    - x.com.samsung.id: '0'
+      x.com.samsung.name: /opt/data/energy.db
+    - x.com.samsung.id: '1'
+      x.com.samsung.name: /opt/data/hass.db
+```
+
+Three things follow.
+
+**The filename is family-dependent, so nothing may hardcode it.** The ACs in
+#301/#329 and the washer in #285 all serve `/mnt/usage.db`. This dishwasher
+has no such path: its history is `/opt/data/energy.db`. A design that keys
+on the name `usage.db` — or that assumes one file — is already wrong on the
+third family anyone points it at.
+
+**There is a selection step, and it has already been exercised.** The items
+carry an `x.com.samsung.id`, and `/file/transfer/vs/0` is declared
+`oic.if.a` in `/oic/res` while `/file/list/vs/0` is `oic.if.s`. That reads
+as list-then-select-then-read, and `ac-filter-reset.md` confirms the second
+half from a live `ARTIK051_KRAC_18K`: *"`/file/transfer/vs/0` serves only
+`/mnt/usage.db`; selecting another path returns 4.05/4.00."* So a selection
+write exists, the firmware validates what it is handed, and on that board it
+refused everything but the primary file. What is still unknown is whether a
+bare GET returns the primary file without any selection — which is what both
+reporters appear to have done, on appliances whose primary file was the one
+they wanted anyway.
+
+**`hass.db` is Samsung's, not ours.** It sits beside `energy.db` here and
+beside `/mnt/usage.db` on the KRAC, and it pairs with the `/hass/state/vs/0`
+and `/hass/command/vs/0` hrefs that three fixtures advertise in `/oic/res`.
+Those return 4.04 on every interface (`ac-filter-reset.md`), so this is
+unimplemented vendor scaffolding that happens to collide with Home
+Assistant's own shorthand. Worth stating once so nobody spends an afternoon
+on it.
+
+One correction to #301 while here: it writes off `/file/information/vs/0` as
+carrying "no file list, no size", which is true and is no longer the point —
+`/file/list/vs/0` is the enumeration resource. But that href's
+`x.com.samsung.timeoffset` is the device's own UTC offset, and every format
+on record stamps records at day or hour granularity in device-local terms.
+It is not a dead resource; it is the thing that makes a record's date mean
+something.
+
 ## The blocker is real and it is not board-specific
 
 `discovery.discover()` walks whatever `parse_device0_batch` found, i.e. the
@@ -93,6 +143,19 @@ never sees. The coordinator then:
 Cost when nothing is there: one GET per probe href per probe interval, which
 404s. That is why the probe list must stay short and maintainer-curated.
 
+`/file/list/vs/0` belongs on that list ahead of `/file/transfer/vs/0`, and
+not only for diagnostics. Since the filename varies by family — `usage.db`
+on the ACs and the washer, `energy.db` on the dishwasher — the list is how
+the probe knows *which* file it is about to read, and by extension which
+parser to reach for and whether a history exists on this board at all. It is
+`oic.if.s`, it answers a plain GET, and its reply is a handful of short
+strings, so it is cheap enough to read on every probe cycle rather than
+cached from first discovery.
+
+Whether reading the file itself is one GET or a select-then-GET is open —
+see question 2 below, which is the single fact this section's cadence
+depends on.
+
 ### 2. Decode in the registry, never cache the blob
 
 The rep is not a Property map of scalars. It is a wrapper —
@@ -132,6 +195,17 @@ is present, not on a model string.
 The validator is the load-bearing part: three 12-byte layouts are already
 known and a fourth is likely, so "does this decode into a monotonic series"
 has to be a test the parser runs, not an assumption it makes.
+
+The filename is a prior, never the test. `energy.db` on a dishwasher and a
+`power_usage` table on the SQLite washers both point at SQLite, and #301's
+`/mnt/usage.db` that is not SQLite is the standing proof that the name
+decides nothing. Read the magic bytes.
+
+If the SQLite branch is ever taken, note that the file arrives as bytes in
+memory and `sqlite3` cannot open a buffer. `sqlite3.Connection.deserialize`
+(3.11+, so available on every Python HA now runs) reads one without a
+temporary file; the alternative is writing the blob to disk from inside an
+executor job, which is worse in every respect.
 
 ### 4. What to expose
 
@@ -190,38 +264,72 @@ In rough order of how much they can invalidate:
    in which case this is a non-issue — or the design needs a
    `smartthings-local` change before its first line. Nothing else matters
    until this is settled.
-2. **The exact record layouts.** The byte-level specs in #301 and its washer
+
+   Note that `/file/list/vs/0` answered a plain segment-path GET from this
+   integration's own `read_resource`, with no query, so the query is not
+   required to reach the file surface as such. That is encouraging, not
+   conclusive: `oic.if.s` is that resource's only non-baseline interface,
+   while `/file/transfer/vs/0` is `oic.if.a`, and an actuator's default
+   interface is the more likely one to answer differently.
+
+2. **Whether a bare GET reads the primary file, or a selection write is
+   required first.** `/file/list/vs/0` hands out an `x.com.samsung.id` per
+   file, and `ac-filter-reset.md` records a live board *rejecting* a
+   selection of a non-primary path (4.05/4.00) — so a write path exists and
+   the firmware validates it. Both reporters' one-shot GETs returned the
+   file they wanted, but on appliances whose primary file was the one they
+   wanted, which does not distinguish "GET returns the primary file" from
+   "GET returns whatever was last selected, and nothing had selected
+   anything".
+
+   This is the question that decides whether the probe in §1 is a read or a
+   read-modify-read, and a scheduled probe that has to *write* to an
+   actuator on every cycle is a materially different proposition — it can
+   race a user's own debug write, and it needs the settle guard
+   `ObserveManager.mark_write_pending` exists for. If selection turns out to
+   be required, that is an argument for probing far less often than §1
+   proposes, or only once per session.
+
+3. **The exact record layouts.** The byte-level specs in #301 and its washer
    comment are written in angle brackets and are stripped from the GitHub
    API's rendering of both. They need to be re-read from the issue as
    displayed, or restated by the reporters, before a parser is written
    against them. The *semantics* above are not in doubt; the field widths
    and order are, and the discriminator in §3 depends on them.
-3. **Whether the GET is safe to repeat.** `/oic/res` advertises
-   `/file/transfer/vs/0` as `oic.if.a` with `bm: 3` — an actuator, and
-   observable. Both reporters' one-shot GETs worked with no prior write, so
-   it very probably has no side effect and needs no session setup, but a
-   resource we intend to poll on a schedule deserves better than "probably".
-   The `bm: 3` is a curiosity only: a 2 KB blob is not something to OBSERVE.
-4. **`/file/list/vs/0`.** Sits in the same `/oic/res` block on every board
-   that carries one, is declared `oic.if.s`, and has never been read by
-   anyone. It is the natural "what files are there, and how big" resource —
-   `/file/information/vs/0` demonstrably is not, carrying only a timezone
-   offset and a misspelled `supprtedtype`. One probe answers whether the
-   guessing in §3 is necessary at all.
+
+4. **Getting bytes out of the device at all.** `read_resource` returns the
+   decoded rep verbatim as a `ServiceResponse`, which HA serializes as JSON
+   for the websocket API. A CBOR byte string has no JSON form, so a blob
+   either fails the response encode or renders as something unusable — and
+   `composite-subdevice-hrefs.md` already warns contributors not to ask for
+   one to be pasted into a comment. Every fixture in this repository is
+   `/device/0` JSON, so a blob also needs a new fixture shape (base64
+   beside the batch), one per format, before any parser can have a golden.
+
+   Both problems have the same small fix: have `read_resource` render a
+   `bytes` value as its length, SHA-256 and base64 rather than passing it
+   through. That is a self-contained change, it is useful to anyone
+   reverse-engineering any binary rep on any board, and nothing else in this
+   design can be collected or tested until it exists.
+
 5. **`/file/transfer/chunk/vs/0`.** Implies a chunked download protocol for
    files too large for a single blockwise GET — most likely relevant to the
    SQLite washers, whose file has no reason to stay at 3 KB.
-6. **Fixtures.** Every fixture in this repository is `/device/0` JSON. A
-   blob needs a new fixture shape (base64 beside the batch), one per format,
-   before the parser can have a golden test.
 
 ## Suggested sequencing
 
-1. Answer (1) and (4) with the existing `read_resource` debug service — no
-   code changes, and between them they decide the shape of everything else.
-2. Land the probe tier alone, with `/file/transfer/vs/0` and
-   `/file/list/vs/0` as coverage-only capabilities that bind no entities.
-   Diagnostics then start carrying both payloads from every board a user
-   owns, which is what turns four reported formats into a real census.
-3. Land the parser and the runtime-hours sensor against the two AC formats.
-4. Decide the energy question in §4 on the evidence step 2 produces.
+1. Land the `bytes` rendering in `read_resource` (question 4). It is the
+   smallest useful change here, it stands on its own merits, and nothing
+   downstream can be measured without it.
+2. With that in hand, read `/file/transfer/vs/0` on a board whose
+   `/file/list/vs/0` is already known — the dishwasher above is the obvious
+   candidate, since its primary file is named `energy.db` outright. One read
+   settles questions 1 and 2 together: whether a plain GET answers, and
+   which file it hands back when the appliance has two.
+3. Land the probe tier alone, with `/file/list/vs/0` and
+   `/file/transfer/vs/0` as coverage-only capabilities that bind no
+   entities. Diagnostics then start carrying the file list — and, once
+   question 4 is done, the blob — from every board a user owns, which is
+   what turns four reported formats into a real census.
+4. Land the parser and the runtime-hours sensor against the two AC formats.
+5. Decide the energy question in §4 on the evidence step 3 produces.
