@@ -63,6 +63,7 @@ from .registry.capabilities.common import (
 )
 from .registry.capabilities.laundry import cycle_options
 from .registry.discovery import BoundEntity
+from .registry.encode import from_json_safe, json_safe
 from .registry.entities import ClimateDesc
 from .registry.identity import (
     DeviceIdentity,
@@ -1271,7 +1272,11 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             await self._snapshot_store.async_save(
                 {
-                    "resources": dict(resources),
+                    # json_safe/from_json_safe on the way out and back in
+                    # (registry/encode.py): a rep the JSON encoder rejects
+                    # used to fail this write entirely, and the only
+                    # symptom was this entry losing its offline load.
+                    "resources": json_safe(dict(resources)),
                     "subdevice_candidates": [asdict(su) for su in candidates],
                     "identity": asdict(ident) if ident is not None else None,
                 }
@@ -1303,7 +1308,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not stored or not stored.get("resources"):
             return False
 
-        resources = stored["resources"]
+        resources = from_json_safe(stored["resources"])
         try:
             ident = stored.get("identity")
             if ident is not None:

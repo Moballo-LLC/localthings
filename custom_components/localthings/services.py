@@ -24,6 +24,7 @@ from homeassistant.helpers import device_registry as dr
 
 from .const import DOMAIN, SERVICE_READ_RESOURCE, SERVICE_WRITE_RESOURCE
 from .coordinator import LocalThingsCoordinator, normalize_href
+from .registry.encode import json_safe
 from .registry.subdevices import MAIN, Subdevice
 
 ATTR_HREF = "href"
@@ -159,7 +160,10 @@ async def _async_write_resource(hass: HomeAssistant, call: ServiceCall) -> Servi
             canonical_by_actual.get(actual_href, actual_href): verified
             for actual_href, verified in sequence["verified"].items()
         }
-    return response
+    # One json_safe at the boundary rather than per field: `before`/`after`
+    # and every verified rep are whatever the appliance sent, and a service
+    # response ends at a JSON encoder (see registry/encode.py).
+    return cast(ServiceResponse, json_safe(response))
 
 
 async def _async_read_resource(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
@@ -174,7 +178,7 @@ async def _async_read_resource(hass: HomeAssistant, call: ServiceCall) -> Servic
         # the appliance reported, without the fields this integration merges
         # on for its own use (see coordinator.entity_resources).
         snapshot: dict[str, Any] = {"resources": coordinator.device_resources(subdevice)}
-        return cast(ServiceResponse, snapshot)
+        return cast(ServiceResponse, json_safe(snapshot))
 
     # Same normalize-before-translate order as the write path above.
     canonical = normalize_href(href)
@@ -194,7 +198,7 @@ async def _async_read_resource(hass: HomeAssistant, call: ServiceCall) -> Servic
     # duplicating every rep in every response.
     if body is not None and not isinstance(body, dict):
         read_result["body"] = body
-    return cast(ServiceResponse, read_result)
+    return cast(ServiceResponse, json_safe(read_result))
 
 
 def async_setup_services(hass: HomeAssistant) -> None:

@@ -297,20 +297,26 @@ In rough order of how much they can invalidate:
    against them. The *semantics* above are not in doubt; the field widths
    and order are, and the discriminator in §3 depends on them.
 
-4. **Getting bytes out of the device at all.** `read_resource` returns the
-   decoded rep verbatim as a `ServiceResponse`, which HA serializes as JSON
-   for the websocket API. A CBOR byte string has no JSON form, so a blob
-   either fails the response encode or renders as something unusable — and
-   `composite-subdevice-hrefs.md` already warns contributors not to ask for
-   one to be pasted into a comment. Every fixture in this repository is
-   `/device/0` JSON, so a blob also needs a new fixture shape (base64
-   beside the batch), one per format, before any parser can have a golden.
+4. ~~**Getting bytes out of the device at all.**~~ **Done.**
+   `read_resource` returned the decoded rep verbatim as a `ServiceResponse`,
+   which HA serializes as JSON, and a CBOR byte string has no JSON form — so
+   a blob could not leave the appliance through this integration at all. The
+   snapshot store had the same problem with a worse symptom: the write fails
+   and the entry silently loses its offline load.
 
-   Both problems have the same small fix: have `read_resource` render a
-   `bytes` value as its length, SHA-256 and base64 rather than passing it
-   through. That is a self-contained change, it is useful to anyone
-   reverse-engineering any binary rep on any board, and nothing else in this
-   design can be collected or tested until it exists.
+   `registry/encode.py` now renders any value a JSON encoder would reject as
+   a self-describing marker (`bytes` as length, SHA-256 and base64), and
+   `from_json_safe` turns the markers back. It is applied once at each
+   boundary that carries device data out — both service responses,
+   diagnostics, and the snapshot store, which round-trips through it — so
+   the next unrepresentable type is representable before anyone hits it.
+
+   The fixture corpus needed less than this file first claimed: a fixture's
+   optional `probes` map already exists for exactly this, holding hand-read
+   resources that belong to no batch (`/multidevice/vs/0` on the
+   `ARTIK051_DONGLE_FAC_18K` fixture). `tests/conftest.py` now decodes it
+   through `from_json_safe`, so a `probes` entry can carry a blob as JSON
+   and the parser under test is handed real `bytes`.
 
 5. **`/file/transfer/chunk/vs/0`.** Implies a chunked download protocol for
    files too large for a single blockwise GET — most likely relevant to the
@@ -318,18 +324,18 @@ In rough order of how much they can invalidate:
 
 ## Suggested sequencing
 
-1. Land the `bytes` rendering in `read_resource` (question 4). It is the
-   smallest useful change here, it stands on its own merits, and nothing
-   downstream can be measured without it.
-2. With that in hand, read `/file/transfer/vs/0` on a board whose
-   `/file/list/vs/0` is already known — the dishwasher above is the obvious
-   candidate, since its primary file is named `energy.db` outright. One read
-   settles questions 1 and 2 together: whether a plain GET answers, and
-   which file it hands back when the appliance has two.
+1. ~~Land the `bytes` rendering in `read_resource`.~~ Done, and generalized —
+   see question 4.
+2. Read `/file/transfer/vs/0` on a board whose `/file/list/vs/0` is already
+   known — the dishwasher above is the obvious candidate, since its primary
+   file is named `energy.db` outright. One read settles questions 1 and 2
+   together: whether a plain GET answers, and which file it hands back when
+   the appliance has two. The blob now survives the trip, so the answer
+   arrives in a form that can go straight into a fixture.
 3. Land the probe tier alone, with `/file/list/vs/0` and
    `/file/transfer/vs/0` as coverage-only capabilities that bind no
-   entities. Diagnostics then start carrying the file list — and, once
-   question 4 is done, the blob — from every board a user owns, which is
-   what turns four reported formats into a real census.
+   entities. Diagnostics then start carrying the file list and the blob from
+   every board a user owns, which is what turns four reported formats into a
+   real census.
 4. Land the parser and the runtime-hours sensor against the two AC formats.
 5. Decide the energy question in §4 on the evidence step 3 produces.
