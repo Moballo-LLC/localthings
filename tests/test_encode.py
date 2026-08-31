@@ -137,3 +137,34 @@ def test_cbor_tags_keep_their_tag_number_and_payload():
 def test_from_json_safe_leaves_ordinary_data_alone():
     rep = {"a": [1, "two", {"three": None}]}
     assert from_json_safe(rep) == rep
+
+
+def test_a_fixture_probe_carries_a_real_blob_back_as_bytes():
+    """The round trip that makes this module worth having, against the one
+    real capture in the corpus: the dishwasher's /file/transfer/vs/0 (issue
+    #301), read live and stored as the marker `read_resource` emits.
+
+    Deliberately does not assert the record's decoded fields -- there is no
+    parser yet, and a test that re-derives struct.unpack to check its own
+    constants pins nothing. What it pins is that a probed resource reaches a
+    future parser as the exact bytes the appliance sent. The layout and the
+    live meter reading it was confirmed against are in the fixture's
+    `probes_note` and in docs/investigations/file-transfer-usage-db.md.
+    """
+    from .conftest import _load_device_full
+
+    _resources, _oic_res, seeds = _load_device_full("dishwasher")
+    items = seeds["/file/transfer/vs/0"]["x.com.samsung.items"]
+    blob = items[0]["x.com.samsung.blob"]
+
+    assert isinstance(blob, bytes)
+    assert len(blob) == 12
+    assert hashlib.sha256(blob).hexdigest() == (
+        "2e956b573a60fcbd191f0c38da2cc97d853d49cd5d8838432fde28cfb2eeeadd"
+    )
+    # The sibling probe is ordinary JSON and must come through untouched.
+    listed = seeds["/file/list/vs/0"]["x.com.samsung.items"]
+    assert [i["x.com.samsung.name"] for i in listed] == [
+        "/opt/data/energy.db",
+        "/opt/data/hass.db",
+    ]

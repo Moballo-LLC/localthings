@@ -130,3 +130,25 @@ def test_bare_key_redaction_does_not_leak_into_substring_matching():
         "spinSpeed": "1200",
         "name": "FilterProgress",
     }
+
+
+def test_redacts_the_wifi_network_name():
+    """connectedApSsid is the owner's WiFi network name. It is not an account
+    credential, which is why it went unredacted long enough for eleven dumps
+    in this corpus to arrive carrying one, but an SSID maps to a street
+    address in public wardriving databases -- and the README tells users a
+    diagnostics download is already stripped of network identifiers."""
+    redacted = redact_resources(
+        {"/wirelessinfo/vs/0": {"connectedApSsid": "somebodys-house", "macaddressWiFi": "x"}}
+    )
+    assert redacted["/wirelessinfo/vs/0"]["connectedApSsid"] == REDACTED
+
+
+def test_no_fixture_in_the_corpus_carries_a_real_ssid():
+    """A regression guard on the dumps themselves, not on redact_resources:
+    fixtures are committed to a public repository, and the redaction above
+    only protects dumps captured after it existed."""
+    for path in sorted(FIXTURES.glob("*_device.json")):
+        for rep in parse_device0_batch(json.loads(path.read_text())["device0"]).values():
+            ssid = rep.get("connectedApSsid")
+            assert ssid in (None, REDACTED), f"{path.name} carries a real SSID: {ssid!r}"

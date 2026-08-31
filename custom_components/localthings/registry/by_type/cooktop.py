@@ -28,6 +28,11 @@ REGISTRY = DeviceRegistry(
             # matching this registry's existing hand-picked-common style.
             common.ALARMS,
             common.KIDS_LOCK_VS_FALLBACK,
+            # Not optional the way the two above are: registry.PROBE_HREFS is
+            # global, so a board that answers the probe surfaces these as a
+            # coverage gap unless every registry carries them (issue #301).
+            common.FILE_LIST,
+            common.FILE_TRANSFER,
         ]
     ),
 )

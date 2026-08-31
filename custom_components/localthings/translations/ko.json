@@ -1026,6 +1026,9 @@
       "energy_kwh": {
         "name": "에너지"
       },
+      "usage_runtime_hours": {
+        "name": "운전 시간"
+      },
       "energy_last_month_kwh": {
         "name": "지난달 에너지"
       },

@@ -11,6 +11,11 @@ REGISTRY = DeviceRegistry(
             range_hood.HOOD_ALARMS,
             common.ENERGY_METER,
             common.FIRMWARE_UPDATE,
+            # registry.PROBE_HREFS is global, so every registry has to cover
+            # these or a board that answers the probe raises a spurious
+            # coverage-gap Repair (issue #301).
+            common.FILE_LIST,
+            common.FILE_TRANSFER,
             range_hood.AFTER_RUN,
             range_hood.HOOD_FAN,
             range_hood.HOOD_LAMP,

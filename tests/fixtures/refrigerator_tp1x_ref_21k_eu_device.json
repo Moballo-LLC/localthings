@@ -463,7 +463,7 @@
       "rep": {
         "macaddressWiFi": "REDACTED",
         "macaddressBLE": "REDACTED",
-        "connectedApSsid": "SPRDFL24"
+        "connectedApSsid": "**REDACTED**"
       }
     }
   ]

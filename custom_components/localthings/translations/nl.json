@@ -1026,6 +1026,9 @@
       "energy_kwh": {
         "name": "Energie"
       },
+      "usage_runtime_hours": {
+        "name": "Bedrijfstijd"
+      },
       "energy_last_month_kwh": {
         "name": "Energie (vorige maand)"
       },

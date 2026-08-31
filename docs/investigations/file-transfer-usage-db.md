@@ -84,6 +84,323 @@ on record stamps records at day or hour granularity in device-local terms.
 It is not a dead resource; it is the thing that makes a record's date mean
 something.
 
+## The first blob read through the integration
+
+Measured 2026-08-31 with `read_resource`, no query string and no selection
+write, on the same appliance as the `/file/list/vs/0` read above:
+
+```yaml
+code: '2.05'
+rep:
+  rt: [x.com.samsung.file.transfer]
+  if: [oic.if.baseline, oic.if.a]
+  x.com.samsung.items:
+    - x.com.samsung.name: /mnt/usage.db
+      x.com.samsung.blob: {len: 12, sha256: 2e956b57…, base64: UEiTal8GAAAAAAAA}
+```
+
+The blob is `50 48 93 6a 5f 06 00 00 00 00 00 00`, and it decodes without
+ambiguity as **one 12-byte record in the washer layout** from #285/#301:
+
+| field | bytes | value | reading |
+| --- | --- | --- | --- |
+| `uint32` LE | `50 48 93 6a` | 1788037200 | 2026-08-29 21:00:00 UTC — on the hour |
+| `uint32` LE | `5f 06 00 00` | 1631 | 163.1 kWh at the tenths scale |
+| `uint32` LE | `00 00 00 00` | 0 | the always-zero third field |
+
+Every detail matches that format's description: hour-granularity timestamps,
+a tenths-of-a-kWh cumulative value, a third field that is zero. Read as the
+KRAC's `uint64`-leading shape instead, the leading field is 7.0e12 — not a
+date, so the two layouts are already separable on one record, which is the
+discriminator #329 proposed working as advertised.
+
+Three things this settles, and two it opens.
+
+**A plain GET answers.** No `?if=oic.if.baseline`, and the rep came back
+*with* `rt`/`if`, which is the baseline interface's own shape — so the query
+the reporters used is not required to get the baseline view. Question 1 is
+answered for the read path.
+
+**No selection write was needed to get a payload.** Half of question 2 is
+answered: the resource is not inert until written to.
+
+**The encoder works end to end on real hardware.** The blob left the
+appliance, survived CBOR decode, base64, JSON and the websocket, and the
+recorded SHA-256 matches the 12 bytes it rebuilds to.
+
+**But there is only one record.** The reporters measured 2172 B (181
+records) and 3372 B (281 records). Twelve bytes is a single row. Either this
+appliance's history genuinely holds one record, or a bare GET returns only
+the newest one and the rest of the file needs the query, a selection, or
+`/file/transfer/chunk/vs/0`. *(Resolved by the fridge below: the same call
+returns a full 2172-byte file, so this appliance's history really is one
+record.)*
+
+**And the name is wrong for this appliance** — confirmed same unit, not an
+inference across two devices. `/file/list/vs/0` on it lists
+`/opt/data/energy.db` and `/opt/data/hass.db`. It does not list
+`/mnt/usage.db` — which is what `/file/transfer/vs/0` just called what it
+served. Either the name field is a firmware default rather than a statement
+about what was read (it would be the same default the ARTIK051 boards serve,
+where it happens to name the real file), or the two resources disagree.
+Until that is resolved, `x.com.samsung.name` cannot be trusted to identify
+the payload, and §3's rule — read the magic bytes, treat the name as a prior
+— is load-bearing rather than cautious.
+
+**The corroboration ran, and both fields match exactly.**
+`/energy/consumption/vs/0` on the same appliance, minutes later:
+
+```yaml
+x.com.samsung.da.cumulativePower: '163100'      # 163.1 kWh — the blob's 1631/10
+x.com.samsung.da.cumulativeDate: '1788037200'   # the blob's timestamp, to the second
+x.com.samsung.da.cumulativeDateUTC: '1788055200'
+x.com.samsung.da.instantaneousPower: '-500'
+```
+
+So the record is the live meter's current value, exactly as #301's washer
+comment found for the last record of its file. The reading of the layout is
+confirmed on hardware, not inferred.
+
+Two things follow that were not obvious before the read.
+
+**The blob's timestamps are in `cumulativeDate`'s frame, not UTC.** The
+board reports both, and they differ by 18000 s — five hours — with the blob
+agreeing with the bare field, not the `...UTC` one. Whatever that frame is,
+a parser must not treat a record stamp as a Unix UTC instant. Note that this
+appliance's `/file/information/vs/0` reports `timeoffset: "+00:00"`, which
+does not account for five hours; the offset resource and the energy resource
+disagree here, and neither has been shown right. Recorded, not resolved.
+
+**On this appliance the file is pure duplication.** Its one record carries
+the same two numbers `/energy/consumption/vs/0` already publishes, and
+`energy_kwh` is already an entity from them. That is a genuinely useful
+negative result: it measures what §4 argued from first principles, that the
+file's energy series is worth an entity only where the meter resource cannot
+supply one — #285's washer, where `cumulativePower` vanishes — or where the
+file carries something the meter resource does not, which is the ACs'
+per-unit runtime hours. On a healthy dishwasher it carries nothing new.
+
+It also lowers the stakes of the one-record question. The reason to want the
+other 180 rows was history, and §5 already rules backfilling out of scope.
+If a bare GET serves the newest row, that row is all a `total_increasing`
+sensor ever needed.
+
+Both reads are banked in `tests/fixtures/dishwasher_device.json` under
+`probes`, with the caveats in its `probes_note`: they were read later than
+that fixture's `device0`, so the blob's record does not line up with the
+energy rep captured there, and nothing should assert that it does.
+
+(`instantaneousPower: -500` is the dead sentinel `common.ENERGY_METER`
+already gates `power_watts` out on, documented for exactly this device
+class in issue #6. Nothing new, but it confirms the appliance is behaving
+as the registry expects.)
+
+One caveat worth stating before a parser is written against this: a single
+record with a small value cannot tell `uint32` value + zero padding apart
+from a little-endian `uint64` value — both read 1631 here. #301's comment
+reports the third field as zero across all 281 of its records, which is
+equally consistent with either. The distinction only shows up on a device
+whose cumulative value has exceeded 2^32 tenths, so the parser should not
+claim to have resolved it.
+
+## A full 181-record file, off a fridge
+
+Measured 2026-08-31, same plain `read_resource` GET, on a **different**
+appliance — a fridge. Its `/file/list/vs/0` is byte-identical to the
+dishwasher's (`/opt/data/energy.db` id 0, `/opt/data/hass.db` id 1), and its
+`/file/transfer/vs/0` again calls what it serves `/mnt/usage.db`. This time
+the blob is **2172 bytes — 181 records, zero remainder**, the same size #301
+measured on a `KRAC_18K`. The SHA-256 the service reported rebuilds from the
+base64 exactly, so these are the appliance's own bytes end to end.
+
+Same layout as the dishwasher's single record, and it holds for all 181:
+
+```
+record := <uint32 LE timestamp><uint32 LE cumulative, tenths of a kWh><uint32 LE month>
+```
+
+| | first | last |
+| --- | --- | --- |
+| timestamp | 2026-03-03 22:54 | 2026-08-30 21:05 |
+| cumulative | 7748 = 774.8 kWh | 11410 = 1141.0 kWh |
+| third field | 3 | 8 |
+
+- **181 records, 181 distinct consecutive calendar days, no gaps.** A fridge
+  runs every day, which fits #301's "one record per day the unit actually
+  ran" without contradicting it.
+- Timestamps are strictly increasing and cluster between 21:05 and 23:59 —
+  an end-of-day rollup, not the on-the-hour stamps the washer and dishwasher
+  show.
+- The cumulative field is strictly increasing across every one of the 180
+  deltas, mean **2.03 kWh/day**, which is what a fridge draws. The deltas are
+  *not* multiples of 5 tenths, which is the check that separates this from
+  the ACs' half-hour-quantised runtime counter.
+
+### The third field tracks the calendar month
+
+Not zero here, and not runtime. It runs 3, 4, 5, 6, 7, 8 across a file
+spanning March to August, and it steps on exactly the five month boundaries.
+Tested against every record: `month(timestamp + offset) == field3` holds for
+**all 181** at any offset from +1 h to +12 h, and fails on exactly 5 at +0 h
+— those five being the last day of each month, where the stamp is late
+enough in the day that the month has already turned in whatever frame the
+counter is kept in.
+
+A full diagnostics download from the fridge settles the frame, where the
+blob alone could not. It reports `/file/information/vs/0`
+`timeoffset: "-05:00"` and `/timezone/vs/0` `America/Chicago`, DST on — so
+the device is at UTC−5, and the record stamps read as local wall time put
+every write between 21:05 and 23:59 **local**, i.e. a rollup just before
+local midnight. That also explains the dishwasher's `cumulativeDate` sitting
+exactly 5 h behind its `cumulativeDateUTC`: the bare field is local-as-epoch
+and the `...UTC` one is real UTC, the same pair of frames the firmware keeps
+everywhere.
+
+With the offset known, the five month-boundary records say something
+sharper. `month(ts + 5 h) == field3` holds for all 181 — that is, **field 3
+is the calendar month in UTC while the timestamp is local**. The two
+descriptions of the field, "UTC calendar month" and "the bucket label of
+the next section", are the same fact: the monthly counter rolls at UTC
+midnight, which lands mid-evening local, so the first record of a new bucket
+is stamped on the last local day of the old month.
+
+Worth recording that the timezone story looked unfalsifiable from the blob
+alone — any offset from roughly +46 min to +21 h made the five mismatches
+vanish — and only the device's own reported offset picked one out.
+
+### The month field is the firmware's own billing bucket, and it reconciles exactly
+
+The fridge is a `TP1X_REF_21K`, and its `/energy/consumption/vs/0` carries
+the monthly pair this registry already maps to `energy_last_month_kwh` and
+`energy_this_month_kwh`:
+
+```yaml
+x.com.samsung.da.cumulativePower: '1141129'          # 1141.129 kWh
+x.com.samsung.da.monthlyConsumption: '68200'         # 68.200 kWh
+x.com.samsung.da.thismonthlyConsumption: '59229'     # 59.229 kWh
+x.com.samsung.da.instantaneousPower: '151'
+```
+
+Group the blob's records by field 3 and the two monthly figures fall out of
+the file exactly:
+
+| bucket | first record | last record | span |
+| --- | --- | --- | --- |
+| 7 | 2026-06-30 23:14, 1011.2 | 2026-07-30 22:57, 1079.4 | **68.2 kWh** |
+| 8 | 2026-07-31 23:33, 1081.9 | 2026-08-30 21:05, 1141.0 | 59.1 kWh |
+
+- **July, a complete month: 68.2 kWh from the blob against
+  `monthlyConsumption` 68.200 kWh.** Exact.
+- **August, still running: 59.1 kWh to the last record, plus the 0.129 kWh
+  the meter has moved since it was written, is 59.229 — against
+  `thismonthlyConsumption` 59.229 kWh.** Exact.
+- Independently: `cumulativePower − thismonthlyConsumption` is 1081900 Wh,
+  which is the first field-3=8 record's cumulative value **to the watt**.
+
+So field 3 is not merely "the calendar month". It is the label of the
+firmware's own monthly bucket, and the record carrying that label first *is*
+the baseline the monthly counter measures from. That is why the label steps
+on the last day of the previous calendar month rather than the first day of
+the new one, and it is a better explanation of the +0 h mismatches above
+than any timezone story.
+
+The bucket is `cum(last record labelled M) − cum(first record labelled M)`,
+which quietly drops the final day: July's bucket closes 2026-07-30 at
+1079.4 and August's opens 2026-07-31 at 1081.9, so that day's 2.5 kWh lands
+in neither. That is Samsung's arithmetic, not a decode error — the whole
+point is that the blob reproduces it exactly, quirk included.
+
+The appliance is a `TP1X_REF_21K` / `RF29DB9750QLAA`, and its diagnostics
+download confirms it is **not** any of the six `TP1X_REF_21K` fixtures
+already in the corpus — its `modelNum` third field (`00176141|0000085003…`)
+matches none of them. It also reports `unbound_hrefs: []`, so it needs no
+new capability work; the reason to bank it as a fixture is the usage file,
+not entity coverage.
+
+One detail from that download worth keeping: both file hrefs appear in the
+dump's `resources` map even on a build with no probe tier, because
+`_raw_read_blocking` applies whatever it reads to the state cache. So a
+maintainer who runs `read_resource` and *then* downloads diagnostics gets
+the probed resources in the dump for free — a usable stopgap for gathering
+the census in §3's step 3 before the probe tier exists.
+
+Three things this pins down at once. Field 2 is beyond doubt the same
+counter as `cumulativePower` — it now agrees with the live meter, with the
+completed month, and with the running month, on three independent
+subtractions. The 129 Wh between the last record and the live meter is about
+1.5 h of running at this fridge's own average, which is what a once-a-day
+rollup should look like. And on a board that reports no monthly pair, the
+file could *supply* one rather than merely corroborate it.
+
+### What that means for a parser
+
+**Field 2 is the portable one.** Cumulative energy in tenths of a kWh is now
+confirmed on four families: the washer (#285/#301), the dishwasher and this
+fridge (both measured here, the fridge three ways over), and the
+`ARTIK051_PRAC_20K`'s `fieldA` (#329, which matched `cumulativePower`
+exactly). That is the value worth an entity.
+
+**Field 3 is not one thing, and must never be published on a guess.**
+It is now classified rather than assumed: a runtime counter is far larger
+than 12 and every delta is a multiple of 5 tenths (the half-hour
+quantisation both AC reports independently measured), where a month label is
+1–12 and steps by one. Anything else — a constant zero, a counter that never
+moves — is left alone.
+
+| family | field 3 |
+| --- | --- |
+| `DA_WM_TP1_21_COMMON` washer (#301) | zero across all 281 records |
+| this dishwasher | zero (its only record) |
+| this `TP1X_REF_21K` fridge | the firmware's monthly bucket label, 3 → 8 |
+| `ARTIK051_PRAC_20K` AC (#329) | cumulative runtime, tenths of an hour |
+
+### The second field's *scale* differs too, and that is the sharper trap
+
+Not just its meaning — its units. Checked against each family's own
+`cumulativePower`:
+
+| family | field 2 (last) | `cumulativePower` | ratio |
+| --- | --- | --- | --- |
+| dishwasher | 1631 | 163100 Wh | 100 |
+| `TP1X_REF_21K` fridge | 11410 | 1141141 Wh | 100 |
+| `DA_WM_TP1_21_COMMON` washer (#301) | 3319 | 331900 Wh | 100 |
+| **`ARTIK051_PRAC_20K` AC (#329)** | **5118585** | **5118585 Wh** | **1** |
+
+Three families store tenths of a kWh; the AC stores plain Wh — its `fieldA`
+*equals* `cumulativePower` outright rather than a hundredth of it. Nothing in
+the bytes distinguishes 5118585 Wh from 5118585 tenths of a kWh, so reading
+that board with the other scale reports **511858.5 kWh instead of 5118.6**.
+
+The energy fallback shipped before this was noticed, and was wrong for that
+board. What saves it in practice is that the AC's meter works, so it never
+reaches a fallback — but that is luck, not design. `cumulative_energy_kwh`
+now refuses outright on any file whose third field classifies as runtime,
+which is exactly the family whose scale is different. The correlation is
+across four measured families rather than a rule read out of firmware, so it
+is a conservative refusal rather than a scale conversion: on that shape the
+integration publishes runtime and no energy.
+
+Four families, three different meanings, one identical byte layout. §3's
+discriminator separates the `uint64`-leading shape from the `uint32`-leading
+one, and that much is sound — but nothing in the bytes says what the third
+field *means*. A parser reads field 2 everywhere and treats field 3 as
+unknown until a family rule says otherwise.
+
+### Two open questions close
+
+**A plain GET returns the whole file.** Same integration, same call, no
+query and no selection write: 12 bytes from the dishwasher, 2172 from the
+fridge. So the dishwasher genuinely holds one record — its history is nearly
+empty, not truncated by the transport. `/file/transfer/chunk/vs/0` is not
+needed for files this size, and question 2's remainder is answered.
+
+**`/mnt/usage.db` is a firmware default label, not a per-device fact.** Two
+different appliance families, both listing `energy.db` and `hass.db` in
+`/file/list/vs/0`, both reporting `/mnt/usage.db` from the transfer
+resource. A hardcoded string, which is also why it happens to name the real
+file on the ARTIK051 boards. `x.com.samsung.name` identifies nothing; §3's
+"read the magic bytes" is the rule.
+
 ## The blocker is real and it is not board-specific
 
 `discovery.discover()` walks whatever `parse_device0_batch` found, i.e. the
@@ -118,6 +435,10 @@ design widens.
 
 ### 1. Reachability: a probe tier, not a general cold-tier rewrite
 
+*Built.* `Capability(poll_tier="probe")` → `registry.PROBE_HREFS` →
+`coordinator._probe_blocking`. What follows is the reasoning; two details
+came out differently in the code and are marked below.
+
 `poll_tier` today has three values and only two behaviours: `hot`/`warm`
 hrefs get individual sub-poll GETs, `cold` means "refreshed by the batch and
 nothing else". What #301 asks for is a fourth behaviour — *read this href
@@ -132,13 +453,35 @@ never sees. The coordinator then:
   results into `resources` **before** `_run_discovery` — same position and
   same posture as `_enumerate_subdevices_blocking`, so a probe that fails
   costs the entities on that href and nothing else;
+- bounds the whole pass with a wall-clock budget, not just a per-href
+  timeout: the first-discovery probe runs inside entry setup and the
+  periodic one holds the session lock that entity writes also need, and on a
+  composite appliance the href count scales with the hardware;
 - re-reads them on a slow cadence afterwards, driven by a cycle counter in
   `_async_update_data` rather than a new timer. A counter that ticks in
   half hours and gains one record a day does not need the 30 s summary
   interval; once every 30–60 minutes is generous.
-- maps each href through `subdevice.to_actual()` like every other read, so
-  the UUID-prefixed per-head copies the `FAC_BORA` fixtures advertise are
-  reachable by the same code.
+- maps each href through `subdevice.to_actual()`, so a composite
+  appliance's siblings are probed alongside MAIN. This is not optional
+  polish: #329 read three heads of one multi-split and got three distinct
+  blobs, each pairing the shared outdoor-unit energy counter with *that
+  head's own* runtime hours. Those heads were three config entries on three
+  IPs, so MAIN alone would have reached them — but a composite board (issue
+  #177) puts the same several indoor units behind one IP as subdevices, and
+  `/oic/res` on the `FAC_BORA` fixtures advertises
+  `/<uuid>/file/transfer/vs/0` for exactly that. Probing MAIN alone there
+  reads the master's file and silently misses every sibling's, losing the
+  one number that is genuinely per-unit.
+
+  Siblings are probed *before* `_run_discovery`, alongside MAIN. That
+  ordering is load-bearing rather than incidental: discovery is what binds an
+  href to an entity and it runs exactly once, so a sibling's file probed
+  after it would be cached forever and never produce the per-head runtime
+  entity this is all for. The probe passes `apply=False` so a rejected
+  subdevice candidate's reps never reach the eviction-free state cache —
+  which is what that block's ordering exists to prevent — and the normal
+  apply loop re-adds the live ones once `_live_subdevice_resources` has
+  filtered them.
 
 Cost when nothing is there: one GET per probe href per probe interval, which
 404s. That is why the probe list must stay short and maintainer-curated.
@@ -157,6 +500,16 @@ see question 2 below, which is the single fact this section's cadence
 depends on.
 
 ### 2. Decode in the registry, never cache the blob
+
+*Superseded in part — the constraint that motivated it is gone.* This
+section argued the blob must never reach `StateCache`, because the snapshot
+store would fail to encode it and diagnostics would choke. `registry/encode.py`
+(shipped in v0.25.0) removed both problems, so the probe caches the rep as
+the appliance sent it and the blob reaches diagnostics intact — which is the
+census this whole design turns on. `Capability.project` stays unused and
+stays the right home for a decoder when there is one to write. The reasoning
+below is still why a *parser* belongs in the registry rather than the
+coordinator.
 
 The rep is not a Property map of scalars. It is a wrapper —
 `x.com.samsung.items` → `[{x.com.samsung.name, x.com.samsung.blob}]` — whose
@@ -196,6 +549,11 @@ The validator is the load-bearing part: three 12-byte layouts are already
 known and a fourth is likely, so "does this decode into a monotonic series"
 has to be a test the parser runs, not an assumption it makes.
 
+Discriminating the layout is not the same as understanding it: the third
+field means something different on every family measured so far (see the
+fridge section above). Read field 2, and leave field 3 alone unless a
+family rule claims it.
+
 The filename is a prior, never the test. `energy.db` on a dishwasher and a
 `power_usage` table on the SQLite washers both point at SQLite, and #301's
 `/mnt/usage.db` that is not SQLite is the standing proof that the name
@@ -209,6 +567,9 @@ executor job, which is worse in every respect.
 
 ### 4. What to expose
 
+*Built.* `usagedb.cumulative_runtime_hours` + a `usage_runtime_hours`
+sensor, for the `uint32`-leading shape only.
+
 **Runtime hours — yes, and this is the part worth doing first.**
 `total_increasing`, `device_class: duration`, unit `h`. It is the honest
 primitive, HA's own long-term statistics give the monthly view for free
@@ -218,9 +579,14 @@ be. On a `KRAC` board it is also the *only* usage number the appliance has —
 #302 established that its permanent `0.0` kWh is correct, because the
 hardware has no meter and its own app draws an hours graph instead.
 
+*Built, as the fallback below.* `registry/usagedb.py` decodes the file;
+`common.FILE_TRANSFER` carries one `energy_kwh` sensor gated to the case the
+meter cannot serve.
+
 **Energy — yes, but not as a second `total_increasing` energy sensor.**
 Where the file carries energy it is the same counter
-`/energy/consumption/vs/0` already publishes. Creating a second
+`/energy/consumption/vs/0` already publishes — now measured rather than
+argued, on the dishwasher above, to the second and to the tenth of a kWh. Creating a second
 `state_class: total_increasing` energy entity for one physical meter is the
 double-count trap #329 warns about, one layer down. Two shapes are
 defensible:
@@ -236,6 +602,37 @@ The second needs no new machinery: two descriptors with complementary
 `exists_fn`, the pattern `ai_energy_level`'s switch/select pair and
 `ENERGY_METER_LEGACY`/`GENERIC` already use.
 
+What shipped is the fallback, and it shares the key `energy_kwh` with
+`ENERGY_METER` rather than adding a second one — the same shape as
+`POWER_GENERIC`/`POWER_VS_FALLBACK`. An appliance gets one energy entity
+from whichever source can supply it and the entity_id does not depend on
+which, which also means the existing translation and any recorded history
+carry over. The meter wins whenever it reports `cumulativePower` **at all**,
+including the permanent, correct `0` of #302's KRAC: the field being present
+is what decides, not its value, so the file never quietly substitutes a
+different number for a meter reading someone is already looking at. A
+not-yet-fetched stub counts as the meter too, because `ENERGY_METER` includes
+its own entity on that basis and two entities on one key would collapse
+silently in `flatten()`.
+
+One property worth stating plainly: the file is a once-a-day rollup, so this
+sensor steps once a day rather than tracking a meter continuously. Lumpy in
+the energy dashboard, correct in total, and better than the nothing these
+appliances report today.
+
+**Decoding it is where the care went.** The two record shapes put *different
+quantities* in the second field — tenths of a kWh on the `uint32`-leading
+shape, cumulative runtime hours on the KRAC's `uint64`-leading one — so
+misidentifying the layout puts hours in a kWh sensor. #329 proposed keying on
+whether the leading field is a plausible timestamp. That is necessary and
+**not sufficient**: a `uint64`-leading record whose date is a plain Unix
+timestamp puts that timestamp in the low half and zeros in the high half, so
+it reads as a perfectly valid leading `uint32` followed by a value of `0`.
+Caught while writing the tests for exactly that case. `usagedb.records()`
+therefore also refuses a counter that is zero or that never moved across the
+file — on the shape it can read those mean "nothing to publish", and on the
+shape it cannot they are the tell.
+
 **`UsagesDB_reset` — no.** #301 is right. It destroys the only copy of the
 history, and there is nothing for a user to weigh that against.
 
@@ -246,10 +643,19 @@ as unreachable as the issue assumes. `recorder` is already in
 `after_dependencies` and `__init__.py` already calls into
 `recorder.statistics` for the v2→v3 particulate relabel.
 
-It should still not happen here. External statistic ids do not attach to the
+One leg of that argument has since been measured away, and it should be
+struck rather than quietly kept: this file claimed the AC formats "carry no
+per-day energy to import". The fridge above carries 181 consecutive days of
+strictly-increasing cumulative kWh with no gaps, which is close to the ideal
+input for `async_add_external_statistics`. Whoever revisits this should know
+the case got stronger, not weaker.
+
+It should still not happen now. External statistic ids do not attach to the
 entity, so the imported history lives beside the sensor rather than in it;
-the AC formats carry no per-day energy to import in the first place; and it
-buys a one-time cosmetic win against permanent complexity. Publish the
+and it buys a one-time win against permanent complexity, on a mechanism this
+integration has never used. Worth reopening once the probe tier exists and
+the census says how many boards carry a full file rather than one row —
+not before. Publish the
 current cumulative value, let HA accumulate from today, leave the past in
 the appliance.
 
@@ -257,7 +663,12 @@ the appliance.
 
 In rough order of how much they can invalidate:
 
-1. **The interface query.** Both reporters read the resource as
+1. ~~**The interface query.**~~ **Answered for the read path** — see the
+   measurement above: a plain segment-path GET returns the baseline rep.
+   Retained below for the original reasoning, and because a *write* to this
+   resource may still need one.
+
+   Both reporters read the resource as
    `GET /file/transfer/vs/0?if=oic.if.baseline`. `DtlsCoapSession.get()`
    takes path segments and no query string, and nothing in this component
    has ever sent one. Either the default RETRIEVE returns the same payload —
@@ -272,8 +683,12 @@ In rough order of how much they can invalidate:
    while `/file/transfer/vs/0` is `oic.if.a`, and an actuator's default
    interface is the more likely one to answer differently.
 
-2. **Whether a bare GET reads the primary file, or a selection write is
-   required first.** `/file/list/vs/0` hands out an `x.com.samsung.id` per
+2. ~~**Whether a bare GET reads the primary file.**~~ **Answered.** No
+   selection write is needed, and the same call returns a full 2172-byte,
+   181-record file from a fridge — so the dishwasher's single record is that
+   appliance's actual history, not a truncated read. The name the resource
+   reports is a firmware default and identifies nothing; see the fridge
+   section. `/file/list/vs/0` hands out an `x.com.samsung.id` per
    file, and `ac-filter-reset.md` records a live board *rejecting* a
    selection of a non-primary path (4.05/4.00) — so a write path exists and
    the firmware validates it. Both reporters' one-shot GETs returned the
@@ -324,18 +739,25 @@ In rough order of how much they can invalidate:
 
 ## Suggested sequencing
 
-1. ~~Land the `bytes` rendering in `read_resource`.~~ Done, and generalized —
-   see question 4.
-2. Read `/file/transfer/vs/0` on a board whose `/file/list/vs/0` is already
-   known — the dishwasher above is the obvious candidate, since its primary
-   file is named `energy.db` outright. One read settles questions 1 and 2
-   together: whether a plain GET answers, and which file it hands back when
-   the appliance has two. The blob now survives the trip, so the answer
-   arrives in a form that can go straight into a fixture.
-3. Land the probe tier alone, with `/file/list/vs/0` and
-   `/file/transfer/vs/0` as coverage-only capabilities that bind no
-   entities. Diagnostics then start carrying the file list and the blob from
-   every board a user owns, which is what turns four reported formats into a
-   real census.
-4. Land the parser and the runtime-hours sensor against the two AC formats.
-5. Decide the energy question in §4 on the evidence step 3 produces.
+1. ~~Land the `bytes` rendering in `read_resource`.~~ Done and generalized as
+   `registry/encode.py`, shipped in v0.25.0.
+2. ~~Read `/file/transfer/vs/0` on a board whose `/file/list/vs/0` is known.~~
+   Done, on a dishwasher and a fridge — see the two measurement sections.
+3. ~~Land the probe tier, coverage-only.~~ Done. Every appliance now reads
+   `/file/list/vs/0` and `/file/transfer/vs/0` once at setup and every ~30
+   minutes after, and both land in diagnostics.
+4. **Collect the census.** Nothing more should be built until dumps from
+   boards nobody here owns say what the third field means on them, whether
+   any family serves SQLite, and how many appliances hold a real history
+   rather than the one row the dishwasher had. Two families measured in one
+   household is not a basis for shipping an entity.
+5. Then the parser and the runtime-hours sensor for the ACs — the one series
+   that lives in this file and nowhere else (#301, #329).
+6. Then the energy question in §4, on the evidence step 4 produces.
+
+An appliance owner who wants to help now needs only to download diagnostics:
+once the probe tier ships, the file list and the usage blob are in it
+automatically. On a build without it, `read_resource` on `/file/list/vs/0`
+and `/file/transfer/vs/0` followed by a diagnostics download does the same
+thing, because `_raw_read_blocking` applies whatever it reads to the state
+cache.

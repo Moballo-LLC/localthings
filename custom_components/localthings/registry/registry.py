@@ -44,3 +44,16 @@ def _build() -> dict[str, list[Capability]]:
 
 
 CAPABILITIES: dict[str, list[Capability]] = _build()
+
+# Hrefs the /device/0 batch never carries, so `discover()` can never reach
+# them and no capability declaring one would ever bind (issue #301). The
+# coordinator GETs these directly and folds the results into the resources
+# dict before discovery runs; see Capability.poll_tier.
+#
+# Deliberately global rather than per-device-type: this list is read before
+# the device type is resolved, and the file surface it covers is advertised
+# by every board family on record. Keep it short -- each entry costs one GET
+# per probe cycle on every appliance, including the ones that answer 4.04.
+PROBE_HREFS: tuple[str, ...] = tuple(
+    sorted({cap.href for cap in ALL if cap.poll_tier == "probe" and cap.href is not None})
+)

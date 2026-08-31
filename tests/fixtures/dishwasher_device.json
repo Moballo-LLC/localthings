@@ -695,5 +695,47 @@
         }
       }
     }
-  ]
+  ],
+  "probes": {
+    "/file/list/vs/0": {
+      "rt": [
+        "x.com.samsung.file.list"
+      ],
+      "if": [
+        "oic.if.baseline",
+        "oic.if.s"
+      ],
+      "x.com.samsung.items": [
+        {
+          "x.com.samsung.id": "0",
+          "x.com.samsung.name": "/opt/data/energy.db"
+        },
+        {
+          "x.com.samsung.id": "1",
+          "x.com.samsung.name": "/opt/data/hass.db"
+        }
+      ]
+    },
+    "/file/transfer/vs/0": {
+      "rt": [
+        "x.com.samsung.file.transfer"
+      ],
+      "if": [
+        "oic.if.baseline",
+        "oic.if.a"
+      ],
+      "x.com.samsung.items": [
+        {
+          "x.com.samsung.name": "/mnt/usage.db",
+          "x.com.samsung.blob": {
+            "__localthings_type__": "bytes",
+            "len": 12,
+            "sha256": "2e956b573a60fcbd191f0c38da2cc97d853d49cd5d8838432fde28cfb2eeeadd",
+            "base64": "UEiTal8GAAAAAAAA"
+          }
+        }
+      ]
+    }
+  },
+  "probes_note": "ALL REAL CAPTURED DATA -- issue #301. Both hrefs sit outside the /device/0 batch (no dump in this corpus carries /file/transfer/vs/0 in one) and were read with the read_resource service on 2026-08-31, verbatim. A plain GET: no ?if= query and no selection write. READ LATER THAN device0 ABOVE, which is from an earlier capture of this same unit -- so the blob's record does NOT match this fixture's /energy/consumption/vs/0 rep, and nothing here should assert that it does. It matched the meter live at read time: the blob decodes as one 12-byte record <uint32 LE ts=1788037200><uint32 LE value=1631><uint32 LE 0>, and the same session's /energy/consumption/vs/0 reported cumulativePower 163100 Wh (= 1631 tenths of a kWh) and cumulativeDate 1788037200 (= the record's ts, exactly). Note the ts matches cumulativeDate and NOT cumulativeDateUTC, which this board reports 18000s apart -- the same offset this fixture's own energy rep carries, and one of the reasons this capture is attributed to this unit. Two open oddities, deliberately recorded rather than smoothed: the transfer resource calls what it served /mnt/usage.db, which is not either name /file/list/vs/0 reports; and 12 bytes is a single record where the issue #301 reporters measured 181 and 281. The blob is stored as the marker registry/encode.py emits for a byte string; tests/conftest.py decodes it back to real bytes via from_json_safe. See docs/investigations/file-transfer-usage-db.md."
 }

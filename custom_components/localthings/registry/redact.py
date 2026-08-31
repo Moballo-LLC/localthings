@@ -28,6 +28,12 @@ _SENSITIVE_SUBSTRINGS = (
     "duid",
     "password",
     "secret",
+    # /wirelessinfo/vs/0's connectedApSsid -- the owner's WiFi network name.
+    # Not an account credential, which is why it slipped past the rules
+    # above, but it is a location identifier: public wardriving databases map
+    # SSIDs to street addresses. Eleven dumps in tests/fixtures reached this
+    # repo carrying one before this rule existed.
+    "ssid",
 )
 
 # Matched whole, not as substrings: these are bare one/two-letter keys too
