@@ -74,6 +74,7 @@ from .registry.identity import (
     resolve_model,
     resolve_serial,
 )
+from .registry.registry import PROBE_HREFS
 from .registry.subdevices import (
     MAIN,
     Subdevice,
@@ -242,6 +243,11 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     # triggers: the PUT itself, then the confirming summary poll.
     _POST_TIMEOUT_S: float = 8.0
     _POLL_TIMEOUT_S: float = 35.0
+    # Summary polls run every 30 s; probe hrefs get one read per this many
+    # cycles (~30 min). A usage file gains one record a day and costs a
+    # multi-KB blockwise transfer, so anything faster is pure waste
+    # (issue #301).
+    _PROBE_EVERY_N_CYCLES: int = 60
 
     # First-discovery subdevice enumeration is part of config-entry setup, so
     # it must have a finite wall-clock cost. A UUID-prefixed AC whose
@@ -339,6 +345,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.device_type_name: str | None = None
         self.one_ui_version: str = ""
         self._consecutive_poll_timeouts = 0
+        self._probe_cycles = 0
         # Set by _poll_once when the failure was the DTLS handshake itself.
         # A switched-off appliance fails there every cycle, and there is no
         # session to tear down and re-establish -- see _async_update_data.
@@ -972,8 +979,13 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 )
         return result
 
-    def _poll_hrefs_blocking(self, hrefs: list[str]) -> dict[str, dict]:
-        """GET individual hrefs sequentially. Does not reconnect on failure. Blocking."""
+    def _poll_hrefs_blocking(self, hrefs: list[str], timeout: float = 10.0) -> dict[str, dict]:
+        """GET individual hrefs sequentially. Does not reconnect on failure. Blocking.
+
+        `timeout` is per href. The probe tier raises it: a usage file is a
+        few KB and arrives blockwise, where a hot/warm resource is a small
+        Property map (issue #301).
+        """
         if self._session is None:
             return {}
         results = {}
@@ -984,7 +996,7 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             first = False
             try:
                 path = href.strip("/").split("/")
-                code, payload = self._session.get(path, timeout=10.0)
+                code, payload = self._session.get(path, timeout=timeout)
                 if code == 0x45 and payload:
                     rep = cbor2.loads(payload)
                     if isinstance(rep, dict):
@@ -993,6 +1005,21 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             except Exception as e:
                 self._log.debug("sub-poll %s: %s", href, e)
         return results
+
+    def _probe_blocking(self) -> dict[str, dict]:
+        """GET the hrefs no /device/0 batch carries (registry.PROBE_HREFS).
+
+        A 4.04 is the expected answer on boards without the resource, so a
+        failure per href is a debug log and an absent key, never a failed
+        poll -- same posture as a sibling subdevice going quiet.
+
+        MAIN only. `/oic/res` on the composite AC fixtures advertises
+        UUID-prefixed copies of these hrefs, but nothing has ever read one,
+        and probing every subdevice would multiply the cost of a tier whose
+        whole point is that it stays cheap. Left for whoever has a composite
+        board and a reason.
+        """
+        return self._poll_hrefs_blocking(list(PROBE_HREFS), timeout=self._POLL_TIMEOUT_S)
 
     # ------------------------------------------------------------------
     # Sub-poll loop (runs between summary polls)
@@ -1838,9 +1865,29 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         "config entry is reloaded: %s",
                         e,
                     )
+                # Folded in before _run_discovery so a probe href is bound
+                # on the first cycle like any batch href -- and so it is
+                # registered as covered rather than surfacing as a coverage
+                # gap the moment it appears in `resources`.
+                try:
+                    resources.update(await self.hass.async_add_executor_job(self._probe_blocking))
+                except Exception as e:
+                    self._log.debug("probe failed on first discovery: %s", e)
 
         source = "sweep" if self._discovered else "poll"
         first_cycle = not self._discovered
+        if not first_cycle and PROBE_HREFS:
+            # Counter rather than a timer: a probe is only meaningful on a
+            # cycle that already reached the device, and this rides one that
+            # just did.
+            self._probe_cycles += 1
+            if self._probe_cycles >= self._PROBE_EVERY_N_CYCLES:
+                self._probe_cycles = 0
+                async with self._session_lock:
+                    try:
+                        await self.hass.async_add_executor_job(self._probe_blocking)
+                    except Exception as e:
+                        self._log.debug("probe cycle failed: %s", e)
         if first_cycle:
             # Discovery runs before the apply loop so a rejected candidate's
             # resources never reach the state cache (issue #177) --

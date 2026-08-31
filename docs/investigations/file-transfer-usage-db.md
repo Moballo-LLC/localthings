@@ -404,6 +404,10 @@ design widens.
 
 ### 1. Reachability: a probe tier, not a general cold-tier rewrite
 
+*Built.* `Capability(poll_tier="probe")` → `registry.PROBE_HREFS` →
+`coordinator._probe_blocking`. What follows is the reasoning; two details
+came out differently in the code and are marked below.
+
 `poll_tier` today has three values and only two behaviours: `hot`/`warm`
 hrefs get individual sub-poll GETs, `cold` means "refreshed by the batch and
 nothing else". What #301 asks for is a fourth behaviour — *read this href
@@ -422,9 +426,12 @@ never sees. The coordinator then:
   `_async_update_data` rather than a new timer. A counter that ticks in
   half hours and gains one record a day does not need the 30 s summary
   interval; once every 30–60 minutes is generous.
-- maps each href through `subdevice.to_actual()` like every other read, so
-  the UUID-prefixed per-head copies the `FAC_BORA` fixtures advertise are
-  reachable by the same code.
+- **MAIN only, in the end.** The plan was to map each href through
+  `subdevice.to_actual()` so the UUID-prefixed per-head copies the
+  `FAC_BORA` fixtures advertise get read too. Not done: nobody has ever read
+  one, and probing every subdevice multiplies the cost of a tier whose whole
+  justification is that it stays cheap. Left for whoever has a composite
+  board and a reason.
 
 Cost when nothing is there: one GET per probe href per probe interval, which
 404s. That is why the probe list must stay short and maintainer-curated.
@@ -443,6 +450,16 @@ see question 2 below, which is the single fact this section's cadence
 depends on.
 
 ### 2. Decode in the registry, never cache the blob
+
+*Superseded in part — the constraint that motivated it is gone.* This
+section argued the blob must never reach `StateCache`, because the snapshot
+store would fail to encode it and diagnostics would choke. `registry/encode.py`
+(shipped in v0.25.0) removed both problems, so the probe caches the rep as
+the appliance sent it and the blob reaches diagnostics intact — which is the
+census this whole design turns on. `Capability.project` stays unused and
+stays the right home for a decoder when there is one to write. The reasoning
+below is still why a *parser* belongs in the registry rather than the
+coordinator.
 
 The rep is not a Property map of scalars. It is a wrapper —
 `x.com.samsung.items` → `[{x.com.samsung.name, x.com.samsung.blob}]` — whose
@@ -634,24 +651,25 @@ In rough order of how much they can invalidate:
 
 ## Suggested sequencing
 
-1. ~~Land the `bytes` rendering in `read_resource`.~~ Done, and generalized —
-   see question 4.
+1. ~~Land the `bytes` rendering in `read_resource`.~~ Done and generalized as
+   `registry/encode.py`, shipped in v0.25.0.
 2. ~~Read `/file/transfer/vs/0` on a board whose `/file/list/vs/0` is known.~~
-   Done — see the measurement above. A plain GET answers, no selection write
-   is needed, and the payload is confirmed against the meter resource.
-3. Land the probe tier, with `/file/list/vs/0` and `/file/transfer/vs/0` as
-   coverage-only capabilities that bind no entities. This is the
-   load-bearing step: two appliances in one household differ by 180 records,
-   the third field means something different on every family measured, and
-   only a census across the boards users actually own says what is typical.
-   Diagnostics carrying the file list and the blob is what produces it.
-4. Land the parser and the runtime-hours sensor against the two AC formats —
-   the one series that is in the file and nowhere else.
-5. Decide the energy question in §4 on what step 3 turns up, with the
-   dishwasher already standing as the "adds nothing" case.
+   Done, on a dishwasher and a fridge — see the two measurement sections.
+3. ~~Land the probe tier, coverage-only.~~ Done. Every appliance now reads
+   `/file/list/vs/0` and `/file/transfer/vs/0` once at setup and every ~30
+   minutes after, and both land in diagnostics.
+4. **Collect the census.** Nothing more should be built until dumps from
+   boards nobody here owns say what the third field means on them, whether
+   any family serves SQLite, and how many appliances hold a real history
+   rather than the one row the dishwasher had. Two families measured in one
+   household is not a basis for shipping an entity.
+5. Then the parser and the runtime-hours sensor for the ACs — the one series
+   that lives in this file and nowhere else (#301, #329).
+6. Then the energy question in §4, on the evidence step 4 produces.
 
-An appliance owner reading this who wants to help: `read_resource` on
-`/file/list/vs/0` and `/file/transfer/vs/0`, plus `/energy/consumption/vs/0`
-from the same session, is the whole contribution. The blob now survives the
-trip out (question 4), so the three responses together say what that board
-keeps and whether the integration already exposes it.
+An appliance owner who wants to help now needs only to download diagnostics:
+once the probe tier ships, the file list and the usage blob are in it
+automatically. On a build without it, `read_resource` on `/file/list/vs/0`
+and `/file/transfer/vs/0` followed by a diagnostics download does the same
+thing, because `_raw_read_blocking` applies whatever it reads to the state
+cache.

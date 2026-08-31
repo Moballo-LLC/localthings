@@ -642,6 +642,10 @@ class TestUniversalAndPowerBundles:
             common.KIDS_LOCK_VS_FALLBACK,
             common.REMOTE_CONTROL_GENERIC,
             common.REMOTE_CONTROL_VS_FALLBACK,
+            # Coverage-only, and in UNIVERSAL because the file surface is
+            # advertised by every board family on record (issue #301).
+            common.FILE_LIST,
+            common.FILE_TRANSFER,
         }
 
     def test_power_kept_separate_for_airconditioners_sake(self):

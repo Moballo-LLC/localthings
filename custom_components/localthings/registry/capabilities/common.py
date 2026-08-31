@@ -763,6 +763,24 @@ SELF_CHECK = Capability(
 # generation, so by_type/airconditioner.py excludes just that one member
 # and substitutes its own ENERGY_METER_GENERIC/ENERGY_METER_LEGACY.
 
+# The appliance's own usage history, and the list that names the files it
+# keeps. Both sit outside the /device/0 batch on every dump on record, so
+# poll_tier='probe' is what makes them readable at all -- see
+# registry.PROBE_HREFS and issue #301.
+#
+# No entities yet, deliberately. The record layout is settled
+# (<uint32 local timestamp><uint32 cumulative, tenths of a kWh><uint32 ...>)
+# and field 2 is confirmed against the live meter on four families, but the
+# third field means something different on each one -- zero on a washer, the
+# firmware's monthly bucket on a fridge, cumulative runtime on an
+# ARTIK051_PRAC_20K. What the file is worth per family is a census question,
+# and registering these coverage-only is what collects that census: the
+# probed reps reach diagnostics without surfacing as coverage gaps.
+FILE_LIST = Capability(href="/file/list/vs/0", poll_tier="probe")
+
+FILE_TRANSFER = Capability(href="/file/transfer/vs/0", poll_tier="probe")
+
+
 UNIVERSAL = (
     ALARMS,
     ENERGY_METER,
@@ -773,6 +791,8 @@ UNIVERSAL = (
     KIDS_LOCK_VS_FALLBACK,
     REMOTE_CONTROL_GENERIC,
     REMOTE_CONTROL_VS_FALLBACK,
+    FILE_LIST,
+    FILE_TRANSFER,
 )
 
 POWER = (
