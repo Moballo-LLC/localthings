@@ -144,12 +144,48 @@ Until that is resolved, `x.com.samsung.name` cannot be trusted to identify
 the payload, and §3's rule — read the magic bytes, treat the name as a prior
 — is load-bearing rather than cautious.
 
-The corroboration to run next is cheap and decisive: read
-`/energy/consumption/vs/0` on this appliance. If `cumulativePower` is
-163100 Wh and `cumulativeDate` is 1788037200, the record is the live meter's
-current value and the "one record" reading is that a bare GET serves the
-newest row. That is exactly how #301's washer comment tied the last record
-of its file to the same two fields.
+**The corroboration ran, and both fields match exactly.**
+`/energy/consumption/vs/0` on the same appliance, minutes later:
+
+```yaml
+x.com.samsung.da.cumulativePower: '163100'      # 163.1 kWh — the blob's 1631/10
+x.com.samsung.da.cumulativeDate: '1788037200'   # the blob's timestamp, to the second
+x.com.samsung.da.cumulativeDateUTC: '1788055200'
+x.com.samsung.da.instantaneousPower: '-500'
+```
+
+So the record is the live meter's current value, exactly as #301's washer
+comment found for the last record of its file. The reading of the layout is
+confirmed on hardware, not inferred.
+
+Two things follow that were not obvious before the read.
+
+**The blob's timestamps are in `cumulativeDate`'s frame, not UTC.** The
+board reports both, and they differ by 18000 s — five hours — with the blob
+agreeing with the bare field, not the `...UTC` one. Whatever that frame is,
+a parser must not treat a record stamp as a Unix UTC instant. Note that this
+appliance's `/file/information/vs/0` reports `timeoffset: "+00:00"`, which
+does not account for five hours; the offset resource and the energy resource
+disagree here, and neither has been shown right. Recorded, not resolved.
+
+**On this appliance the file is pure duplication.** Its one record carries
+the same two numbers `/energy/consumption/vs/0` already publishes, and
+`energy_kwh` is already an entity from them. That is a genuinely useful
+negative result: it measures what §4 argued from first principles, that the
+file's energy series is worth an entity only where the meter resource cannot
+supply one — #285's washer, where `cumulativePower` vanishes — or where the
+file carries something the meter resource does not, which is the ACs'
+per-unit runtime hours. On a healthy dishwasher it carries nothing new.
+
+It also lowers the stakes of the one-record question. The reason to want the
+other 180 rows was history, and §5 already rules backfilling out of scope.
+If a bare GET serves the newest row, that row is all a `total_increasing`
+sensor ever needed.
+
+(`instantaneousPower: -500` is the dead sentinel `common.ENERGY_METER`
+already gates `power_watts` out on, documented for exactly this device
+class in issue #6. Nothing new, but it confirms the appliance is behaving
+as the registry expects.)
 
 One caveat worth stating before a parser is written against this: a single
 record with a small value cannot tell `uint32` value + zero padding apart
@@ -295,7 +331,8 @@ hardware has no meter and its own app draws an hours graph instead.
 
 **Energy — yes, but not as a second `total_increasing` energy sensor.**
 Where the file carries energy it is the same counter
-`/energy/consumption/vs/0` already publishes. Creating a second
+`/energy/consumption/vs/0` already publishes — now measured rather than
+argued, on the dishwasher above, to the second and to the tenth of a kWh. Creating a second
 `state_class: total_increasing` energy entity for one physical meter is the
 double-count trap #329 warns about, one layer down. Two shapes are
 defensible:
@@ -409,16 +446,23 @@ In rough order of how much they can invalidate:
 
 1. ~~Land the `bytes` rendering in `read_resource`.~~ Done, and generalized —
    see question 4.
-2. Read `/file/transfer/vs/0` on a board whose `/file/list/vs/0` is already
-   known — the dishwasher above is the obvious candidate, since its primary
-   file is named `energy.db` outright. One read settles questions 1 and 2
-   together: whether a plain GET answers, and which file it hands back when
-   the appliance has two. The blob now survives the trip, so the answer
-   arrives in a form that can go straight into a fixture.
-3. Land the probe tier alone, with `/file/list/vs/0` and
-   `/file/transfer/vs/0` as coverage-only capabilities that bind no
-   entities. Diagnostics then start carrying the file list and the blob from
-   every board a user owns, which is what turns four reported formats into a
-   real census.
-4. Land the parser and the runtime-hours sensor against the two AC formats.
-5. Decide the energy question in §4 on the evidence step 3 produces.
+2. ~~Read `/file/transfer/vs/0` on a board whose `/file/list/vs/0` is known.~~
+   Done — see the measurement above. A plain GET answers, no selection write
+   is needed, and the payload is confirmed against the meter resource.
+3. Land the probe tier, with `/file/list/vs/0` and `/file/transfer/vs/0` as
+   coverage-only capabilities that bind no entities. This is now the
+   load-bearing step rather than a preliminary: one appliance says the file
+   can be pure duplication, three reporters say it can hold the only copy of
+   a number worth having, and only a census across the boards users actually
+   own says which is typical. Diagnostics carrying the file list and the blob
+   is what produces that census.
+4. Land the parser and the runtime-hours sensor against the two AC formats —
+   the one series that is in the file and nowhere else.
+5. Decide the energy question in §4 on what step 3 turns up, with the
+   dishwasher already standing as the "adds nothing" case.
+
+An appliance owner reading this who wants to help: `read_resource` on
+`/file/list/vs/0` and `/file/transfer/vs/0`, plus `/energy/consumption/vs/0`
+from the same session, is the whole contribution. The blob now survives the
+trip out (question 4), so the three responses together say what that board
+keeps and whether the integration already exposes it.
