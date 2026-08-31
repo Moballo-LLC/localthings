@@ -546,7 +546,7 @@
       "rep": {
         "macaddressWiFi": "**REDACTED**",
         "macaddressBLE": "**REDACTED**",
-        "connectedApSsid": "REDACTED_SSID"
+        "connectedApSsid": "**REDACTED**"
       }
     },
     {
