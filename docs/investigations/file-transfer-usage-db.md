@@ -84,6 +84,81 @@ on record stamps records at day or hour granularity in device-local terms.
 It is not a dead resource; it is the thing that makes a record's date mean
 something.
 
+## The first blob read through the integration
+
+Measured 2026-08-31 with `read_resource`, no query string and no selection
+write, on the same appliance as the `/file/list/vs/0` read above:
+
+```yaml
+code: '2.05'
+rep:
+  rt: [x.com.samsung.file.transfer]
+  if: [oic.if.baseline, oic.if.a]
+  x.com.samsung.items:
+    - x.com.samsung.name: /mnt/usage.db
+      x.com.samsung.blob: {len: 12, sha256: 2e956b57…, base64: UEiTal8GAAAAAAAA}
+```
+
+The blob is `50 48 93 6a 5f 06 00 00 00 00 00 00`, and it decodes without
+ambiguity as **one 12-byte record in the washer layout** from #285/#301:
+
+| field | bytes | value | reading |
+| --- | --- | --- | --- |
+| `uint32` LE | `50 48 93 6a` | 1788037200 | 2026-08-29 21:00:00 UTC — on the hour |
+| `uint32` LE | `5f 06 00 00` | 1631 | 163.1 kWh at the tenths scale |
+| `uint32` LE | `00 00 00 00` | 0 | the always-zero third field |
+
+Every detail matches that format's description: hour-granularity timestamps,
+a tenths-of-a-kWh cumulative value, a third field that is zero. Read as the
+KRAC's `uint64`-leading shape instead, the leading field is 7.0e12 — not a
+date, so the two layouts are already separable on one record, which is the
+discriminator #329 proposed working as advertised.
+
+Three things this settles, and two it opens.
+
+**A plain GET answers.** No `?if=oic.if.baseline`, and the rep came back
+*with* `rt`/`if`, which is the baseline interface's own shape — so the query
+the reporters used is not required to get the baseline view. Question 1 is
+answered for the read path.
+
+**No selection write was needed to get a payload.** Half of question 2 is
+answered: the resource is not inert until written to.
+
+**The encoder works end to end on real hardware.** The blob left the
+appliance, survived CBOR decode, base64, JSON and the websocket, and the
+recorded SHA-256 matches the 12 bytes it rebuilds to.
+
+**But there is only one record.** The reporters measured 2172 B (181
+records) and 3372 B (281 records). Twelve bytes is a single row. Either this
+appliance's history genuinely holds one record, or a bare GET returns only
+the newest one and the rest of the file needs the query, a selection, or
+`/file/transfer/chunk/vs/0`. Nothing here distinguishes those.
+
+**And the name is wrong for this appliance.** `/file/list/vs/0` on this same
+unit lists `/opt/data/energy.db` and `/opt/data/hass.db`. It does not list
+`/mnt/usage.db` — which is what `/file/transfer/vs/0` just called what it
+served. Either the name field is a firmware default rather than a statement
+about what was read (it would be the same default the ARTIK051 boards serve,
+where it happens to name the real file), or the two resources disagree.
+Until that is resolved, `x.com.samsung.name` cannot be trusted to identify
+the payload, and §3's rule — read the magic bytes, treat the name as a prior
+— is load-bearing rather than cautious.
+
+The corroboration to run next is cheap and decisive: read
+`/energy/consumption/vs/0` on this appliance. If `cumulativePower` is
+163100 Wh and `cumulativeDate` is 1788037200, the record is the live meter's
+current value and the "one record" reading is that a bare GET serves the
+newest row. That is exactly how #301's washer comment tied the last record
+of its file to the same two fields.
+
+One caveat worth stating before a parser is written against this: a single
+record with a small value cannot tell `uint32` value + zero padding apart
+from a little-endian `uint64` value — both read 1631 here. #301's comment
+reports the third field as zero across all 281 of its records, which is
+equally consistent with either. The distinction only shows up on a device
+whose cumulative value has exceeded 2^32 tenths, so the parser should not
+claim to have resolved it.
+
 ## The blocker is real and it is not board-specific
 
 `discovery.discover()` walks whatever `parse_device0_batch` found, i.e. the
@@ -257,7 +332,12 @@ the appliance.
 
 In rough order of how much they can invalidate:
 
-1. **The interface query.** Both reporters read the resource as
+1. ~~**The interface query.**~~ **Answered for the read path** — see the
+   measurement above: a plain segment-path GET returns the baseline rep.
+   Retained below for the original reasoning, and because a *write* to this
+   resource may still need one.
+
+   Both reporters read the resource as
    `GET /file/transfer/vs/0?if=oic.if.baseline`. `DtlsCoapSession.get()`
    takes path segments and no query string, and nothing in this component
    has ever sent one. Either the default RETRIEVE returns the same payload —
@@ -272,8 +352,11 @@ In rough order of how much they can invalidate:
    while `/file/transfer/vs/0` is `oic.if.a`, and an actuator's default
    interface is the more likely one to answer differently.
 
-2. **Whether a bare GET reads the primary file, or a selection write is
-   required first.** `/file/list/vs/0` hands out an `x.com.samsung.id` per
+2. **Partly answered: a bare GET returns a payload with no selection
+   write.** What is still open is whether it returns the *whole file* — the
+   read above brought back one 12-byte record where the reporters measured
+   181 and 281 — and which file it is reading, given the name it reported is
+   not in this appliance's own file list. `/file/list/vs/0` hands out an `x.com.samsung.id` per
    file, and `ac-filter-reset.md` records a live board *rejecting* a
    selection of a non-primary path (4.05/4.00) — so a write path exists and
    the firmware validates it. Both reporters' one-shot GETs returned the
