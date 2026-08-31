@@ -34,10 +34,17 @@ def _load_device_full(name: str):
     belong to no batch, e.g. the hand-read /multidevice/vs/0 in the
     ARTIK051_DONGLE_FAC_18K fixture) is folded into `seeds` here, since
     FakeCoapSession answers both shapes off the same href key.
+
+    `probes` runs through `from_json_safe`, so an entry may carry a binary
+    rep as the marker `read_resource`/diagnostics emit for one (see
+    registry/encode.py) and the fake session hands the caller real `bytes`,
+    exactly as a device would.
     """
+    from custom_components.localthings.registry.encode import from_json_safe
+
     data = json.loads((FIXTURES / f"{name}_device.json").read_text())
     resources = _resources_from_dump(data)
-    seeds = {**data.get("seeds", {}), **data.get("probes", {})}
+    seeds = {**data.get("seeds", {}), **from_json_safe(data.get("probes", {}))}
     return resources, data.get("oic_res", []), seeds
 
 

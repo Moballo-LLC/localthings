@@ -123,6 +123,36 @@ async def test_snapshot_written_after_first_discovery(
     assert "subdevice_candidates" in stored
 
 
+async def test_snapshot_survives_a_binary_rep(
+    hass: HomeAssistant, mock_entry, hass_storage
+) -> None:
+    """A rep carrying bytes used to fail the whole snapshot write -- the
+    JSON store can't encode one -- and the only symptom was this entry
+    silently losing its offline load. registry/encode.py stores a marker
+    and rebuilds the bytes on replay."""
+    resources = _load_fridge()
+    resources["/file/transfer/vs/0"] = {
+        "x.com.samsung.name": "/mnt/usage.db",
+        "x.com.samsung.blob": b"\x00\x01\x02usage",
+    }
+
+    online_ids = await _setup_online_then_unload(hass, mock_entry, resources)
+    assert online_ids
+
+    stored = hass_storage[_store_key(mock_entry)]["data"]
+    assert stored["resources"]["/file/transfer/vs/0"]["x.com.samsung.blob"]["len"] == 8
+
+    with _unreachable():
+        await hass.config_entries.async_setup(mock_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert mock_entry.state is ConfigEntryState.LOADED
+    assert {s.entity_id for s in hass.states.async_all()} == online_ids
+    coordinator: LocalThingsCoordinator = hass.data[DOMAIN][mock_entry.entry_id]
+    replayed = coordinator.discovery_resources["/file/transfer/vs/0"]
+    assert replayed["x.com.samsung.blob"] == b"\x00\x01\x02usage"
+
+
 async def test_snapshot_not_written_when_device_never_answers(
     hass: HomeAssistant, mock_entry, hass_storage
 ) -> None:

@@ -9,6 +9,8 @@ multi-write sequencing, settle/verify_after, and the options-flow rewiring.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from unittest.mock import AsyncMock, patch
 
 import cbor2
@@ -29,6 +31,7 @@ from custom_components.localthings.const import (
     SERVICE_WRITE_RESOURCE,
 )
 from custom_components.localthings.coordinator import LocalThingsCoordinator
+from custom_components.localthings.registry.encode import TYPE_KEY, from_json_safe
 from custom_components.localthings.registry.subdevices import Subdevice
 from custom_components.localthings.services import async_setup_services
 
@@ -640,6 +643,31 @@ async def test_read_resource_surfaces_a_collections_list_body(hass, coordinator,
     assert response["code"] == "2.05"
     assert response["rep"] == {}
     assert response["body"] == batch
+
+
+async def test_read_resource_renders_a_binary_rep_as_a_marker(hass, coordinator, device_id):
+    """A CBOR byte string has no JSON form, and a service response is
+    JSON-serialized -- so without registry/encode.py the appliance's usage
+    history at /file/transfer/vs/0 (issue #301) could not leave the device
+    through this service at all."""
+    blob = bytes(range(256)) * 8
+    fake = _FakeSession()
+    fake.queue_get(
+        "file/transfer/vs/0",
+        {"x.com.samsung.name": "/mnt/usage.db", "x.com.samsung.blob": blob},
+    )
+    coordinator._session = fake
+
+    response = await _call_read(hass, device_id, href="/file/transfer/vs/0")
+
+    assert response["rep"]["x.com.samsung.name"] == "/mnt/usage.db"
+    marker = response["rep"]["x.com.samsung.blob"]
+    assert marker[TYPE_KEY] == "bytes"
+    assert marker["len"] == len(blob)
+    assert marker["sha256"] == hashlib.sha256(blob).hexdigest()
+    # The response is what a contributor pastes into a fixture, so the trip
+    # back to real bytes has to survive an actual JSON encode.
+    assert from_json_safe(json.loads(json.dumps(response)))["rep"]["x.com.samsung.blob"] == blob
 
 
 async def test_read_resource_failure_is_surfaced_as_a_home_assistant_error(
