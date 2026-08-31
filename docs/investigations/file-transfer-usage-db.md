@@ -341,6 +341,11 @@ fridge (both measured here, the fridge three ways over), and the
 exactly). That is the value worth an entity.
 
 **Field 3 is not one thing, and must never be published on a guess.**
+It is now classified rather than assumed: a runtime counter is far larger
+than 12 and every delta is a multiple of 5 tenths (the half-hour
+quantisation both AC reports independently measured), where a month label is
+1–12 and steps by one. Anything else — a constant zero, a counter that never
+moves — is left alone.
 
 | family | field 3 |
 | --- | --- |
@@ -348,6 +353,32 @@ exactly). That is the value worth an entity.
 | this dishwasher | zero (its only record) |
 | this `TP1X_REF_21K` fridge | the firmware's monthly bucket label, 3 → 8 |
 | `ARTIK051_PRAC_20K` AC (#329) | cumulative runtime, tenths of an hour |
+
+### The second field's *scale* differs too, and that is the sharper trap
+
+Not just its meaning — its units. Checked against each family's own
+`cumulativePower`:
+
+| family | field 2 (last) | `cumulativePower` | ratio |
+| --- | --- | --- | --- |
+| dishwasher | 1631 | 163100 Wh | 100 |
+| `TP1X_REF_21K` fridge | 11410 | 1141141 Wh | 100 |
+| `DA_WM_TP1_21_COMMON` washer (#301) | 3319 | 331900 Wh | 100 |
+| **`ARTIK051_PRAC_20K` AC (#329)** | **5118585** | **5118585 Wh** | **1** |
+
+Three families store tenths of a kWh; the AC stores plain Wh — its `fieldA`
+*equals* `cumulativePower` outright rather than a hundredth of it. Nothing in
+the bytes distinguishes 5118585 Wh from 5118585 tenths of a kWh, so reading
+that board with the other scale reports **511858.5 kWh instead of 5118.6**.
+
+The energy fallback shipped before this was noticed, and was wrong for that
+board. What saves it in practice is that the AC's meter works, so it never
+reaches a fallback — but that is luck, not design. `cumulative_energy_kwh`
+now refuses outright on any file whose third field classifies as runtime,
+which is exactly the family whose scale is different. The correlation is
+across four measured families rather than a rule read out of firmware, so it
+is a conservative refusal rather than a scale conversion: on that shape the
+integration publishes runtime and no energy.
 
 Four families, three different meanings, one identical byte layout. §3's
 discriminator separates the `uint64`-leading shape from the `uint32`-leading
@@ -527,6 +558,9 @@ temporary file; the alternative is writing the blob to disk from inside an
 executor job, which is worse in every respect.
 
 ### 4. What to expose
+
+*Built.* `usagedb.cumulative_runtime_hours` + a `usage_runtime_hours`
+sensor, for the `uint32`-leading shape only.
 
 **Runtime hours — yes, and this is the part worth doing first.**
 `total_increasing`, `device_class: duration`, unit `h`. It is the honest

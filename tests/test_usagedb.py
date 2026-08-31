@@ -67,13 +67,81 @@ def test_the_fridge_file_is_one_ordered_record_per_day():
     assert gaps == {1}
 
 
-def test_the_third_field_is_not_interpreted():
-    """It is the monthly bucket on this fridge, zero on a washer, and runtime
-    hours on an ARTIK051_PRAC_20K. records() hands it back untouched and
-    nothing downstream reads it yet."""
+def test_the_fridges_third_field_is_a_month_label_not_runtime():
+    """It runs 3..8 across a March-to-August file. Classifying it as runtime
+    would publish "8 hours" and, worse, would change how the energy field is
+    scaled -- see test_energy_is_refused_where_the_scale_is_unconfirmed."""
     blob, _ = _capture("refrigerator_tp1x_ref_21k")
     parsed = usagedb.records(_rep(blob))
     assert {r[2] for r in parsed} == {3, 4, 5, 6, 7, 8}
+    assert usagedb.cumulative_runtime_hours(_rep(blob)) is None
+
+
+def test_a_washer_shaped_zero_third_field_is_not_runtime():
+    """Zero on all 281 of #301's washer records."""
+    blob = _synthetic([(100, 0), (120, 0), (140, 0)])
+    assert usagedb.cumulative_runtime_hours(_rep(blob)) is None
+
+
+# ---------------------------------------------------------------------------
+# Runtime hours (#329's ARTIK051_PRAC_20K)
+#
+# NOT fixture-backed: no raw capture of this board exists here, only the
+# reported field description and the three per-head totals. Per this
+# project's fixture-integrity rule these are hand-built reps matching those
+# quoted shapes, kept clearly distinct from the real captures above. Replace
+# with a fixture if a dump ever surfaces.
+# ---------------------------------------------------------------------------
+
+
+def _prac_like(last_tenths_of_hours: int, days: int = 12) -> bytes:
+    """A PRAC-shaped file: <ts><energy in Wh><runtime in tenths of an hour>,
+    the runtime moving in half-hour steps as both AC reports describe."""
+    step = 5 * (last_tenths_of_hours // (5 * days) or 1)
+    start = last_tenths_of_hours - step * (days - 1)
+    return _synthetic([(4_888_612 + i * 1200, start + i * step) for i in range(days)])
+
+
+@pytest.mark.parametrize(
+    "tenths,hours",
+    [(62700, 6270.0), (7995, 799.5), (16600, 1660.0)],
+    ids=["office", "bedroom", "basias"],
+)
+def test_runtime_decodes_to_each_heads_own_total(tenths, hours):
+    """#329's three heads of one multi-split, whose runtime differs per head
+    while the energy field beside it is the shared outdoor unit's."""
+    assert usagedb.cumulative_runtime_hours(_rep(_prac_like(tenths))) == hours
+
+
+def test_runtime_requires_the_half_hour_quantisation():
+    """ "All 360 deltas across both units divisible by 5 in tenths" (#301),
+    "every delta on every unit is divisible by 5 tenths" (#329). A counter
+    that moves in ones is a month label, not hours."""
+    blob = _synthetic([(100, 20), (120, 21), (140, 22)])
+    assert usagedb.cumulative_runtime_hours(_rep(blob)) is None
+
+
+def test_runtime_requires_the_counter_to_move():
+    blob = _synthetic([(100, 500), (120, 500), (140, 500)])
+    assert usagedb.cumulative_runtime_hours(_rep(blob)) is None
+
+
+def test_runtime_refuses_a_backwards_counter():
+    """A month label wrapping 12 -> 1 at a year boundary, among other things."""
+    blob = _synthetic([(100, 600), (120, 605), (140, 5)])
+    assert usagedb.cumulative_runtime_hours(_rep(blob)) is None
+
+
+def test_energy_is_refused_where_the_scale_is_unconfirmed():
+    """The reason the classifier is strict. Every family whose third field is
+    zero or a month label stores tenths of a kWh -- confirmed against each
+    one's own cumulativePower. The one family that pairs energy with runtime,
+    #329's ARTIK051_PRAC_20K, stores plain Wh: its fieldA *equals*
+    cumulativePower rather than a hundredth of it. Reading 5118585 Wh with
+    the other scale reports 511858.5 kWh instead of 5118.6."""
+    rep = _rep(_prac_like(62700))
+    assert usagedb.cumulative_runtime_hours(rep) == 6270.0
+    assert usagedb.cumulative_energy_kwh(rep) is None
 
 
 # ---------------------------------------------------------------------------

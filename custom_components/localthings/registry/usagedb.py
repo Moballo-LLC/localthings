@@ -36,6 +36,7 @@ docs/investigations/file-transfer-usage-db.md.
 
 from __future__ import annotations
 
+import itertools
 import struct
 
 ITEMS_FIELD = "x.com.samsung.items"
@@ -104,14 +105,76 @@ def records(rep: dict) -> list[tuple[int, int, int]] | None:
     return out
 
 
+# A month label is 1..12 and steps by one. A runtime counter is far larger
+# and moves in half hours -- "all 360 deltas across both units divisible by 5
+# in tenths" (#301), "every delta on every unit is divisible by 5 tenths"
+# (#329). The +1 of a month rollover is what that test rejects.
+_MAX_MONTH = 12
+_RUNTIME_QUANTUM = 5  # tenths of an hour
+
+
+def _is_runtime_series(values: list[int]) -> bool:
+    """True when the third field is a cumulative runtime counter rather than
+    the firmware's monthly bucket or a constant zero.
+
+    Deliberately strict, because the answer decides both whether runtime is
+    published *and* how the energy field is scaled -- see
+    `cumulative_energy_kwh`.
+    """
+    if values[-1] <= _MAX_MONTH:
+        return False
+    deltas = [b - a for a, b in itertools.pairwise(values)]
+    if any(delta < 0 for delta in deltas):
+        return False
+    if not any(deltas):
+        return False
+    return all(delta % _RUNTIME_QUANTUM == 0 for delta in deltas)
+
+
 def cumulative_energy_kwh(rep: dict) -> float | None:
     """The newest record's cumulative energy, in kWh.
 
     The file is a once-a-day rollup, so this steps once a day rather than
     tracking the meter continuously -- see common.FILE_TRANSFER for why that
     is still worth an entity on an appliance that reports no meter at all.
+
+    Refused on a board whose third field is a runtime counter, because the
+    energy field's *scale* is not the same there. Every family whose third
+    field is zero or a month label stores tenths of a kWh, confirmed against
+    each one's own `cumulativePower`: a washer (#301), a dishwasher and a
+    fridge. The one family that pairs energy with runtime, the
+    `ARTIK051_PRAC_20K` of #329, stores plain Wh -- its `fieldA` equals
+    `cumulativePower` outright rather than a hundredth of it. Nothing in the
+    bytes distinguishes 5118585 Wh from 5118585 tenths of a kWh, so reading
+    that board with this scale would report 511858.5 kWh instead of 5118.6.
+
+    That board's meter works, so it never reaches this fallback anyway; this
+    refuses on the shape rather than relying on that.
     """
     parsed = records(rep)
     if not parsed:
         return None
+    if _is_runtime_series([r[2] for r in parsed]):
+        return None
     return parsed[-1][1] / 10
+
+
+def cumulative_runtime_hours(rep: dict) -> float | None:
+    """The newest record's cumulative running time, in hours.
+
+    The one number on a multi-head system that is genuinely per-unit: #329
+    read three heads of one multi-split and found this field differing per
+    head (6270.0 h, 799.5 h, 1660.0 h) while the energy field beside it was
+    the shared outdoor unit's, identical on all three.
+
+    Only the `uint32`-leading shape is read. The `ARTIK051_KRAC_18K` of #301
+    keeps runtime too, but in the `uint64`-leading layout `records` refuses,
+    and no capture of one exists to write a decoder against.
+    """
+    parsed = records(rep)
+    if not parsed:
+        return None
+    values = [r[2] for r in parsed]
+    if not _is_runtime_series(values):
+        return None
+    return values[-1] / 10

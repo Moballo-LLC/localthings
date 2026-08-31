@@ -134,3 +134,53 @@ def test_no_entity_when_the_blob_cannot_be_decoded():
 
 def test_no_entity_when_the_file_is_absent():
     assert "energy_kwh" not in _state({ENERGY: {}})
+
+
+# ---------------------------------------------------------------------------
+# Runtime hours (#329). Not a fallback -- no other resource on these boards
+# reports it, so there is nothing to defer to.
+# ---------------------------------------------------------------------------
+
+
+def _prac_like(last_tenths_of_hours: int = 62700, days: int = 12) -> bytes:
+    """A PRAC-shaped file, hand-built: no capture of that board exists here.
+    <ts><energy in Wh><runtime in tenths of an hour>, runtime moving in half
+    hours as both AC reports describe."""
+    step = 5 * (last_tenths_of_hours // (5 * days) or 1)
+    start = last_tenths_of_hours - step * (days - 1)
+    return b"".join(
+        struct.pack("<III", 1_780_000_000 + i * 86400, 4_888_612 + i * 1200, start + i * step)
+        for i in range(days)
+    )
+
+
+def test_runtime_is_published_alongside_no_meter_of_its_own():
+    state = _state(
+        {
+            ENERGY: {"x.com.samsung.da.cumulativePower": "5118585"},
+            TRANSFER: _transfer_rep(_prac_like()),
+        }
+    )
+    assert state["usage_runtime_hours"] == 6270.0
+    # The meter still owns energy here, as it should.
+    assert state["energy_kwh"] == 5118.59
+
+
+def test_no_runtime_entity_on_a_board_whose_third_field_is_a_month_label():
+    """The fridge. Publishing its month number as "8 hours" is exactly the
+    mistake the classifier exists to prevent."""
+    state = _state({ENERGY: {}, TRANSFER: _transfer_rep()})
+    assert "usage_runtime_hours" not in state
+
+
+def test_no_runtime_entity_when_there_is_no_usable_file():
+    assert "usage_runtime_hours" not in _state({ENERGY: {}})
+
+
+def test_a_runtime_board_publishes_no_energy_fallback():
+    """The scale guard, at entity level: #329's board stores energy in Wh
+    where every other measured family stores tenths of a kWh, and nothing in
+    the bytes says which. Its own meter works, so it loses nothing."""
+    state = _state({ENERGY: {}, TRANSFER: _transfer_rep(_prac_like())})
+    assert state["usage_runtime_hours"] == 6270.0
+    assert "energy_kwh" not in state

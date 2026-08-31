@@ -836,6 +836,24 @@ FILE_TRANSFER = Capability(
             rep_fn=usagedb.cumulative_energy_kwh,
             exists_fn=_usage_energy_exists,
         ),
+        # Runtime, unlike energy, is not a fallback: no other resource on
+        # these boards reports it, so there is nothing to defer to. Issue
+        # #329 is what makes it worth having -- on a multi-head system this
+        # is the one number that is genuinely per-unit, differing per head
+        # while the energy counter beside it is the shared outdoor unit's.
+        #
+        # No state_class change needed for the daily-rollup lumpiness that
+        # applies to energy_kwh above: hours are not summed into a dashboard.
+        SensorDesc(
+            key="usage_runtime_hours",
+            device_class="duration",
+            state_class="total_increasing",
+            unit="h",
+            icon="mdi:timer-outline",
+            entity_category="diagnostic",
+            rep_fn=usagedb.cumulative_runtime_hours,
+            exists_fn=lambda rep, resources: usagedb.cumulative_runtime_hours(rep) is not None,
+        ),
     ),
 )
 
