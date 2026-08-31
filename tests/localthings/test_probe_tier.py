@@ -7,10 +7,9 @@ bind. `Capability.poll_tier="probe"` puts an href on `registry.PROBE_HREFS`,
 which the coordinator GETs directly and folds into the resources dict before
 discovery runs.
 
-These capabilities bind no entities on purpose (see common.FILE_LIST): the
-point of the tier today is that the probed reps reach diagnostics, so what
-the file is worth per appliance family can be settled on a census rather
-than on three reports.
+`/file/list/vs/0` binds nothing -- it exists so the probed rep reaches
+diagnostics and so the href is not a coverage gap. `/file/transfer/vs/0`
+binds one gated fallback; see test_usage_energy_fallback.py.
 """
 
 from __future__ import annotations
@@ -87,14 +86,12 @@ def test_a_probed_href_is_registered_so_it_is_not_a_coverage_gap():
         assert href in registry.capabilities
 
 
-def test_a_probed_capability_binds_no_entities():
-    """Deliberate: the record's third field means something different on
-    every family measured so far, so nothing is published yet."""
-    resources = _load_fridge()
-    registry = resolve_registry(resources)
-    for href in PROBE_HREFS:
-        for cap in registry.capabilities[href]:
-            assert cap.entities == ()
+def test_the_file_list_probe_binds_nothing():
+    """It is read for the census and for gap coverage, not for an entity --
+    the filename it reports is a firmware default that identifies nothing."""
+    registry = resolve_registry(_load_fridge())
+    for cap in registry.capabilities[FILE_LIST]:
+        assert cap.entities == ()
 
 
 class _ProbeSession:

@@ -537,6 +537,10 @@ be. On a `KRAC` board it is also the *only* usage number the appliance has —
 #302 established that its permanent `0.0` kWh is correct, because the
 hardware has no meter and its own app draws an hours graph instead.
 
+*Built, as the fallback below.* `registry/usagedb.py` decodes the file;
+`common.FILE_TRANSFER` carries one `energy_kwh` sensor gated to the case the
+meter cannot serve.
+
 **Energy — yes, but not as a second `total_increasing` energy sensor.**
 Where the file carries energy it is the same counter
 `/energy/consumption/vs/0` already publishes — now measured rather than
@@ -555,6 +559,37 @@ defensible:
 The second needs no new machinery: two descriptors with complementary
 `exists_fn`, the pattern `ai_energy_level`'s switch/select pair and
 `ENERGY_METER_LEGACY`/`GENERIC` already use.
+
+What shipped is the fallback, and it shares the key `energy_kwh` with
+`ENERGY_METER` rather than adding a second one — the same shape as
+`POWER_GENERIC`/`POWER_VS_FALLBACK`. An appliance gets one energy entity
+from whichever source can supply it and the entity_id does not depend on
+which, which also means the existing translation and any recorded history
+carry over. The meter wins whenever it reports `cumulativePower` **at all**,
+including the permanent, correct `0` of #302's KRAC: the field being present
+is what decides, not its value, so the file never quietly substitutes a
+different number for a meter reading someone is already looking at. A
+not-yet-fetched stub counts as the meter too, because `ENERGY_METER` includes
+its own entity on that basis and two entities on one key would collapse
+silently in `flatten()`.
+
+One property worth stating plainly: the file is a once-a-day rollup, so this
+sensor steps once a day rather than tracking a meter continuously. Lumpy in
+the energy dashboard, correct in total, and better than the nothing these
+appliances report today.
+
+**Decoding it is where the care went.** The two record shapes put *different
+quantities* in the second field — tenths of a kWh on the `uint32`-leading
+shape, cumulative runtime hours on the KRAC's `uint64`-leading one — so
+misidentifying the layout puts hours in a kWh sensor. #329 proposed keying on
+whether the leading field is a plausible timestamp. That is necessary and
+**not sufficient**: a `uint64`-leading record whose date is a plain Unix
+timestamp puts that timestamp in the low half and zeros in the high half, so
+it reads as a perfectly valid leading `uint32` followed by a value of `0`.
+Caught while writing the tests for exactly that case. `usagedb.records()`
+therefore also refuses a counter that is zero or that never moved across the
+file — on the shape it can read those mean "nothing to publish", and on the
+shape it cannot they are the tell.
 
 **`UsagesDB_reset` — no.** #301 is right. It destroys the only copy of the
 history, and there is nothing for a user to weigh that against.

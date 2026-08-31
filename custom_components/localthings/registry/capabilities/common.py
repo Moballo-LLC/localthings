@@ -13,6 +13,7 @@ against live device dumps:
 
 from datetime import UTC, datetime
 
+from .. import usagedb
 from ..batch import is_stub_rep
 from ..capability import Capability
 from ..entities import (
@@ -495,8 +496,10 @@ ALARMS = Capability(
 # reporting a real value (e.g. a fridge's 93 W) still shows it (issue #6).
 _DEAD_INSTANTANEOUS_POWER = "-500"
 
+HREF_ENERGY_CONSUMPTION = "/energy/consumption/vs/0"
+
 ENERGY_METER = Capability(
-    href="/energy/consumption/vs/0",
+    href=HREF_ENERGY_CONSUMPTION,
     entities=(
         # is_stub_rep(rep) keeps the stub carve-out (see
         # entity._is_included): an explicit exists_fn otherwise bypasses
@@ -778,7 +781,63 @@ SELF_CHECK = Capability(
 # probed reps reach diagnostics without surfacing as coverage gaps.
 FILE_LIST = Capability(href="/file/list/vs/0", poll_tier="probe")
 
-FILE_TRANSFER = Capability(href="/file/transfer/vs/0", poll_tier="probe")
+
+def _meter_reports_cumulative_power(resources) -> bool:
+    """True when /energy/consumption/vs/0 is the better source for energy.
+
+    A stub rep counts as yes: it means "not fetched yet", and
+    ENERGY_METER.energy_kwh includes itself on that basis, so treating it as
+    a no here would create both entities on the same key.
+    """
+    rep = resources.get(HREF_ENERGY_CONSUMPTION)
+    if rep is None:
+        return False
+    if is_stub_rep(rep):
+        return True
+    return "x.com.samsung.da.cumulativePower" in rep
+
+
+def _usage_energy_exists(rep, resources) -> bool:
+    """Bind the file's energy only where the meter resource cannot supply it
+    and the blob actually decodes -- an unreadable payload must produce no
+    entity rather than a permanently-unknown one."""
+    if _meter_reports_cumulative_power(resources):
+        return False
+    return usagedb.cumulative_energy_kwh(rep) is not None
+
+
+FILE_TRANSFER = Capability(
+    href="/file/transfer/vs/0",
+    poll_tier="probe",
+    entities=(
+        # Deliberately the same key as ENERGY_METER's, and mutually exclusive
+        # with it: the two exists_fn are exact complements, so an appliance
+        # gets one `energy_kwh` from whichever source can supply it and the
+        # entity_id does not depend on which. Same shape as the
+        # POWER_GENERIC/POWER_VS_FALLBACK pair above.
+        #
+        # A fallback rather than a second opinion. Where both exist the file
+        # is pure duplication -- measured on a dishwasher, whose single
+        # record matched cumulativePower and cumulativeDate exactly -- and
+        # two total_increasing energy sensors for one physical meter is the
+        # double-count trap issue #329 warns about. Where the meter reports
+        # nothing, though, this is the only copy of the number: issue #285's
+        # washer lost `cumulativePower` from its rep entirely and kept
+        # recording to the file.
+        #
+        # Steps once a day, because the file is a daily rollup rather than a
+        # live counter. Lumpy in the energy dashboard, correct in total, and
+        # better than the nothing these appliances report today.
+        SensorDesc(
+            key="energy_kwh",
+            device_class="energy",
+            state_class="total_increasing",
+            unit="kWh",
+            rep_fn=usagedb.cumulative_energy_kwh,
+            exists_fn=_usage_energy_exists,
+        ),
+    ),
+)
 
 
 UNIVERSAL = (
