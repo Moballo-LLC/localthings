@@ -236,7 +236,7 @@ record := <uint32 LE timestamp><uint32 LE cumulative, tenths of a kWh><uint32 LE
   *not* multiples of 5 tenths, which is the check that separates this from
   the ACs' half-hour-quantised runtime counter.
 
-### The third field is the calendar month
+### The third field tracks the calendar month
 
 Not zero here, and not runtime. It runs 3, 4, 5, 6, 7, 8 across a file
 spanning March to August, and it steps on exactly the five month boundaries.
@@ -246,19 +246,80 @@ Tested against every record: `month(timestamp + offset) == field3` holds for
 enough in the day that the month has already turned in whatever frame the
 counter is kept in.
 
-So the month field is independent evidence that **the timestamps are not in
-the same frame as the rest of the record**, which is the same conclusion the
-dishwasher's `cumulativeDate` vs `cumulativeDateUTC` gave. The dishwasher's
-measured +5 h is consistent with this file, but this file alone does not pin
-the offset — anything from roughly +46 min to +21 h satisfies it. Don't
-read a precise timezone out of this.
+A timezone shift was the first explanation for those five, and it is not the
+right one — see the next section, where the label turns out to mark a
+billing bucket whose baseline is deliberately stamped on the last day of the
+previous month. Worth stating because the shift *would* have fitted: any
+offset from roughly +46 min to +21 h makes the mismatches vanish, including
+the +5 h the dishwasher's `cumulativeDate`/`cumulativeDateUTC` pair
+measures. A fit across that wide a range was never evidence for a particular
+offset, and no timezone should be read out of this file.
+
+### The month field is the firmware's own billing bucket, and it reconciles exactly
+
+The fridge is a `TP1X_REF_21K`, and its `/energy/consumption/vs/0` carries
+the monthly pair this registry already maps to `energy_last_month_kwh` and
+`energy_this_month_kwh`:
+
+```yaml
+x.com.samsung.da.cumulativePower: '1141129'          # 1141.129 kWh
+x.com.samsung.da.monthlyConsumption: '68200'         # 68.200 kWh
+x.com.samsung.da.thismonthlyConsumption: '59229'     # 59.229 kWh
+x.com.samsung.da.instantaneousPower: '151'
+```
+
+Group the blob's records by field 3 and the two monthly figures fall out of
+the file exactly:
+
+| bucket | first record | last record | span |
+| --- | --- | --- | --- |
+| 7 | 2026-06-30 23:14, 1011.2 | 2026-07-30 22:57, 1079.4 | **68.2 kWh** |
+| 8 | 2026-07-31 23:33, 1081.9 | 2026-08-30 21:05, 1141.0 | 59.1 kWh |
+
+- **July, a complete month: 68.2 kWh from the blob against
+  `monthlyConsumption` 68.200 kWh.** Exact.
+- **August, still running: 59.1 kWh to the last record, plus the 0.129 kWh
+  the meter has moved since it was written, is 59.229 — against
+  `thismonthlyConsumption` 59.229 kWh.** Exact.
+- Independently: `cumulativePower − thismonthlyConsumption` is 1081900 Wh,
+  which is the first field-3=8 record's cumulative value **to the watt**.
+
+So field 3 is not merely "the calendar month". It is the label of the
+firmware's own monthly bucket, and the record carrying that label first *is*
+the baseline the monthly counter measures from. That is why the label steps
+on the last day of the previous calendar month rather than the first day of
+the new one, and it is a better explanation of the +0 h mismatches above
+than any timezone story.
+
+The bucket is `cum(last record labelled M) − cum(first record labelled M)`,
+which quietly drops the final day: July's bucket closes 2026-07-30 at
+1079.4 and August's opens 2026-07-31 at 1081.9, so that day's 2.5 kWh lands
+in neither. That is Samsung's arithmetic, not a decode error — the whole
+point is that the blob reproduces it exactly, quirk included.
+
+Not banked as a fixture yet: the capture is two probed resources with no
+`/device/0` batch beside them, and the six `TP1X_REF_21K` fixtures in the
+corpus cannot be narrowed to this unit — `refrigerator_tp1x_ref_21k_us` is
+ruled out (its `cumulativePower` is 1831.9 kWh, above this fridge's
+1141.129, and the counter only climbs), but the other five are all
+consistent with being this appliance at an earlier date. A diagnostics
+download from it would settle both.
+
+Three things this pins down at once. Field 2 is beyond doubt the same
+counter as `cumulativePower` — it now agrees with the live meter, with the
+completed month, and with the running month, on three independent
+subtractions. The 129 Wh between the last record and the live meter is about
+1.5 h of running at this fridge's own average, which is what a once-a-day
+rollup should look like. And on a board that reports no monthly pair, the
+file could *supply* one rather than merely corroborate it.
 
 ### What that means for a parser
 
 **Field 2 is the portable one.** Cumulative energy in tenths of a kWh is now
 confirmed on four families: the washer (#285/#301), the dishwasher and this
-fridge (both measured here), and the `ARTIK051_PRAC_20K`'s `fieldA` (#329,
-which matched `cumulativePower` exactly). That is the value worth an entity.
+fridge (both measured here, the fridge three ways over), and the
+`ARTIK051_PRAC_20K`'s `fieldA` (#329, which matched `cumulativePower`
+exactly). That is the value worth an entity.
 
 **Field 3 is not one thing, and must never be published on a guess.**
 
@@ -266,7 +327,7 @@ which matched `cumulativePower` exactly). That is the value worth an entity.
 | --- | --- |
 | `DA_WM_TP1_21_COMMON` washer (#301) | zero across all 281 records |
 | this dishwasher | zero (its only record) |
-| this fridge | calendar month, 3 → 8 |
+| this `TP1X_REF_21K` fridge | the firmware's monthly bucket label, 3 → 8 |
 | `ARTIK051_PRAC_20K` AC (#329) | cumulative runtime, tenths of an hour |
 
 Four families, three different meanings, one identical byte layout. §3's
