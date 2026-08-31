@@ -1006,20 +1006,28 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._log.debug("sub-poll %s: %s", href, e)
         return results
 
-    def _probe_blocking(self) -> dict[str, dict]:
-        """GET the hrefs no /device/0 batch carries (registry.PROBE_HREFS).
+    def _probe_blocking(self, subdevices: list[Subdevice]) -> dict[str, dict]:
+        """GET the hrefs no /device/0 batch carries (registry.PROBE_HREFS),
+        once per subdevice in `subdevices`.
 
         A 4.04 is the expected answer on boards without the resource, so a
         failure per href is a debug log and an absent key, never a failed
         poll -- same posture as a sibling subdevice going quiet.
 
-        MAIN only. `/oic/res` on the composite AC fixtures advertises
-        UUID-prefixed copies of these hrefs, but nothing has ever read one,
-        and probing every subdevice would multiply the cost of a tier whose
-        whole point is that it stays cheap. Left for whoever has a composite
-        board and a reason.
+        Per subdevice rather than MAIN only, because on a multi-head system
+        the per-head file is the whole point: issue #329 read three heads of
+        one multi-split and got three distinct blobs, each carrying the
+        shared outdoor-unit energy counter alongside *that head's own*
+        runtime hours. Those heads were three config entries on three IPs,
+        so MAIN would have covered them -- but a composite board (issue #177)
+        puts the same several indoor units behind one IP as subdevices, and
+        `/oic/res` on the FAC_BORA fixtures advertises
+        `/<uuid>/file/transfer/vs/0` for exactly that. Probing MAIN alone
+        there would read the master's file and silently miss every sibling's,
+        losing the one number that is genuinely per-unit.
         """
-        return self._poll_hrefs_blocking(list(PROBE_HREFS), timeout=self._POLL_TIMEOUT_S)
+        hrefs = [su.to_actual(href) for su in subdevices for href in PROBE_HREFS]
+        return self._poll_hrefs_blocking(hrefs, timeout=self._POLL_TIMEOUT_S)
 
     # ------------------------------------------------------------------
     # Sub-poll loop (runs between summary polls)
@@ -1870,7 +1878,9 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # registered as covered rather than surfacing as a coverage
                 # gap the moment it appears in `resources`.
                 try:
-                    resources.update(await self.hass.async_add_executor_job(self._probe_blocking))
+                    resources.update(
+                        await self.hass.async_add_executor_job(self._probe_blocking, [MAIN])
+                    )
                 except Exception as e:
                     self._log.debug("probe failed on first discovery: %s", e)
 
@@ -1885,7 +1895,9 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._probe_cycles = 0
                 async with self._session_lock:
                     try:
-                        await self.hass.async_add_executor_job(self._probe_blocking)
+                        await self.hass.async_add_executor_job(
+                            self._probe_blocking, [MAIN, *self.subdevices]
+                        )
                     except Exception as e:
                         self._log.debug("probe cycle failed: %s", e)
         if first_cycle:
@@ -1902,6 +1914,19 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self._async_save_snapshot(resources, candidates)
             self._reconcile_rehydrated()
             resources = self._live_subdevice_resources(resources)
+            # Siblings are probed here rather than beside MAIN's probe above:
+            # `self.subdevices` is still the pre-narrowing candidate list up
+            # there, and _poll_hrefs_blocking applies what it reads straight
+            # to the cache -- which is the one thing the ordering in this
+            # block exists to keep a rejected candidate's resources out of.
+            if self.subdevices:
+                async with self._session_lock:
+                    try:
+                        await self.hass.async_add_executor_job(
+                            self._probe_blocking, list(self.subdevices)
+                        )
+                    except Exception as e:
+                        self._log.debug("subdevice probe failed on first discovery: %s", e)
         sweep_mismatch = False
         if self._observe.mode == MODE_OBSERVE:
             # A mismatch never tears down a still-live OBSERVE session (see

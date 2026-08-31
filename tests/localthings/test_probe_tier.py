@@ -26,6 +26,7 @@ from custom_components.localthings.const import DOMAIN, SUMMARY_INTERVAL_S
 from custom_components.localthings.coordinator import LocalThingsCoordinator
 from custom_components.localthings.registry.by_type import resolve as resolve_registry
 from custom_components.localthings.registry.registry import PROBE_HREFS
+from custom_components.localthings.registry.subdevices import MAIN, Subdevice
 
 from .conftest import _load_fridge_resources as _load_fridge
 
@@ -239,3 +240,89 @@ async def test_the_probe_runs_again_once_its_cycle_count_is_reached(hass, probin
 
     assert len(polls) >= 3
     assert session.gets.count(FILE_TRANSFER) == 2
+
+
+# ---------------------------------------------------------------------------
+# Composite appliances (issue #177): one IP, several indoor subdevices
+# ---------------------------------------------------------------------------
+
+
+def _probe_only_coordinator(hass, entry, session):
+    """A coordinator with a session installed and nothing else running, for
+    exercising _probe_blocking directly."""
+    coordinator = LocalThingsCoordinator(hass, entry)
+    coordinator._session = session
+    return coordinator
+
+
+def test_probe_reads_each_subdevices_own_copy_of_the_file(hass, mock_entry):
+    """The per-head file is the point of the whole feature. Issue #329 read
+    three heads of one multi-split and got three distinct blobs, each pairing
+    the shared outdoor-unit energy counter with *that head's* runtime hours.
+
+    Those heads were three config entries on three IPs, so MAIN alone would
+    have reached them -- but a composite board puts the same several indoor
+    units behind one IP as subdevices, and /oic/res on the FAC_BORA fixtures
+    advertises /<uuid>/file/transfer/vs/0 for exactly that. Probing MAIN only
+    would read the master's file and silently miss every sibling's.
+    """
+    uuid = "6c2dff6d-ee5c-dad1-6a5e-000000000001"
+    sibling = Subdevice(kind="prefixed", key=uuid, seed_path=(uuid, "device", "0"))
+    session = _ProbeSession(answers={})
+    coordinator = _probe_only_coordinator(hass, mock_entry, session)
+
+    coordinator._probe_blocking([MAIN, sibling])
+
+    assert session.gets == [
+        FILE_LIST,
+        FILE_TRANSFER,
+        f"/{uuid}{FILE_LIST}",
+        f"/{uuid}{FILE_TRANSFER}",
+    ]
+
+
+def test_probe_of_an_indexed_sibling_uses_its_own_index(hass, mock_entry):
+    """Pattern A (issue #177's ARTIK051_DONGLE_FAC_18K): siblings are indexed
+    rather than UUID-prefixed, and to_actual rewrites the trailing segment."""
+    sibling = Subdevice(kind="indexed", key="1", seed_path=("device", "1"))
+    session = _ProbeSession(answers={})
+    coordinator = _probe_only_coordinator(hass, mock_entry, session)
+
+    coordinator._probe_blocking([sibling])
+
+    assert session.gets == ["/file/list/vs/1", "/file/transfer/vs/1"]
+
+
+def test_a_single_subdevice_device_probes_exactly_the_bare_hrefs(hass, mock_entry):
+    """MAIN's to_actual is the identity transform, so the ordinary appliance
+    is unaffected by any of the above."""
+    session = _ProbeSession(answers={})
+    coordinator = _probe_only_coordinator(hass, mock_entry, session)
+
+    coordinator._probe_blocking([MAIN])
+
+    assert session.gets == [FILE_LIST, FILE_TRANSFER]
+
+
+async def test_the_periodic_probe_covers_main_and_every_live_subdevice(hass, probing_entry):
+    """The call site, not the primitive above: a sibling materialized at
+    discovery has to keep being re-read, not just read once."""
+    entry, _session, _polls = probing_entry
+    seen: list[list] = []
+
+    with patch.object(LocalThingsCoordinator, "_PROBE_EVERY_N_CYCLES", 1):
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        coordinator: LocalThingsCoordinator = hass.data[DOMAIN][entry.entry_id]
+        sibling = Subdevice(kind="indexed", key="1", seed_path=("device", "1"))
+        coordinator.subdevices = [sibling]
+
+        with patch.object(
+            LocalThingsCoordinator,
+            "_probe_blocking",
+            lambda self, subdevices: seen.append(list(subdevices)) or {},
+        ):
+            await _advance_one_cycle(hass)
+
+    assert seen == [[MAIN, sibling]]

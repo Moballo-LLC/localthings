@@ -426,12 +426,23 @@ never sees. The coordinator then:
   `_async_update_data` rather than a new timer. A counter that ticks in
   half hours and gains one record a day does not need the 30 s summary
   interval; once every 30–60 minutes is generous.
-- **MAIN only, in the end.** The plan was to map each href through
-  `subdevice.to_actual()` so the UUID-prefixed per-head copies the
-  `FAC_BORA` fixtures advertise get read too. Not done: nobody has ever read
-  one, and probing every subdevice multiplies the cost of a tier whose whole
-  justification is that it stays cheap. Left for whoever has a composite
-  board and a reason.
+- maps each href through `subdevice.to_actual()`, so a composite
+  appliance's siblings are probed alongside MAIN. This is not optional
+  polish: #329 read three heads of one multi-split and got three distinct
+  blobs, each pairing the shared outdoor-unit energy counter with *that
+  head's own* runtime hours. Those heads were three config entries on three
+  IPs, so MAIN alone would have reached them — but a composite board (issue
+  #177) puts the same several indoor units behind one IP as subdevices, and
+  `/oic/res` on the `FAC_BORA` fixtures advertises
+  `/<uuid>/file/transfer/vs/0` for exactly that. Probing MAIN alone there
+  reads the master's file and silently misses every sibling's, losing the
+  one number that is genuinely per-unit.
+
+  Siblings are probed *after* `_run_discovery`, not beside MAIN's probe:
+  before it, `self.subdevices` is still the pre-narrowing candidate list,
+  and the probe applies what it reads straight to the state cache — which is
+  the one thing that block's ordering exists to keep a rejected candidate's
+  resources out of.
 
 Cost when nothing is there: one GET per probe href per probe interval, which
 404s. That is why the probe list must stay short and maintainer-curated.
