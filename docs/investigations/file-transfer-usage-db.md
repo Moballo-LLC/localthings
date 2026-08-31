@@ -246,14 +246,27 @@ Tested against every record: `month(timestamp + offset) == field3` holds for
 enough in the day that the month has already turned in whatever frame the
 counter is kept in.
 
-A timezone shift was the first explanation for those five, and it is not the
-right one — see the next section, where the label turns out to mark a
-billing bucket whose baseline is deliberately stamped on the last day of the
-previous month. Worth stating because the shift *would* have fitted: any
-offset from roughly +46 min to +21 h makes the mismatches vanish, including
-the +5 h the dishwasher's `cumulativeDate`/`cumulativeDateUTC` pair
-measures. A fit across that wide a range was never evidence for a particular
-offset, and no timezone should be read out of this file.
+A full diagnostics download from the fridge settles the frame, where the
+blob alone could not. It reports `/file/information/vs/0`
+`timeoffset: "-05:00"` and `/timezone/vs/0` `America/Chicago`, DST on — so
+the device is at UTC−5, and the record stamps read as local wall time put
+every write between 21:05 and 23:59 **local**, i.e. a rollup just before
+local midnight. That also explains the dishwasher's `cumulativeDate` sitting
+exactly 5 h behind its `cumulativeDateUTC`: the bare field is local-as-epoch
+and the `...UTC` one is real UTC, the same pair of frames the firmware keeps
+everywhere.
+
+With the offset known, the five month-boundary records say something
+sharper. `month(ts + 5 h) == field3` holds for all 181 — that is, **field 3
+is the calendar month in UTC while the timestamp is local**. The two
+descriptions of the field, "UTC calendar month" and "the bucket label of
+the next section", are the same fact: the monthly counter rolls at UTC
+midnight, which lands mid-evening local, so the first record of a new bucket
+is stamped on the last local day of the old month.
+
+Worth recording that the timezone story looked unfalsifiable from the blob
+alone — any offset from roughly +46 min to +21 h made the five mismatches
+vanish — and only the device's own reported offset picked one out.
 
 ### The month field is the firmware's own billing bucket, and it reconciles exactly
 
@@ -297,13 +310,19 @@ which quietly drops the final day: July's bucket closes 2026-07-30 at
 in neither. That is Samsung's arithmetic, not a decode error — the whole
 point is that the blob reproduces it exactly, quirk included.
 
-Not banked as a fixture yet: the capture is two probed resources with no
-`/device/0` batch beside them, and the six `TP1X_REF_21K` fixtures in the
-corpus cannot be narrowed to this unit — `refrigerator_tp1x_ref_21k_us` is
-ruled out (its `cumulativePower` is 1831.9 kWh, above this fridge's
-1141.129, and the counter only climbs), but the other five are all
-consistent with being this appliance at an earlier date. A diagnostics
-download from it would settle both.
+The appliance is a `TP1X_REF_21K` / `RF29DB9750QLAA`, and its diagnostics
+download confirms it is **not** any of the six `TP1X_REF_21K` fixtures
+already in the corpus — its `modelNum` third field (`00176141|0000085003…`)
+matches none of them. It also reports `unbound_hrefs: []`, so it needs no
+new capability work; the reason to bank it as a fixture is the usage file,
+not entity coverage.
+
+One detail from that download worth keeping: both file hrefs appear in the
+dump's `resources` map even on a build with no probe tier, because
+`_raw_read_blocking` applies whatever it reads to the state cache. So a
+maintainer who runs `read_resource` and *then* downloads diagnostics gets
+the probed resources in the dump for free — a usable stopgap for gathering
+the census in §3's step 3 before the probe tier exists.
 
 Three things this pins down at once. Field 2 is beyond doubt the same
 counter as `cumulativePower` — it now agrees with the live meter, with the
