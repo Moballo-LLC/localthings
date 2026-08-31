@@ -1,7 +1,10 @@
 """Tests for the shared laundry capabilities (washer/dryer/dishwasher)."""
 
+from typing import ClassVar
+
 from custom_components.localthings.registry.capabilities import laundry
 from custom_components.localthings.registry.entities import SelectDesc
+from tests.conftest import FIXTURES, _load_device
 
 
 class TestCourseHelpers:
@@ -295,6 +298,412 @@ class TestCourseCodesFromSupportedOptions:
             "8E",
             "8F",
         ]
+
+
+class TestCourseOptionGroups:
+    """The payload behind each supportedOptions record: 2-byte groups of
+    <kind nibble><default nibble> <mask>, the mask indexing that option's
+    own supported<Option> list.
+
+    Four kinds are named -- 0xD dry off a DV5000T's per-course panel
+    report, 0x8/0x9/0xA off a WW6500's; both readings are checked against
+    the corpus in TestCourseOptionGroupsAcrossCorpus. The evidence, and the
+    WW6600R combo that carries its dry dial on 0xB instead, is written up
+    in docs/investigations/course-option-groups.md.
+    """
+
+    # DA_WM_TP1_21_COMMON DV9400B, from dryer_tp1_21_drum_clean: K=3, so a
+    # single dry group per record. 16 (Cotton) allows Damp/Less/Normal/More
+    # by mask 0x1E and defaults to Normal; 23 (Quick Dry 35') allows none.
+    _DRYER: ClassVar[dict] = {
+        "/course/vs/0": {
+            "x.com.samsung.da.options": ["Course_16"],
+            "x.com.samsung.da.supportedOptions": ["116D31E29D31E23D00017D31E"],
+        }
+    }
+
+    def test_decodes_the_selected_course_by_default(self):
+        assert laundry.course_option_mask(self._DRYER, laundry.OPTION_KIND_DRY) == (3, [1, 2, 3, 4])
+
+    def test_decodes_a_named_course(self):
+        mask = laundry.course_option_mask(self._DRYER, laundry.OPTION_KIND_DRY, course="29")
+        assert mask == (3, [1, 2, 3, 4])
+
+    def test_a_course_allowing_nothing_reports_an_empty_list(self):
+        """Distinct from None: the device does have an opinion here, and it
+        is that this course takes no dry setting at all."""
+        assert laundry.course_option_mask(self._DRYER, laundry.OPTION_KIND_DRY, course="23") == (
+            0,
+            [],
+        )
+
+    def test_none_when_the_course_is_not_in_the_table(self):
+        assert laundry.course_option_mask(self._DRYER, laundry.OPTION_KIND_DRY, course="ZZ") is None
+
+    def test_none_when_the_record_has_no_group_of_that_kind(self):
+        assert laundry.course_option_mask(self._DRYER, 0x9) is None
+
+    def test_none_without_supported_options(self):
+        assert laundry.course_option_mask({}, laundry.OPTION_KIND_DRY) is None
+        assert laundry.course_option_mask({"/course/vs/0": {}}, laundry.OPTION_KIND_DRY) is None
+
+    def test_non_hex_payload_says_nothing_rather_than_raising(self):
+        """The width guards alone can't tell a record table from arbitrary
+        text, so a payload that divides evenly but isn't hex still reaches
+        the group parse. It has to decline, not raise into whichever entity
+        happened to ask."""
+        resources = {
+            "/course/vs/0": {
+                "x.com.samsung.da.options": ["Course_16"],
+                "x.com.samsung.da.supportedOptions": ["016GG000017GG0000"],
+            }
+        }
+        assert laundry.course_option_mask(resources, laundry.OPTION_KIND_DRY) is None
+
+    def test_default_index_is_into_the_list_not_the_allowed_set(self):
+        """A dishwasher reports default 0 while allowing only index 1, so a
+        caller cannot treat the default as a member of the allowed set."""
+        resources = _load_device("dishwasher")
+        found = laundry.course_option_mask(resources, laundry.OPTION_KIND_DRY, course="83")
+        assert found == (0, [1])
+
+    def test_the_stated_width_beats_a_narrower_passing_split(self):
+        """Where the header and the smallest-that-parses scan disagree, the
+        header wins. No shipped dump is that case -- the two agree on all
+        seventeen (test_the_header_states_the_record_width) -- so it takes a
+        constructed one: twelve bytes split six ways gives unique first
+        bytes that include the selected course, so the scan's guards accept
+        a two-byte width, while the header says three.
+        """
+        course_rep = {
+            "x.com.samsung.da.options": ["Course_11"],
+            "x.com.samsung.da.supportedOptions": ["1110022334400550066778800"],
+        }
+        records = laundry._course_records(course_rep)
+        assert list(records) == ["11", "33", "55", "77"]
+        assert len(next(iter(records.values()))) == 6  # three bytes, not two
+
+    def test_the_edit_course_list_still_arbitrates_where_the_header_cannot(self):
+        """Same twelve bytes, but the header now says one byte per record --
+        a width whose first bytes repeat, so it states nothing usable and
+        the scan takes over. The scan's own smallest passing width is two
+        bytes; the editCourseList is what pushes it to three, and it is the
+        only thing that can once the header is out.
+        """
+        course_rep = {
+            "x.com.samsung.da.options": ["Course_11"],
+            "x.com.samsung.da.supportedOptions": ["0110022334400550066778800"],
+        }
+        assert list(laundry._course_records(course_rep)) == ["11", "22", "44", "55", "66", "88"]
+
+        records = laundry._course_records(course_rep, must_cover={"11", "33", "55", "77"})
+        assert list(records) == ["11", "33", "55", "77"]
+
+    def test_an_unsatisfiable_edit_course_list_falls_back_rather_than_going_dark(self):
+        """A device that lists a course its supportedOptions does not carry
+        -- a personal or cloud slot -- must not switch the decoder off for
+        every kind on the whole device. No width can cover 'AA' here, so the
+        smallest passing split stands, which is what the course-list
+        fallback would have returned anyway.
+        """
+        course_rep = {
+            "x.com.samsung.da.options": ["Course_11"],
+            "x.com.samsung.da.supportedOptions": ["0110022334400550066778800"],
+        }
+        records = laundry._course_records(course_rep, must_cover={"11", "AA"})
+        assert list(records) == ["11", "22", "44", "55", "66", "88"]
+
+    def test_groups_are_read_on_their_own_boundaries(self):
+        """Groups are two bytes each after the course byte, so the scan has
+        to step four hex digits at a time. A window landing half a group
+        out would still parse -- and answer for a kind the record does not
+        carry -- rather than failing, so nothing else in the corpus would
+        notice the stride being wrong.
+
+        Here every record is <course><A8 9D><31 E2>, two groups -- hence the
+        header of 2. Read correctly there is no rinse (0x9) group at all;
+        read two digits out of step, the bytes '9D 31' look exactly like one.
+        """
+        course_rep = {
+            "x.com.samsung.da.options": ["Course_01"],
+            "x.com.samsung.da.supportedOptions": [
+                "2" + "".join(f"{code:02X}A89D31E2" for code in range(1, 7))
+            ],
+        }
+        resources = {"/course/vs/0": course_rep}
+        assert laundry._course_records(course_rep)["01"] == "01A89D31E2"
+
+        assert laundry.course_option_mask(resources, 0x9) is None
+        # The real group, whose mask reaches bit 7 -- the top of the byte,
+        # which no *named* kind exercises in the corpus (washer_wa8000t's
+        # unnamed 0x6 does, with mask 0xA1).
+        assert laundry.course_option_mask(resources, 0xA) == (8, [0, 2, 3, 4, 7])
+
+    def test_reads_past_a_group_of_another_kind(self):
+        """A DVE50A8600 record is <course><kind-8 group><dry group>, so the
+        dry mask is only reachable by scanning past a group of another kind.
+
+        Driven off the real dump rather than a trimmed copy of it: the
+        record width is recovered from how the whole table divides, so a
+        two-record excerpt legitimately resolves to a different width than
+        the nineteen-record original.
+        """
+        resources = _load_device("dryer_dve50a8600")
+        levels = resources["/washer/vs/0"]["x.com.samsung.da.supportedDryLevel"]
+        assert levels == ["None", "Damp", "Less", "Normal", "More", "Very"]
+
+        default, allowed = laundry.course_option_mask(resources, laundry.OPTION_KIND_DRY)
+        assert [levels[i] for i in allowed] == ["Damp", "Less", "Normal", "More", "Very"]
+        assert levels[default] == "Normal"
+        # The kind-8 group ahead of it decodes too, unnamed on purpose.
+        assert laundry.course_option_mask(resources, 0x8) is not None
+
+
+class TestCourseOptionGroupsAcrossCorpus:
+    """Structure invariants over every shipped dump, so a future fixture
+    that decodes differently fails here rather than silently mis-gating an
+    entity -- and, alongside them, the individual dumps the kind naming
+    rests on, which are what those invariants are checking is still true."""
+
+    def _dumps(self):
+        for path in sorted(FIXTURES.glob("*_device.json")):
+            yield path.name, _load_device(path.name[: -len("_device.json")])
+
+    def test_the_header_states_the_record_width(self):
+        """The header nibble is the group count, so 1 + 2*hdr bytes is the
+        record width -- true on every dump here, across six distinct widths
+        (1, 3, 5, 7, 9, 11 bytes). This is what lets _course_records take a
+        stated width instead of guessing the smallest one that parses.
+        """
+        disagreeing = []
+        for name, resources in self._dumps():
+            course_rep = resources.get("/course/vs/0") or {}
+            raw = course_rep.get("x.com.samsung.da.supportedOptions")
+            hexstr = raw[0] if isinstance(raw, list) and raw else raw
+            records = laundry._course_records(course_rep)
+            if not isinstance(hexstr, str) or not records:
+                continue
+            header = int(hexstr[0], 16)
+            width = len(next(iter(records.values()))) // 2
+            if width != 1 + 2 * header:
+                disagreeing.append((name, header, width))
+        assert disagreeing == []
+
+    def test_the_stated_width_reproduces_the_scan_it_replaced(self):
+        """Nothing shipped changes shape: on every dump the header-derived
+        split is the one the smallest-that-parses scan already returned, so
+        no course list -- and no golden that depends on one -- moves.
+        """
+        differing = []
+        for name, resources in self._dumps():
+            course_rep = resources.get("/course/vs/0") or {}
+            raw = course_rep.get("x.com.samsung.da.supportedOptions")
+            hexstr = raw[0] if isinstance(raw, list) and raw else raw
+            if not isinstance(hexstr, str):
+                continue
+            # A non-hex header states nothing, which is how the scan gets
+            # driven from here without a second entry point into it.
+            scanned = laundry._course_records(
+                {**course_rep, "x.com.samsung.da.supportedOptions": "Z" + hexstr[1:]}
+            )
+            if list(scanned) != list(laundry._course_records(course_rep)):
+                differing.append(name)
+        assert differing == []
+
+    def test_a_course_code_is_matched_case_insensitively(self):
+        """select.py lowercases an entity's options for the translation
+        catalog, so a caller that reaches for what the entity displays
+        rather than the raw Course_ token still has to get an answer --
+        silently getting "no opinion" is how a gate no-ops without anyone
+        noticing."""
+        resources = _load_device("dryer_dv6800n")
+        upper = laundry.course_option_mask(resources, laundry.OPTION_KIND_DRY, course="9A")
+        assert upper == laundry.course_option_mask(resources, laundry.OPTION_KIND_DRY, course="9a")
+        assert upper is not None
+
+    def test_every_record_is_a_course_byte_plus_whole_groups(self):
+        odd = []
+        for name, resources in self._dumps():
+            records = laundry._course_records(resources.get("/course/vs/0") or {})
+            for code, record in records.items():
+                # hex chars: 2 for the course byte, then 4 per group.
+                if (len(record) - 2) % 4:
+                    odd.append((name, code, record))
+        assert odd == []
+
+    def test_confirmed_ww6500_course_matches_its_panel(self):
+        """A WW6500 owner read one course's three dials off the panel:
+        Cold/20/30/40 with no "None" offered, every rinse count including
+        none, and every spin including rinse-hold. Two of its fourteen
+        courses carry exactly those sets (they differ only in defaults), so
+        this pins the sets rather than the course code -- which is all the
+        kind naming rests on.
+        """
+        resources = _load_device("washer_ww6500")
+        washer = resources["/washer/vs/0"]
+        lists = (
+            (laundry.OPTION_KIND_WATER_TEMPERATURE, "supportedWaterTemperature"),
+            (laundry.OPTION_KIND_RINSE, "supportedRinseCycles"),
+            (laundry.OPTION_KIND_SPIN, "supportedSpinLevel"),
+        )
+        reported = (
+            ["Cold", "20", "30", "40"],
+            ["0", "1", "2", "3", "4", "5"],
+            ["RinseHold", "NoSpin", "400", "800", "1200", "1400"],
+        )
+        matching = []
+        for code in laundry.cycle_options(resources):
+            decoded = []
+            for kind, field in lists:
+                found = laundry.course_option_mask(resources, kind, course=code)
+                supported = washer[f"x.com.samsung.da.{field}"]
+                decoded.append([supported[i] for i in found[1]] if found else None)
+            if tuple(decoded) == reported:
+                matching.append(code)
+        assert matching == ["5C", "61"]
+
+    def test_spin_cannot_be_rinse_on_a_list_length_argument(self):
+        """The panel reading above cannot in fact tell rinse from spin: on
+        both courses that match it the two masks are 0x3F alike, so swapping
+        the constants leaves it passing. This is the independent structural
+        half -- on the `washer` dump 0xA addresses index 6, which a
+        six-entry supportedRinseCycles cannot hold, so 0xA is not rinse
+        whatever an owner reports. 0x9 tops out at index 5 there, exactly
+        what that list allows."""
+        resources = _load_device("washer")
+        washer = resources["/washer/vs/0"]
+        assert len(washer["x.com.samsung.da.supportedRinseCycles"]) == 6
+        top = {}
+        for code in laundry._course_records(resources["/course/vs/0"]):
+            for kind in (laundry.OPTION_KIND_RINSE, laundry.OPTION_KIND_SPIN):
+                found = laundry.course_option_mask(resources, kind, course=code)
+                if found and found[1]:
+                    top[kind] = max(top.get(kind, 0), max(found[1]))
+        assert top[laundry.OPTION_KIND_SPIN] == 6
+        assert top[laundry.OPTION_KIND_RINSE] == 5
+
+    def test_the_combo_carries_its_dry_dial_on_0xb_not_0xd(self):
+        """Recorded so the next change does not re-derive it: the WW6600R
+        combo is the only board here with a real multi-entry
+        supportedDryLevel, and it has no 0xD group at all -- its dry dial is
+        0xB, dry-only courses dropping "None" and defaulting to Cupboard.
+        A gate keyed on 0xD alone would silently no-op on the one board
+        family that already ships a writable dry_level select.
+
+        0xB stays unnamed: washer_dryer_onebody_awm is also a combo and
+        uses 0xD, so this is not a rule the corpus can state yet. See
+        docs/investigations/course-option-groups.md.
+        """
+        resources = _load_device("washer_dryer_combo")
+        levels = resources["/washer/vs/0"]["x.com.samsung.da.supportedDryLevel"]
+        assert len(levels) == 8
+
+        def decode(kind, course):
+            found = laundry.course_option_mask(resources, kind, course=course)
+            return None if found is None else (levels[found[0]], [levels[i] for i in found[1]])
+
+        # Pinned, so "no course carries 0xD" cannot pass by decoding nothing.
+        records = laundry._course_records(resources["/course/vs/0"])
+        assert len(records) == 24
+        assert all(decode(laundry.OPTION_KIND_DRY, code) is None for code in records)
+        wash_and_dry = ["None", "Cupboard", "30", "60", "90"]
+        assert decode(0xB, "1C") == ("None", wash_and_dry)
+        assert decode(0xB, "36") == ("Cupboard", wash_and_dry[1:])  # dry-only
+        assert decode(0xB, "24") == ("None", [])  # wash-only
+
+    def test_dv6800n_dry_policy_agrees_with_the_other_board_family(self):
+        """The DV6800N is the one dump carrying both a dry-level (0xD) and a
+        dry-time (0xE) group, and its courses are labelled -- so it is where
+        the decode can be sanity-checked against meaning rather than bytes.
+
+        Its policy lands course-for-course on what a DV5000T owner reported
+        from their panel, despite a different board family and a different
+        course-code space (Table_00 here, Table_03 there): full range on
+        cottons/mixed/synthetics, a single fixed level on wool and iron dry,
+        a different single level on bedding/delicates, a timed dry instead
+        of a level on the air and time courses, and neither on Quick Dry.
+        Two unrelated code spaces would not agree like that on a mask read
+        at the wrong offset.
+        """
+        resources = _load_device("dryer_dv6800n")
+        levels = resources["/washer/vs/0"]["x.com.samsung.da.supportedDryLevel"]
+        times = resources["/washer/vs/0"]["x.com.samsung.da.supportedDryTime"]
+
+        policy = {}
+        for code in laundry.cycle_options(resources):
+            dry = laundry.course_option_mask(resources, laundry.OPTION_KIND_DRY, course=code)
+            timed = laundry.course_option_mask(resources, 0xE, course=code)
+            policy[code] = (
+                [levels[i] for i in dry[1]] if dry else [],
+                [times[i] for i in timed[1]] if timed else [],
+            )
+
+        # No course offers both -- the mutual exclusion the DV5000T owner
+        # described, corroborated here on a board they have never seen.
+        assert [c for c, (lv, tm) in policy.items() if lv and tm] == []
+
+        assert policy["9A"][0] == ["1", "2", "3"]  # Cotton
+        assert policy["B5"][0] == ["1"]  # Wool
+        assert policy["93"][0] == ["1"]  # Iron Dry
+        assert policy["A5"][0] == ["2"]  # Bedding
+        assert policy["EB"][0] == ["2"]  # Delicates
+        assert policy["98"] == ([], [])  # Quick Dry 35 -- neither
+        assert policy["7F"][1] == ["00:30:00", "01:00:00", "01:30:00", "02:00:00", "02:30:00"]
+
+    def test_live_values_sit_inside_their_courses_decoded_set(self):
+        """The strongest cross-check available without hardware: whatever
+        each device currently reports for temperature/rinse/spin/dry has to
+        be something its selected course's mask actually permits. A mask
+        decoded at the wrong offset would put a live value outside its own
+        allowed set almost immediately.
+
+        An empty mask is skipped rather than failed -- a cloud Download
+        slot declares no ranges for any of its kinds while still holding
+        live values, because the downloaded program supplies them.
+        """
+        pairs = (
+            (laundry.OPTION_KIND_WATER_TEMPERATURE, "waterTemperature"),
+            (laundry.OPTION_KIND_RINSE, "rinseCycles"),
+            (laundry.OPTION_KIND_SPIN, "spinLevel"),
+            (laundry.OPTION_KIND_DRY, "dryLevel"),
+        )
+        checked, outside, overflowing = 0, [], []
+        for name, resources in self._dumps():
+            washer = resources.get("/washer/vs/0") or {}
+            for kind, field in pairs:
+                supported = washer.get(f"x.com.samsung.da.supported{field[0].upper()}{field[1:]}")
+                live = washer.get(f"x.com.samsung.da.{field}")
+                found = laundry.course_option_mask(resources, kind)
+                if not supported or live is None or not found or not found[1]:
+                    continue
+                checked += 1
+                # A bit past the end of the list is the failure, not
+                # something to filter away: dropping those would turn a
+                # wide garbage mask into "everything allowed", which any
+                # live value then trivially satisfies.
+                if max(found[1]) >= len(supported):
+                    overflowing.append((name, field, found[1], len(supported)))
+                    continue
+                allowed = [supported[i] for i in found[1]]
+                if live not in allowed:
+                    outside.append((name, field, live, allowed))
+        assert overflowing == []
+        assert outside == []
+        assert checked >= 12, f"expected the corpus to exercise this, saw {checked}"
+
+    def test_dry_masks_stay_inside_the_devices_own_supported_list(self):
+        """The mask indexes supportedDryLevel, so a bit past its end would
+        mean the record is being split at the wrong width."""
+        out_of_range = []
+        for name, resources in self._dumps():
+            levels = (resources.get("/washer/vs/0") or {}).get("x.com.samsung.da.supportedDryLevel")
+            if not levels:
+                continue
+            for code in laundry._course_records(resources.get("/course/vs/0") or {}):
+                found = laundry.course_option_mask(resources, laundry.OPTION_KIND_DRY, course=code)
+                if found and found[1] and max(found[1]) >= len(levels):
+                    out_of_range.append((name, code, found, len(levels)))
+        assert out_of_range == []
 
 
 class TestCycleSelect:

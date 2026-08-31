@@ -250,6 +250,174 @@ def drum_clean_last_cleaned(rep):
         return None
 
 
+# ---------------------------------------------------------------------------
+# supportedOptions -- what each course permits.
+#
+# A 1-nibble header followed by one fixed-width record per selectable
+# course: the course's own hex code, then zero or more 2-byte groups.
+#
+#   <hdr:1 nibble> ( <course:1> ( <kind:nibble><default:nibble> <mask:1> )* )*
+#
+# The header is the group count, so it states the record width: 1 + 2*hdr
+# bytes. True on all 17 dumps here, across six distinct widths, and it
+# reproduces the codes the old smallest-that-parses scan derived on every
+# one of them -- see _course_records, which keeps that scan as a fallback.
+#
+# The mask indexes that option's own supported<Option> list, and so does
+# the default nibble -- but into the list, not into the mask: a dishwasher
+# reports default 0 with a mask allowing only index 1. It is one byte, so
+# it cannot address past index 7: three boards carry an 11- or 13-entry
+# supportedDryTime, and none of them carries a group for it.
+#
+# Four kinds are named: 0x8 water temperature, 0x9 rinse and 0xA spin from a
+# WW6500 panel reading plus a list-length argument (the reading alone cannot
+# separate rinse from spin), 0xD dry from a DV5000T's. The rest stay unnamed,
+# 0xB included -- but 0xB, not 0xD, is the dry dial on the WW6600R combo,
+# which carries no 0xD at all, so a gate keyed on 0xD alone silently no-ops
+# there. Evidence for all of it in docs/investigations/course-option-groups.md.
+#
+# A kind is not an entity name: dishwashers carry 0xD with no
+# supportedDryLevel at all (their dry setting is heated_dry), so callers key
+# the mask against their own list rather than assuming what it counts.
+#
+# Two things a caller cannot infer from the bytes:
+#
+#   - A mask is what the device advertises, not what it enforces. A WW6500
+#     takes only 2-5 rinses on Baby Care -- on its own panel, not just in
+#     SmartThings -- where the mask allows all six. Gating on one offers at
+#     most a little too much, which the appliance then refuses.
+#   - An empty mask is NOT automatically "nothing is selectable". On a
+#     dryer's Quick Dry it is, but a washer's cloud Download slot reports
+#     empty masks for every kind while still holding live values, because
+#     the downloaded program supplies its own. That call is the caller's.
+# ---------------------------------------------------------------------------
+
+OPTION_KIND_WATER_TEMPERATURE = 0x8
+OPTION_KIND_RINSE = 0x9
+OPTION_KIND_SPIN = 0xA
+OPTION_KIND_DRY = 0xD
+
+
+def _course_records(course_rep, must_cover=None):
+    """{course code: record hex} from supportedOptions, or {} if unreadable.
+
+    The header states the width (1 + 2*hdr bytes), so that split is tried
+    first and taken whenever it satisfies the guards below. The
+    smallest-that-parses scan those guards were written for stays as the
+    fallback: it is what every course list shipped so far was derived from,
+    and the header rule reproduces it exactly on all 17 dumps, so nothing
+    rests on the header being right about a board none of us has seen.
+
+    `must_cover` is a further check, not a search: the split's codes must
+    include every code given. Callers that can see a live editCourseList
+    pass it. An unsatisfiable one no longer means "say nothing" -- a device
+    that lists a course supportedOptions does not carry (a personal or
+    cloud slot, say) would otherwise switch the decoder off wholesale, and
+    silently, which is the failure mode this module is most anxious about.
+    A covering split wins; failing that, the smallest passing one does.
+    """
+    raw = course_rep.get("x.com.samsung.da.supportedOptions")
+    hexstr = raw[0] if isinstance(raw, list) and raw else raw
+    if not isinstance(hexstr, str) or len(hexstr) < 3:
+        return {}
+    body = hexstr[1:]
+    if len(body) % 2:
+        return {}
+    total_bytes = len(body) // 2
+    current = option_value(course_rep.get("x.com.samsung.da.options"), "Course")
+
+    def split(k):
+        """Records at a width of k bytes, or None if k can't be the width."""
+        if k < 1 or total_bytes % k:
+            return None
+        n = total_bytes // k
+        # Two records minimum: k == total_bytes satisfies every guard below
+        # trivially, so a table of one is indistinguishable from garbage.
+        if n < 2:
+            return None
+        records = [body[i * k * 2 : (i + 1) * k * 2] for i in range(n)]
+        firsts = [r[:2] for r in records]
+        if len(set(firsts)) != n:
+            return None
+        if current is not None and current not in firsts:
+            return None
+        return dict(zip(firsts, records, strict=True))
+
+    try:
+        stated = split(1 + 2 * int(hexstr[0], 16))
+    except ValueError:
+        stated = None  # header isn't hex, so it states nothing
+    if stated is not None and (not must_cover or must_cover <= set(stated)):
+        return stated
+
+    fallback = None
+    for k in range(1, total_bytes + 1):
+        records = split(k)
+        if records is None:
+            continue
+        if must_cover and not must_cover <= set(records):
+            fallback = fallback or records
+            continue
+        return records
+    return fallback or {}
+
+
+def course_option_mask(resources, kind, course=None):
+    """(default index, allowed indices) for `kind` on the selected course.
+
+    None when this device says nothing usable -- no supportedOptions, an
+    unrecognized course, or no group of that kind on the record. Callers
+    treat that as "no opinion" rather than "nothing allowed": several
+    boards carry supported<Option> lists with no supportedOptions groups at
+    all, and refusing everything there would be worse than not gating.
+
+    The default index is into the same supported<Option> list as the
+    allowed indices, but it is NOT necessarily one of them -- a dishwasher
+    reports default 0 alongside a mask allowing only index 1. Callers that
+    want a fallback value have to decide for themselves whether an
+    out-of-set default is usable.
+
+    Where the device also publishes an editCourseList, it is handed to
+    _course_records as a check on the split -- free here, and worth having
+    where the header and the scan could disagree.
+
+    `course` is matched case-insensitively. Device-side codes are uppercase
+    hex, but select.py lowercases an entity's options for the translation
+    catalog, so a caller reaching for what the entity displays rather than
+    the raw Course_ token would otherwise get a silent "no opinion".
+    """
+    course_rep = resources.get("/course/vs/0") or {}
+    edit_list = parse_edit_course_list(
+        (resources.get("/wm/editcourse/vs/0") or {}).get("x.com.samsung.da.editCourseList")
+    )
+    records = _course_records(course_rep, must_cover=set(edit_list))
+    if not records:
+        return None
+    if course is None:
+        course = option_value(course_rep.get("x.com.samsung.da.options"), "Course")
+    if not isinstance(course, str):
+        return None
+    record = {code.upper(): r for code, r in records.items()}.get(course.upper())
+    if record is None:
+        return None
+    for i in range(2, len(record), 4):
+        group = record[i : i + 4]
+        if len(group) < 4:
+            break
+        try:
+            head = int(group[:2], 16)
+            mask = int(group[2:], 16)
+        except ValueError:
+            # Not hex after all, so this split is not a record table --
+            # the width guards alone can't tell. Say nothing rather than
+            # raise into whatever entity asked.
+            return None
+        if head >> 4 != kind:
+            continue
+        return head & 0xF, [bit for bit in range(8) if mask >> bit & 1]
+    return None
+
+
 def _course_codes_from_supported_options(course_rep):
     """Fallback for an empty/missing editCourseList: derive the selectable
     course list from /course/vs/0's own supportedOptions instead (issue #1:
@@ -263,39 +431,18 @@ def _course_codes_from_supported_options(course_rep):
     evenly into `header + N * K bytes` with fully unique first bytes across
     all N records, at the record's true byte width.
 
-    Two conservative guards rather than guessing further: the derived codes
-    must all be distinct, and must include whatever course is currently
-    selected. If no split satisfies both, this returns [].
+    K is the width the header states, checked by two conservative guards
+    rather than trusted outright: the derived codes must all be distinct,
+    and must include whatever course is currently selected. Where the
+    header doesn't hold up, the smallest passing K wins instead -- the
+    heuristic this fallback shipped with, kept because every course list
+    derived so far came out of it. If nothing passes, this returns [].
 
-    Among splits that satisfy both, the smallest passing K wins -- more
-    than one K reliably passes on real data, and smallest-K-wins matches
-    the confirmed answer on all six dumps checked, though it's a heuristic
-    rather than a proof. Not guarded further: course tables are typically
-    large enough that colliding by chance on both checks is unlikely, and
-    no device seen so far needs it.
+    The record payload behind those first bytes is decoded by
+    course_option_mask above; both share _course_records, so the split
+    they see can never drift apart.
     """
-    raw = course_rep.get("x.com.samsung.da.supportedOptions")
-    hexstr = raw[0] if isinstance(raw, list) and raw else raw
-    if not isinstance(hexstr, str) or len(hexstr) < 3:
-        return []
-    body = hexstr[1:]
-    if len(body) % 2:
-        return []
-    total_bytes = len(body) // 2
-    current = option_value(course_rep.get("x.com.samsung.da.options"), "Course")
-    for k in range(1, total_bytes + 1):
-        if total_bytes % k:
-            continue
-        n = total_bytes // k
-        if n < 2:
-            continue
-        firsts = [body[i * k * 2 : i * k * 2 + 2] for i in range(n)]
-        if len(set(firsts)) != n:
-            continue
-        if current is not None and current not in firsts:
-            continue
-        return firsts
-    return []
+    return list(_course_records(course_rep))
 
 
 def option_tokens(*pairs):
