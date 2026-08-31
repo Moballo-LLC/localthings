@@ -121,9 +121,14 @@ def test_runtime_requires_the_half_hour_quantisation():
     assert usagedb.cumulative_runtime_hours(_rep(blob)) is None
 
 
-def test_runtime_requires_the_counter_to_move():
+def test_runtime_survives_a_head_that_sat_idle():
+    """A multi-split head idle for the whole window has a flat but real
+    running total. Refusing it would make the sensor vanish exactly when the
+    appliance is off -- and would hand the file back to the energy path,
+    whose scale is not known on that board."""
     blob = _synthetic([(100, 500), (120, 500), (140, 500)])
-    assert usagedb.cumulative_runtime_hours(_rep(blob)) is None
+    assert usagedb.cumulative_runtime_hours(_rep(blob)) == 50.0
+    assert usagedb.cumulative_energy_kwh(_rep(blob)) is None
 
 
 def test_runtime_refuses_a_backwards_counter():
@@ -211,11 +216,22 @@ def test_records_out_of_time_order_are_refused():
     assert usagedb.records(_rep(blob)) is None
 
 
-def test_an_implausible_gap_between_records_is_refused():
-    """A daily file does not skip two years. A jump that large means the
-    field being read as a timestamp is not one."""
+def test_a_long_gap_between_records_is_kept():
+    """One record per day the appliance actually *ran* -- #301 notes a
+    25th-to-29th gap on an AC -- so a seasonally-used unit legitimately skips
+    months. An earlier bound here threw the whole file away for that, taking
+    the appliance's entities with it."""
     blob = struct.pack("<III", 1_780_000_000, 10, 0) + struct.pack("<III", 1_850_000_000, 20, 0)
-    assert usagedb.records(_rep(blob)) is None
+    assert usagedb.cumulative_energy_kwh(_rep(blob)) == 2.0
+
+
+def test_energy_is_refused_on_a_third_field_that_matches_no_known_family():
+    """The scale gate is a positive identification, not "isn't runtime": a
+    third field that is neither all-zero nor a month label could be either
+    scale, and guessing costs a factor of 100."""
+    blob = _synthetic([(100, 40), (120, 41), (140, 42)])
+    assert usagedb.cumulative_energy_kwh(_rep(blob)) is None
+    assert usagedb.cumulative_runtime_hours(_rep(blob)) is None
 
 
 @pytest.mark.parametrize(

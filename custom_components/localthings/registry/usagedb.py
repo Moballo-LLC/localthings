@@ -26,11 +26,14 @@ zero, or which never moves across the file, is refused too: on the shape
 this module can read those mean "nothing to report", and on the shape it
 cannot they are the tell.
 
-The third field is deliberately not interpreted here. It is zero on a
-`DA_WM_TP1_21_COMMON` washer and on a dishwasher, the firmware's monthly
-billing bucket on a `TP1X_REF_21K` fridge, and cumulative runtime hours on
-an `ARTIK051_PRAC_20K` -- four families, one byte layout, three meanings,
-and nothing in the bytes to say which. See
+The third field carries a different quantity on every family measured: zero
+on a `DA_WM_TP1_21_COMMON` washer and on a dishwasher, the firmware's
+monthly billing bucket on a `TP1X_REF_21K` fridge, and cumulative runtime
+hours on an `ARTIK051_PRAC_20K`. Four families, one byte layout, three
+meanings, and nothing in the bytes to say which -- so it is classified, not
+assumed, and the classification decides both what is published from it and
+whether the *second* field's scale is known (see
+`_energy_scale_is_confirmed`). See
 docs/investigations/file-transfer-usage-db.md.
 """
 
@@ -51,10 +54,12 @@ _RECORD = struct.Struct("<III")
 _TS_MIN = 1_420_070_400  # 2015-01-01
 _TS_MAX = 4_102_444_800  # 2100-01-01
 
-# Records are written once a day. A gap longer than this is not a slow
-# appliance, it is a misread field -- the files skip days the appliance did
-# not run, so the bound is generous rather than tight.
-_MAX_GAP_S = 60 * 86400
+# There is deliberately no bound on the gap between records. One record is
+# written per day the appliance actually *ran* -- #301 notes a 25th-to-29th
+# gap on an AC -- so a seasonally-used one legitimately skips months, and any
+# bound short enough to catch a misparse would throw that appliance's whole
+# file away. The timestamp window above plus strict ordering is what
+# separates a real series from a misread field.
 
 
 def _blob(rep: dict) -> bytes | None:
@@ -87,9 +92,9 @@ def records(rep: dict) -> list[tuple[int, int, int]] | None:
             return None
         if out:
             previous_ts, previous_value, _ = out[-1]
-            # Strictly increasing in time, never decreasing in a cumulative
-            # counter, and no implausible jump between neighbours.
-            if timestamp <= previous_ts or timestamp - previous_ts > _MAX_GAP_S:
+            # Strictly increasing in time and never decreasing in a
+            # cumulative counter.
+            if timestamp <= previous_ts:
                 return None
             if value < previous_value:
                 return None
@@ -114,21 +119,48 @@ _RUNTIME_QUANTUM = 5  # tenths of an hour
 
 
 def _is_runtime_series(values: list[int]) -> bool:
-    """True when the third field is a cumulative runtime counter rather than
-    the firmware's monthly bucket or a constant zero.
+    """True when the third field is a cumulative runtime counter.
 
-    Deliberately strict, because the answer decides both whether runtime is
-    published *and* how the energy field is scaled -- see
-    `cumulative_energy_kwh`.
+    A counter that never moves still qualifies: a multi-split head that sat
+    idle for the whole window has a flat but perfectly real runtime total,
+    and dropping its entity on that basis would make the sensor disappear
+    exactly when the appliance is off.
     """
     if values[-1] <= _MAX_MONTH:
         return False
     deltas = [b - a for a, b in itertools.pairwise(values)]
     if any(delta < 0 for delta in deltas):
         return False
-    if not any(deltas):
-        return False
     return all(delta % _RUNTIME_QUANTUM == 0 for delta in deltas)
+
+
+def _energy_scale_is_confirmed(values: list[int]) -> bool:
+    """True when the third field identifies this file as one of the families
+    whose second field is known to hold tenths of a kWh.
+
+    A *positive* identification, and it has to be. The obvious shape --
+    "publish energy unless the third field looks like runtime" -- is unsafe,
+    because failing to recognise a runtime counter is not the same as
+    recognising a tenths-of-a-kWh one. A brand-new multi-split head whose
+    runtime is still under 1.2 h reads as a month label, and an idle head's
+    flat counter reads as neither; both would then have the PRAC's plain-Wh
+    energy field divided by 10 and reported 100x high into a
+    `total_increasing` sensor.
+
+    So only the two measured shapes are accepted:
+
+    - every value zero -- a `DA_WM_TP1_21_COMMON` washer (#301) and a
+      dishwasher, both confirmed against their own `cumulativePower`;
+    - a month label: every value in 1..12 *and* at least one consecutive
+      repeat, since a label spans a month of daily records while a counter
+      climbing one unit a day does not. The repeat is what separates a
+      `TP1X_REF_21K` fridge from a new head reading 5, 6, 7.
+    """
+    if not any(values):
+        return True
+    if not all(1 <= value <= _MAX_MONTH for value in values):
+        return False
+    return any(a == b for a, b in itertools.pairwise(values))
 
 
 def cumulative_energy_kwh(rep: dict) -> float | None:
@@ -138,23 +170,23 @@ def cumulative_energy_kwh(rep: dict) -> float | None:
     tracking the meter continuously -- see common.FILE_TRANSFER for why that
     is still worth an entity on an appliance that reports no meter at all.
 
-    Refused on a board whose third field is a runtime counter, because the
-    energy field's *scale* is not the same there. Every family whose third
-    field is zero or a month label stores tenths of a kWh, confirmed against
-    each one's own `cumulativePower`: a washer (#301), a dishwasher and a
-    fridge. The one family that pairs energy with runtime, the
-    `ARTIK051_PRAC_20K` of #329, stores plain Wh -- its `fieldA` equals
-    `cumulativePower` outright rather than a hundredth of it. Nothing in the
-    bytes distinguishes 5118585 Wh from 5118585 tenths of a kWh, so reading
-    that board with this scale would report 511858.5 kWh instead of 5118.6.
+    Published only where the third field positively identifies a family whose
+    second field is known to hold tenths of a kWh, because the *scale* is
+    family-dependent. A washer (#301), a dishwasher and a fridge all store
+    tenths of a kWh, each confirmed against its own `cumulativePower`. The
+    one family that pairs energy with runtime, the `ARTIK051_PRAC_20K` of
+    #329, stores plain Wh -- its `fieldA` equals `cumulativePower` outright
+    rather than a hundredth of it. Nothing in the bytes distinguishes
+    5118585 Wh from 5118585 tenths of a kWh, so reading that board with this
+    scale reports 511858.5 kWh instead of 5118.6.
 
-    That board's meter works, so it never reaches this fallback anyway; this
-    refuses on the shape rather than relying on that.
+    See `_energy_scale_is_confirmed` for why this is a positive test rather
+    than "not runtime".
     """
     parsed = records(rep)
     if not parsed:
         return None
-    if _is_runtime_series([r[2] for r in parsed]):
+    if not _energy_scale_is_confirmed([r[2] for r in parsed]):
         return None
     return parsed[-1][1] / 10
 

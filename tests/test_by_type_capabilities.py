@@ -86,3 +86,25 @@ def test_door_generic_binds_cooler_door_with_auto_derived_key():
     b = cooler_bindings[0]
     assert b.capability is fridge.DOOR_GENERIC, f"Expected DOOR_GENERIC, got {b.capability!r}"
     assert _key(b) == "door_cooler_open", f"Expected 'door_cooler_open', got {_key(b)!r}"
+
+
+def test_every_registry_covers_the_probe_hrefs():
+    """registry.PROBE_HREFS is global: the coordinator reads those hrefs on
+    every appliance, whatever its type, and folds the answers into the
+    resources dict before discovery. A registry that does not carry them
+    turns a board that *answers* the probe into a spurious "incomplete
+    capability coverage" Repair (issue #301).
+
+    Registries that hand-pick common capabilities rather than spreading
+    `common.UNIVERSAL` are the ones that miss this -- gas_cooktop and
+    range_hood both did.
+    """
+    from custom_components.localthings.registry.by_type import _REGISTRY_BY_KEY
+    from custom_components.localthings.registry.registry import PROBE_HREFS
+
+    missing = {
+        registry.name: gaps
+        for registry in _REGISTRY_BY_KEY.values()
+        if (gaps := [href for href in PROBE_HREFS if href not in registry.capabilities])
+    }
+    assert not missing

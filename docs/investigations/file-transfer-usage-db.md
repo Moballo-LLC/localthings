@@ -453,6 +453,10 @@ never sees. The coordinator then:
   results into `resources` **before** `_run_discovery` — same position and
   same posture as `_enumerate_subdevices_blocking`, so a probe that fails
   costs the entities on that href and nothing else;
+- bounds the whole pass with a wall-clock budget, not just a per-href
+  timeout: the first-discovery probe runs inside entry setup and the
+  periodic one holds the session lock that entity writes also need, and on a
+  composite appliance the href count scales with the hardware;
 - re-reads them on a slow cadence afterwards, driven by a cycle counter in
   `_async_update_data` rather than a new timer. A counter that ticks in
   half hours and gains one record a day does not need the 30 s summary
@@ -469,11 +473,15 @@ never sees. The coordinator then:
   reads the master's file and silently misses every sibling's, losing the
   one number that is genuinely per-unit.
 
-  Siblings are probed *after* `_run_discovery`, not beside MAIN's probe:
-  before it, `self.subdevices` is still the pre-narrowing candidate list,
-  and the probe applies what it reads straight to the state cache — which is
-  the one thing that block's ordering exists to keep a rejected candidate's
-  resources out of.
+  Siblings are probed *before* `_run_discovery`, alongside MAIN. That
+  ordering is load-bearing rather than incidental: discovery is what binds an
+  href to an entity and it runs exactly once, so a sibling's file probed
+  after it would be cached forever and never produce the per-head runtime
+  entity this is all for. The probe passes `apply=False` so a rejected
+  subdevice candidate's reps never reach the eviction-free state cache —
+  which is what that block's ordering exists to prevent — and the normal
+  apply loop re-adds the live ones once `_live_subdevice_resources` has
+  filtered them.
 
 Cost when nothing is there: one GET per probe href per probe interval, which
 404s. That is why the probe list must stay short and maintainer-curated.

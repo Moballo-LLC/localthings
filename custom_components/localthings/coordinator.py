@@ -248,6 +248,16 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     # multi-KB blockwise transfer, so anything faster is pure waste
     # (issue #301).
     _PROBE_EVERY_N_CYCLES: int = 60
+    # Per href, and for the whole probe pass. A few-KB blockwise transfer
+    # needs more than a Property map's 10 s, but not the summary poll's 35 s
+    # -- and the total matters more than the per-href figure here: the
+    # first-discovery probe runs inside entry setup, and the periodic one
+    # holds _session_lock, which entity writes also need. On a composite
+    # appliance the href count is 2 x (1 + subdevices), so an unbounded pass
+    # would scale with the hardware. Same reasoning, and roughly the same
+    # budget, as registry.subdevices' enumeration budget.
+    _PROBE_TIMEOUT_S: float = 12.0
+    _PROBE_BUDGET_S: float = 20.0
 
     # First-discovery subdevice enumeration is part of config-entry setup, so
     # it must have a finite wall-clock cost. A UUID-prefixed AC whose
@@ -979,18 +989,41 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 )
         return result
 
-    def _poll_hrefs_blocking(self, hrefs: list[str], timeout: float = 10.0) -> dict[str, dict]:
+    def _poll_hrefs_blocking(
+        self,
+        hrefs: list[str],
+        timeout: float = 10.0,
+        apply: bool = True,
+        budget: float | None = None,
+    ) -> dict[str, dict]:
         """GET individual hrefs sequentially. Does not reconnect on failure. Blocking.
 
         `timeout` is per href. The probe tier raises it: a usage file is a
         few KB and arrives blockwise, where a hot/warm resource is a small
         Property map (issue #301).
+
+        `apply=False` returns the reps without writing them to the state
+        cache, for the one caller that must hand them to discovery *before*
+        a rejected subdevice candidate's resources could reach a cache with
+        no eviction -- see the first-discovery probe in _async_update_data.
+
+        `budget`, when set, caps the whole pass rather than each href, and
+        each remaining GET is clamped to what is left of it. Without one, a
+        long href list multiplies `timeout` by its length while holding the
+        session.
         """
         if self._session is None:
             return {}
         results = {}
         first = True
+        deadline = time.monotonic() + budget if budget is not None else None
         for href in hrefs:
+            if deadline is not None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    self._log.debug("href poll budget spent; skipping %s", href)
+                    continue
+                timeout = min(timeout, remaining)
             if not first:
                 self._session.pace()
             first = False
@@ -1000,13 +1033,14 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if code == 0x45 and payload:
                     rep = cbor2.loads(payload)
                     if isinstance(rep, dict):
-                        self._observe.apply(href, rep, source="poll")
+                        if apply:
+                            self._observe.apply(href, rep, source="poll")
                         results[href] = rep
             except Exception as e:
                 self._log.debug("sub-poll %s: %s", href, e)
         return results
 
-    def _probe_blocking(self, subdevices: list[Subdevice]) -> dict[str, dict]:
+    def _probe_blocking(self, subdevices: list[Subdevice], apply: bool = True) -> dict[str, dict]:
         """GET the hrefs no /device/0 batch carries (registry.PROBE_HREFS),
         once per subdevice in `subdevices`.
 
@@ -1027,7 +1061,9 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         losing the one number that is genuinely per-unit.
         """
         hrefs = [su.to_actual(href) for su in subdevices for href in PROBE_HREFS]
-        return self._poll_hrefs_blocking(hrefs, timeout=self._POLL_TIMEOUT_S)
+        return self._poll_hrefs_blocking(
+            hrefs, timeout=self._PROBE_TIMEOUT_S, apply=apply, budget=self._PROBE_BUDGET_S
+        )
 
     # ------------------------------------------------------------------
     # Sub-poll loop (runs between summary polls)
@@ -1878,8 +1914,18 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # registered as covered rather than surfacing as a coverage
                 # gap the moment it appears in `resources`.
                 try:
+                    # Candidates as well as MAIN, and before _run_discovery:
+                    # discovery is what binds an href to an entity and it runs
+                    # exactly once, so a sibling's file probed after it would
+                    # be cached forever and never surface as the per-head
+                    # runtime issue #329 is about. apply=False keeps a
+                    # rejected candidate's reps out of the eviction-free
+                    # cache; the apply loop below re-adds the live ones from
+                    # `resources` after _live_subdevice_resources filters it.
                     resources.update(
-                        await self.hass.async_add_executor_job(self._probe_blocking, [MAIN])
+                        await self.hass.async_add_executor_job(
+                            self._probe_blocking, [MAIN, *self.subdevices], False
+                        )
                     )
                 except Exception as e:
                     self._log.debug("probe failed on first discovery: %s", e)
@@ -1914,19 +1960,6 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self._async_save_snapshot(resources, candidates)
             self._reconcile_rehydrated()
             resources = self._live_subdevice_resources(resources)
-            # Siblings are probed here rather than beside MAIN's probe above:
-            # `self.subdevices` is still the pre-narrowing candidate list up
-            # there, and _poll_hrefs_blocking applies what it reads straight
-            # to the cache -- which is the one thing the ordering in this
-            # block exists to keep a rejected candidate's resources out of.
-            if self.subdevices:
-                async with self._session_lock:
-                    try:
-                        await self.hass.async_add_executor_job(
-                            self._probe_blocking, list(self.subdevices)
-                        )
-                    except Exception as e:
-                        self._log.debug("subdevice probe failed on first discovery: %s", e)
         sweep_mismatch = False
         if self._observe.mode == MODE_OBSERVE:
             # A mismatch never tears down a still-live OBSERVE session (see

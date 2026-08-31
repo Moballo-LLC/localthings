@@ -323,3 +323,65 @@ async def test_the_periodic_probe_covers_main_and_every_live_subdevice(hass, pro
             await _advance_one_cycle(hass)
 
     assert seen == [[MAIN, sibling]]
+
+
+async def test_the_probe_reaches_discovery_rather_than_only_the_cache(hass, mock_entry):
+    """The ordering the whole tier depends on, and the one that was wrong.
+
+    `_run_discovery` is what binds an href to an entity and it runs exactly
+    once. A probe landing after it would populate the state cache forever and
+    never produce an entity -- which on a composite board means the per-head
+    runtime hours of issue #329 silently never appear. So the probed reps,
+    MAIN's *and* every candidate subdevice's, must be in the dict discovery
+    is handed.
+    """
+    uuid = "6c2dff6d-ee5c-dad1-6a5e-000000000001"
+    sibling = Subdevice(kind="prefixed", key=uuid, seed_path=(uuid, "device", "0"))
+    answers = {f"/{uuid}{href}": PROBE_REPS[href] for href in PROBE_HREFS}
+    answers.update(PROBE_REPS)
+    session = _ProbeSession(answers=answers)
+    resources = _load_fridge()
+    seen: dict = {}
+
+    def _connect(self):
+        self._session = session
+
+    def _enumerate(self, res):
+        # The real one opens the session as a side effect; _poll_once is
+        # patched out here, so nothing else would.
+        self._session = session
+        self.subdevices = [sibling]
+        return res
+
+    real_discovery = LocalThingsCoordinator._run_discovery
+
+    def _capture(self, res, from_snapshot=False):
+        seen.update(res)
+        return real_discovery(self, res, from_snapshot)
+
+    with (
+        patch(
+            "custom_components.localthings.coordinator.LocalThingsCoordinator._connect_session",
+            _connect,
+        ),
+        patch(
+            "custom_components.localthings.coordinator.LocalThingsCoordinator._poll_once",
+            return_value=resources,
+        ),
+        patch(
+            "custom_components.localthings.coordinator.LocalThingsCoordinator"
+            "._enumerate_subdevices_blocking",
+            _enumerate,
+        ),
+        patch(
+            "custom_components.localthings.coordinator.LocalThingsCoordinator._run_discovery",
+            _capture,
+        ),
+        patch("custom_components.localthings.coordinator.LocalThingsCoordinator._close_session"),
+    ):
+        await hass.config_entries.async_setup(mock_entry.entry_id)
+        await hass.async_block_till_done()
+
+    for href in PROBE_HREFS:
+        assert href in seen, f"MAIN's {href} never reached discovery"
+        assert f"/{uuid}{href}" in seen, f"the sibling's {href} never reached discovery"
