@@ -90,6 +90,7 @@ def test_the_file_list_probe_binds_nothing():
     """It is read for the census and for gap coverage, not for an entity --
     the filename it reports is a firmware default that identifies nothing."""
     registry = resolve_registry(_load_fridge())
+    assert registry is not None
     for cap in registry.capabilities[FILE_LIST]:
         assert cap.entities == ()
 

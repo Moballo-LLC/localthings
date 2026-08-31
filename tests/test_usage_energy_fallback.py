@@ -119,7 +119,13 @@ def test_exactly_one_source_ever_binds_energy_kwh(resources):
     be silent."""
     bound = discover(resources, CAPABILITIES)
     energy = [b for b in bound if b.desc.key == "energy_kwh"]
-    included = [b for b in energy if b.desc.exists_fn(resources.get(b.href) or {}, resources)]
+    # Both sources must gate themselves; an unguarded one would be the bug.
+    assert all(b.desc.exists_fn is not None for b in energy)
+    included = [
+        b
+        for b in energy
+        if b.desc.exists_fn is not None and b.desc.exists_fn(resources.get(b.href) or {}, resources)
+    ]
     assert len(included) <= 1
 
 

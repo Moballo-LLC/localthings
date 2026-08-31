@@ -50,13 +50,16 @@ def test_a_real_capture_decodes_to_its_recorded_totals(name):
     blob, expected = _capture(name)
     rep = _rep(blob)
 
-    assert len(usagedb.records(rep)) == expected["records"]
+    parsed = usagedb.records(rep)
+    assert parsed is not None
+    assert len(parsed) == expected["records"]
     assert usagedb.cumulative_energy_kwh(rep) == expected["cumulative_kwh"]
 
 
 def test_the_fridge_file_is_one_ordered_record_per_day():
     blob, _ = _capture("refrigerator_tp1x_ref_21k")
     parsed = usagedb.records(_rep(blob))
+    assert parsed is not None
 
     timestamps = [r[0] for r in parsed]
     values = [r[1] for r in parsed]
@@ -73,6 +76,7 @@ def test_the_fridges_third_field_is_a_month_label_not_runtime():
     scaled -- see test_energy_is_refused_where_the_scale_is_unconfirmed."""
     blob, _ = _capture("refrigerator_tp1x_ref_21k")
     parsed = usagedb.records(_rep(blob))
+    assert parsed is not None
     assert {r[2] for r in parsed} == {3, 4, 5, 6, 7, 8}
     assert usagedb.cumulative_runtime_hours(_rep(blob)) is None
 
@@ -254,4 +258,5 @@ def test_a_repeated_reading_is_accepted():
     """22 of the washer's 281 records repeat the previous cumulative value
     (#301). Flat is not backwards."""
     parsed = usagedb.records(_rep(_synthetic([(100, 0), (100, 0), (110, 0)])))
+    assert parsed is not None
     assert [r[1] for r in parsed] == [100, 100, 110]
