@@ -820,6 +820,11 @@ class LocalThingsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._identity = None
 
     def _close_session(self) -> None:
+        # Blocking, run in an executor. As of smartthings-local 0.1.12,
+        # close() actually puts the DTLS close_notify on the wire instead of
+        # just building it (issue #417), and paces the OBSERVE deregisters
+        # it now sends through the session rate limiter -- a few seconds for
+        # an appliance with a dozen relations at the 5 req/s default.
         sess = self._session
         self._session = None
         if sess is not None:
