@@ -11,7 +11,7 @@
   "requirements": [
     "cbor2>=5.4.6",
     "pyOpenSSL>=23.0",
-    "smartthings-local>=0.1.11"
+    "smartthings-local>=0.1.12"
   ],
-  "version": "0.24.0"
+  "version": "0.25.0"
 }
