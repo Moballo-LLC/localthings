@@ -132,10 +132,13 @@ recorded SHA-256 matches the 12 bytes it rebuilds to.
 records) and 3372 B (281 records). Twelve bytes is a single row. Either this
 appliance's history genuinely holds one record, or a bare GET returns only
 the newest one and the rest of the file needs the query, a selection, or
-`/file/transfer/chunk/vs/0`. Nothing here distinguishes those.
+`/file/transfer/chunk/vs/0`. *(Resolved by the fridge below: the same call
+returns a full 2172-byte file, so this appliance's history really is one
+record.)*
 
-**And the name is wrong for this appliance.** `/file/list/vs/0` on this same
-unit lists `/opt/data/energy.db` and `/opt/data/hass.db`. It does not list
+**And the name is wrong for this appliance** — confirmed same unit, not an
+inference across two devices. `/file/list/vs/0` on it lists
+`/opt/data/energy.db` and `/opt/data/hass.db`. It does not list
 `/mnt/usage.db` — which is what `/file/transfer/vs/0` just called what it
 served. Either the name field is a firmware default rather than a statement
 about what was read (it would be the same default the ARTIK051 boards serve,
@@ -182,6 +185,11 @@ other 180 rows was history, and §5 already rules backfilling out of scope.
 If a bare GET serves the newest row, that row is all a `total_increasing`
 sensor ever needed.
 
+Both reads are banked in `tests/fixtures/dishwasher_device.json` under
+`probes`, with the caveats in its `probes_note`: they were read later than
+that fixture's `device0`, so the blob's record does not line up with the
+energy rep captured there, and nothing should assert that it does.
+
 (`instantaneousPower: -500` is the dead sentinel `common.ENERGY_METER`
 already gates `power_watts` out on, documented for exactly this device
 class in issue #6. Nothing new, but it confirms the appliance is behaving
@@ -194,6 +202,93 @@ reports the third field as zero across all 281 of its records, which is
 equally consistent with either. The distinction only shows up on a device
 whose cumulative value has exceeded 2^32 tenths, so the parser should not
 claim to have resolved it.
+
+## A full 181-record file, off a fridge
+
+Measured 2026-08-31, same plain `read_resource` GET, on a **different**
+appliance — a fridge. Its `/file/list/vs/0` is byte-identical to the
+dishwasher's (`/opt/data/energy.db` id 0, `/opt/data/hass.db` id 1), and its
+`/file/transfer/vs/0` again calls what it serves `/mnt/usage.db`. This time
+the blob is **2172 bytes — 181 records, zero remainder**, the same size #301
+measured on a `KRAC_18K`. The SHA-256 the service reported rebuilds from the
+base64 exactly, so these are the appliance's own bytes end to end.
+
+Same layout as the dishwasher's single record, and it holds for all 181:
+
+```
+record := <uint32 LE timestamp><uint32 LE cumulative, tenths of a kWh><uint32 LE month>
+```
+
+| | first | last |
+| --- | --- | --- |
+| timestamp | 2026-03-03 22:54 | 2026-08-30 21:05 |
+| cumulative | 7748 = 774.8 kWh | 11410 = 1141.0 kWh |
+| third field | 3 | 8 |
+
+- **181 records, 181 distinct consecutive calendar days, no gaps.** A fridge
+  runs every day, which fits #301's "one record per day the unit actually
+  ran" without contradicting it.
+- Timestamps are strictly increasing and cluster between 21:05 and 23:59 —
+  an end-of-day rollup, not the on-the-hour stamps the washer and dishwasher
+  show.
+- The cumulative field is strictly increasing across every one of the 180
+  deltas, mean **2.03 kWh/day**, which is what a fridge draws. The deltas are
+  *not* multiples of 5 tenths, which is the check that separates this from
+  the ACs' half-hour-quantised runtime counter.
+
+### The third field is the calendar month
+
+Not zero here, and not runtime. It runs 3, 4, 5, 6, 7, 8 across a file
+spanning March to August, and it steps on exactly the five month boundaries.
+Tested against every record: `month(timestamp + offset) == field3` holds for
+**all 181** at any offset from +1 h to +12 h, and fails on exactly 5 at +0 h
+— those five being the last day of each month, where the stamp is late
+enough in the day that the month has already turned in whatever frame the
+counter is kept in.
+
+So the month field is independent evidence that **the timestamps are not in
+the same frame as the rest of the record**, which is the same conclusion the
+dishwasher's `cumulativeDate` vs `cumulativeDateUTC` gave. The dishwasher's
+measured +5 h is consistent with this file, but this file alone does not pin
+the offset — anything from roughly +46 min to +21 h satisfies it. Don't
+read a precise timezone out of this.
+
+### What that means for a parser
+
+**Field 2 is the portable one.** Cumulative energy in tenths of a kWh is now
+confirmed on four families: the washer (#285/#301), the dishwasher and this
+fridge (both measured here), and the `ARTIK051_PRAC_20K`'s `fieldA` (#329,
+which matched `cumulativePower` exactly). That is the value worth an entity.
+
+**Field 3 is not one thing, and must never be published on a guess.**
+
+| family | field 3 |
+| --- | --- |
+| `DA_WM_TP1_21_COMMON` washer (#301) | zero across all 281 records |
+| this dishwasher | zero (its only record) |
+| this fridge | calendar month, 3 → 8 |
+| `ARTIK051_PRAC_20K` AC (#329) | cumulative runtime, tenths of an hour |
+
+Four families, three different meanings, one identical byte layout. §3's
+discriminator separates the `uint64`-leading shape from the `uint32`-leading
+one, and that much is sound — but nothing in the bytes says what the third
+field *means*. A parser reads field 2 everywhere and treats field 3 as
+unknown until a family rule says otherwise.
+
+### Two open questions close
+
+**A plain GET returns the whole file.** Same integration, same call, no
+query and no selection write: 12 bytes from the dishwasher, 2172 from the
+fridge. So the dishwasher genuinely holds one record — its history is nearly
+empty, not truncated by the transport. `/file/transfer/chunk/vs/0` is not
+needed for files this size, and question 2's remainder is answered.
+
+**`/mnt/usage.db` is a firmware default label, not a per-device fact.** Two
+different appliance families, both listing `energy.db` and `hass.db` in
+`/file/list/vs/0`, both reporting `/mnt/usage.db` from the transfer
+resource. A hardcoded string, which is also why it happens to name the real
+file on the ARTIK051 boards. `x.com.samsung.name` identifies nothing; §3's
+"read the magic bytes" is the rule.
 
 ## The blocker is real and it is not board-specific
 
@@ -307,6 +402,11 @@ The validator is the load-bearing part: three 12-byte layouts are already
 known and a fourth is likely, so "does this decode into a monotonic series"
 has to be a test the parser runs, not an assumption it makes.
 
+Discriminating the layout is not the same as understanding it: the third
+field means something different on every family measured so far (see the
+fridge section above). Read field 2, and leave field 3 alone unless a
+family rule claims it.
+
 The filename is a prior, never the test. `energy.db` on a dishwasher and a
 `power_usage` table on the SQLite washers both point at SQLite, and #301's
 `/mnt/usage.db` that is not SQLite is the standing proof that the name
@@ -358,10 +458,19 @@ as unreachable as the issue assumes. `recorder` is already in
 `after_dependencies` and `__init__.py` already calls into
 `recorder.statistics` for the v2→v3 particulate relabel.
 
-It should still not happen here. External statistic ids do not attach to the
+One leg of that argument has since been measured away, and it should be
+struck rather than quietly kept: this file claimed the AC formats "carry no
+per-day energy to import". The fridge above carries 181 consecutive days of
+strictly-increasing cumulative kWh with no gaps, which is close to the ideal
+input for `async_add_external_statistics`. Whoever revisits this should know
+the case got stronger, not weaker.
+
+It should still not happen now. External statistic ids do not attach to the
 entity, so the imported history lives beside the sensor rather than in it;
-the AC formats carry no per-day energy to import in the first place; and it
-buys a one-time cosmetic win against permanent complexity. Publish the
+and it buys a one-time win against permanent complexity, on a mechanism this
+integration has never used. Worth reopening once the probe tier exists and
+the census says how many boards carry a full file rather than one row —
+not before. Publish the
 current cumulative value, let HA accumulate from today, leave the past in
 the appliance.
 
@@ -389,11 +498,12 @@ In rough order of how much they can invalidate:
    while `/file/transfer/vs/0` is `oic.if.a`, and an actuator's default
    interface is the more likely one to answer differently.
 
-2. **Partly answered: a bare GET returns a payload with no selection
-   write.** What is still open is whether it returns the *whole file* — the
-   read above brought back one 12-byte record where the reporters measured
-   181 and 281 — and which file it is reading, given the name it reported is
-   not in this appliance's own file list. `/file/list/vs/0` hands out an `x.com.samsung.id` per
+2. ~~**Whether a bare GET reads the primary file.**~~ **Answered.** No
+   selection write is needed, and the same call returns a full 2172-byte,
+   181-record file from a fridge — so the dishwasher's single record is that
+   appliance's actual history, not a truncated read. The name the resource
+   reports is a firmware default and identifies nothing; see the fridge
+   section. `/file/list/vs/0` hands out an `x.com.samsung.id` per
    file, and `ac-filter-reset.md` records a live board *rejecting* a
    selection of a non-primary path (4.05/4.00) — so a write path exists and
    the firmware validates it. Both reporters' one-shot GETs returned the
@@ -450,12 +560,11 @@ In rough order of how much they can invalidate:
    Done — see the measurement above. A plain GET answers, no selection write
    is needed, and the payload is confirmed against the meter resource.
 3. Land the probe tier, with `/file/list/vs/0` and `/file/transfer/vs/0` as
-   coverage-only capabilities that bind no entities. This is now the
-   load-bearing step rather than a preliminary: one appliance says the file
-   can be pure duplication, three reporters say it can hold the only copy of
-   a number worth having, and only a census across the boards users actually
-   own says which is typical. Diagnostics carrying the file list and the blob
-   is what produces that census.
+   coverage-only capabilities that bind no entities. This is the
+   load-bearing step: two appliances in one household differ by 180 records,
+   the third field means something different on every family measured, and
+   only a census across the boards users actually own says what is typical.
+   Diagnostics carrying the file list and the blob is what produces it.
 4. Land the parser and the runtime-hours sensor against the two AC formats —
    the one series that is in the file and nowhere else.
 5. Decide the energy question in §4 on what step 3 turns up, with the
