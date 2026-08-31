@@ -20,6 +20,30 @@ mask indexes that option's own `supported<Option>` list, and so does the
 default nibble — but into the list, not into the mask: the dishwasher reports
 default `0` with a mask allowing only index `1`.
 
+**The header is the group count**, so the record width is stated rather than
+inferred: `1 + 2×hdr` bytes. It holds on all 17 dumps carrying a
+`supportedOptions`, across all six widths, and the split it gives is the one
+the original smallest-that-parses scan already produced on every one of them —
+so adopting it moved no course list and no golden.
+
+| hdr | 0 | 1 | 2 | 3 | 4 | 5 |
+| --- | --- | --- | --- | --- | --- | --- |
+| width (bytes) | 1 | 3 | 5 | 7 | 9 | 11 |
+| dumps | AirDresser | 5 | 2 | 5 | 3 | WA8000T |
+
+`_course_records` keeps the scan as a fallback for a board that contradicts
+this, and still checks the stated width against the guards the scan was
+written for (distinct course bytes, the selected course present, and any live
+`editCourseList` accounted for) rather than trusting it outright.
+
+**The mask is one byte**, so it cannot address past index 7. Most lists are
+comfortably shorter, but `supportedDryTime` is 11 entries on `dryer` and
+`dryer_tp1_21_drum_clean` and 13 on `washer_dryer_onebody_awm` (as is
+`washer_wa8000t`'s 12-entry `supportedWaterHeight`). None of those boards
+carries a group for it, so nothing here contradicts the format — but whatever
+encodes dry time on them is not an 8-bit-mask group of this shape, which is
+worth knowing before gating a dry-time entity on one.
+
 ## The four named kinds
 
 | Kind | Named | Evidence |
@@ -105,4 +129,11 @@ board whose `dry_level` select it would be narrowing.
 `0x0`, `0x5`, `0x6`, `0x7`, `0xB` and `0xC` all occur, none pinned beyond the
 above. `0xE` behaves like dry time on the DV6800N — decodes against
 `supportedDryTime`, mutually exclusive with `0xD` — but one board is not a
-pin; name it in the change that consumes it.
+pin; name it in the change that consumes it. Note that the DV6800N's
+`supportedDryTime` is six entries, and the three boards with an 11- or
+13-entry one carry no `0xE` at all, so the mask width says nothing has been
+seen that a single byte could not address.
+
+`0x6` is the one kind that reaches bit 7 anywhere in the corpus
+(`washer_wa8000t`, mask `0xA1` on eight of its thirteen courses). No named
+kind does.

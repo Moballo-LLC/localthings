@@ -367,27 +367,51 @@ class TestCourseOptionGroups:
         found = laundry.course_option_mask(resources, laundry.OPTION_KIND_DRY, course="83")
         assert found == (0, [1])
 
-    def test_edit_course_list_overrides_a_narrower_passing_split(self):
-        """The editCourseList guard only earns its place where the smallest
-        otherwise-valid width is the wrong one -- on every shipped dump the
-        smallest already covers the list, so a corpus fixture cannot tell
-        the guard from its absence.
-
-        Built to be exactly that case: twelve bytes split six ways gives
-        unique first bytes that include the selected course, so the old
-        guards accept it, but two of the four codes the device lists as
-        selectable are then nowhere to be found.
+    def test_the_stated_width_beats_a_narrower_passing_split(self):
+        """Where the header and the smallest-that-parses scan disagree, the
+        header wins. No shipped dump is that case -- the two agree on all
+        seventeen (test_the_header_states_the_record_width) -- so it takes a
+        constructed one: twelve bytes split six ways gives unique first
+        bytes that include the selected course, so the scan's guards accept
+        a two-byte width, while the header says three.
         """
         course_rep = {
             "x.com.samsung.da.options": ["Course_11"],
             "x.com.samsung.da.supportedOptions": ["1110022334400550066778800"],
         }
-        assert list(laundry._course_records(course_rep)) == ["11", "22", "44", "55", "66", "88"]
-
-        listed = {"11", "33", "55", "77"}
-        records = laundry._course_records(course_rep, must_cover=listed)
+        records = laundry._course_records(course_rep)
         assert list(records) == ["11", "33", "55", "77"]
         assert len(next(iter(records.values()))) == 6  # three bytes, not two
+
+    def test_the_edit_course_list_still_arbitrates_where_the_header_cannot(self):
+        """Same twelve bytes, but the header now says one byte per record --
+        a width whose first bytes repeat, so it states nothing usable and
+        the scan takes over. The scan's own smallest passing width is two
+        bytes; the editCourseList is what pushes it to three, and it is the
+        only thing that can once the header is out.
+        """
+        course_rep = {
+            "x.com.samsung.da.options": ["Course_11"],
+            "x.com.samsung.da.supportedOptions": ["0110022334400550066778800"],
+        }
+        assert list(laundry._course_records(course_rep)) == ["11", "22", "44", "55", "66", "88"]
+
+        records = laundry._course_records(course_rep, must_cover={"11", "33", "55", "77"})
+        assert list(records) == ["11", "33", "55", "77"]
+
+    def test_an_unsatisfiable_edit_course_list_falls_back_rather_than_going_dark(self):
+        """A device that lists a course its supportedOptions does not carry
+        -- a personal or cloud slot -- must not switch the decoder off for
+        every kind on the whole device. No width can cover 'AA' here, so the
+        smallest passing split stands, which is what the course-list
+        fallback would have returned anyway.
+        """
+        course_rep = {
+            "x.com.samsung.da.options": ["Course_11"],
+            "x.com.samsung.da.supportedOptions": ["0110022334400550066778800"],
+        }
+        records = laundry._course_records(course_rep, must_cover={"11", "AA"})
+        assert list(records) == ["11", "22", "44", "55", "66", "88"]
 
     def test_groups_are_read_on_their_own_boundaries(self):
         """Groups are two bytes each after the course byte, so the scan has
@@ -396,22 +420,23 @@ class TestCourseOptionGroups:
         carry -- rather than failing, so nothing else in the corpus would
         notice the stride being wrong.
 
-        Here every record is <course><A8 9D><31 E2>. Read correctly there
-        is no rinse (0x9) group at all; read two digits out of step, the
-        bytes '9D 31' look exactly like one.
+        Here every record is <course><A8 9D><31 E2>, two groups -- hence the
+        header of 2. Read correctly there is no rinse (0x9) group at all;
+        read two digits out of step, the bytes '9D 31' look exactly like one.
         """
         course_rep = {
             "x.com.samsung.da.options": ["Course_01"],
             "x.com.samsung.da.supportedOptions": [
-                "1" + "".join(f"{code:02X}A89D31E2" for code in range(1, 7))
+                "2" + "".join(f"{code:02X}A89D31E2" for code in range(1, 7))
             ],
         }
         resources = {"/course/vs/0": course_rep}
         assert laundry._course_records(course_rep)["01"] == "01A89D31E2"
 
         assert laundry.course_option_mask(resources, 0x9) is None
-        # The real group, whose mask also reaches bit 7 -- the top of the
-        # byte, unexercised anywhere in the corpus.
+        # The real group, whose mask reaches bit 7 -- the top of the byte,
+        # which no *named* kind exercises in the corpus (washer_wa8000t's
+        # unnamed 0x6 does, with mask 0xA1).
         assert laundry.course_option_mask(resources, 0xA) == (8, [0, 2, 3, 4, 7])
 
     def test_reads_past_a_group_of_another_kind(self):
@@ -443,6 +468,58 @@ class TestCourseOptionGroupsAcrossCorpus:
     def _dumps(self):
         for path in sorted(FIXTURES.glob("*_device.json")):
             yield path.name, _load_device(path.name[: -len("_device.json")])
+
+    def test_the_header_states_the_record_width(self):
+        """The header nibble is the group count, so 1 + 2*hdr bytes is the
+        record width -- true on every dump here, across six distinct widths
+        (1, 3, 5, 7, 9, 11 bytes). This is what lets _course_records take a
+        stated width instead of guessing the smallest one that parses.
+        """
+        disagreeing = []
+        for name, resources in self._dumps():
+            course_rep = resources.get("/course/vs/0") or {}
+            raw = course_rep.get("x.com.samsung.da.supportedOptions")
+            hexstr = raw[0] if isinstance(raw, list) and raw else raw
+            records = laundry._course_records(course_rep)
+            if not isinstance(hexstr, str) or not records:
+                continue
+            header = int(hexstr[0], 16)
+            width = len(next(iter(records.values()))) // 2
+            if width != 1 + 2 * header:
+                disagreeing.append((name, header, width))
+        assert disagreeing == []
+
+    def test_the_stated_width_reproduces_the_scan_it_replaced(self):
+        """Nothing shipped changes shape: on every dump the header-derived
+        split is the one the smallest-that-parses scan already returned, so
+        no course list -- and no golden that depends on one -- moves.
+        """
+        differing = []
+        for name, resources in self._dumps():
+            course_rep = resources.get("/course/vs/0") or {}
+            raw = course_rep.get("x.com.samsung.da.supportedOptions")
+            hexstr = raw[0] if isinstance(raw, list) and raw else raw
+            if not isinstance(hexstr, str):
+                continue
+            # A non-hex header states nothing, which is how the scan gets
+            # driven from here without a second entry point into it.
+            scanned = laundry._course_records(
+                {**course_rep, "x.com.samsung.da.supportedOptions": "Z" + hexstr[1:]}
+            )
+            if list(scanned) != list(laundry._course_records(course_rep)):
+                differing.append(name)
+        assert differing == []
+
+    def test_a_course_code_is_matched_case_insensitively(self):
+        """select.py lowercases an entity's options for the translation
+        catalog, so a caller that reaches for what the entity displays
+        rather than the raw Course_ token still has to get an answer --
+        silently getting "no opinion" is how a gate no-ops without anyone
+        noticing."""
+        resources = _load_device("dryer_dv6800n")
+        upper = laundry.course_option_mask(resources, laundry.OPTION_KIND_DRY, course="9A")
+        assert upper == laundry.course_option_mask(resources, laundry.OPTION_KIND_DRY, course="9a")
+        assert upper is not None
 
     def test_every_record_is_a_course_byte_plus_whole_groups(self):
         odd = []
